@@ -2,345 +2,258 @@
 
 Indigo is a native Nintendo 3DS homebrew client for the AT Protocol / Bluesky.
 
-It is the 3DS counterpart to Cobalt, but it is **not a port of Cobalt**. The application, interaction model, rendering strategy and platform integration must be designed for the 3DS rather than treating the Wii U implementation as a template to copy line-for-line.
+It is the 3DS counterpart to Cobalt, but it is **not a port of Cobalt**. The application, rendering, interaction model and platform integration must be designed for the 3DS.
 
-This file is the architectural contract for coding agents working in the repository. Read it before making changes. If the code and this document disagree, inspect the code and update this document when the intended architecture has changed rather than allowing the two to drift apart.
+This document is the architectural contract for coding agents working in the repository. Keep it aligned with the code.
 
----
+## 1. Platform and project intent
 
-## 1. Project intent
+Indigo is a normal 3DS homebrew application targeting the current devkitPro ecosystem:
 
-Indigo exists to put a native AT Protocol client on Nintendo 3DS hardware.
+- devkitARM;
+- libctru;
+- citro3d;
+- citro2d;
+- devkitPro 3DS portlibs where required;
+- the standard devkitARM `3ds_rules` Makefile infrastructure;
+- `.3dsx` as the development/homebrew executable format.
 
-The interesting part is not reproducing a modern Bluesky web client on a tiny screen. The interesting part is making the application feel like a 3DS application while still exposing the useful parts of Bluesky:
+The normal launch environment is the 3DS Homebrew Menu, typically through Luma3DS/Rosalina.
 
-- reading timelines and threads;
-- viewing profiles;
-- searching;
-- notifications;
-- composing posts and replies;
-- interacting with posts;
-- handling the account/session lifecycle;
-- eventually supporting the parts of the AT Protocol surface that make sense on this hardware.
+The project should feel native to the console rather than like a desktop Bluesky client compressed onto two screens.
 
-The project should take the 3DS seriously as a platform:
+The immediate milestone is a real native 3DS shell. The current shell establishes:
 
-- one physical bottom touchscreen;
-- one physical top screen;
-- buttons and Circle Pad on every model;
-- C-Stick and ZL/ZR on New 3DS hardware;
-- limited CPU, memory and rendering bandwidth compared with current phones and desktops;
-- an ARM11/libctru execution environment;
-- an SD-card filesystem rather than a conventional desktop application data directory;
-- network connectivity that can disappear at any time.
+- libctru application lifecycle;
+- GPU-backed citro2d rendering;
+- separate top and bottom render targets;
+- buttons, Circle Pad, C-Stick and touchscreen input;
+- the Wolfram protocol boundary.
 
-Do not optimise for feature count at the expense of making the application usable on the console.
-
-The first milestone is a genuinely bootable native shell. Later milestones should add protocol and UI functionality incrementally.
-
----
+Bluesky session/feed functionality comes later.
 
 ## 2. Relationship to Cobalt
 
-Cobalt and Indigo share a goal, not an implementation.
+Cobalt is the Wii U client. Indigo is the 3DS client.
 
-Cobalt is the Wii U client. Indigo is the 3DS client. They should share protocol concepts through Wolfram where practical, but platform code should remain platform-specific.
+They share product intent and protocol concepts, but not their platform implementation.
 
 Do not copy Cobalt's:
 
 - rendering code;
-- input code;
-- Wii U lifecycle code;
-- screen layout assumptions;
-- SDL-specific abstractions;
-- GamePad-specific interaction model;
-- Wii U filesystem conventions;
-- networking implementation merely because it already exists.
+- SDL2 usage;
+- Wii U lifecycle;
+- GamePad assumptions;
+- screen layout;
+- filesystem conventions;
+- platform networking.
 
-Cobalt is useful as a reference for application behaviour, AT Protocol feature decisions and lessons learned. It is not an Indigo framework.
+When bringing a feature from Cobalt to Indigo, reproduce the behaviour only after deciding what the correct 3DS interaction is.
 
-When a Cobalt feature is brought to Indigo, first decide what the equivalent interaction should be on a 3DS. A feature can have the same semantic behaviour while having completely different controls and screen composition.
-
----
-
-## 3. Shared protocol layer: Wolfram
+## 3. Wolfram is the protocol layer
 
 Wolfram is my C AT Protocol SDK and is the intended protocol implementation for Indigo.
 
-Do not build a second AT Protocol stack inside Indigo.
+Do not implement another AT Protocol stack in Indigo.
 
-Wolfram already has a dedicated 3DS platform implementation and a 3DS CMake toolchain. Its 3DS platform currently uses libctru's socket layer and platform primitives, including `socInit()`, LightLock and `osGetTime()`. The 3DS build is intended to use the devkitARM/libctru environment.
+Protocol concerns belong in Wolfram, including:
 
-This has an important consequence for Indigo's current scaffold:
-
-**Do not initialise the 3DS socket service twice.**
-
-The current `src/net/` scaffold predates the Wolfram 3DS integration being wired through. Before the real Wolfram session is connected, reconcile `indigo_net_init()` with Wolfram's `wf_platform_init()` rather than allowing both layers to call `socInit()`. There should ultimately be one clear owner for the platform network lifecycle.
-
-Similarly, do not add a second HTTP/TLS stack merely because Indigo has a `net/` directory. If Wolfram provides the transport, Indigo should consume it.
-
-When Indigo needs protocol functionality that Wolfram does not expose:
-
-1. Check whether the functionality already exists elsewhere in Wolfram.
-2. Extend Wolfram if the missing operation belongs to the SDK.
-3. Keep Indigo-side code focused on presentation, application state and console-specific behaviour.
-4. Do not fork Wolfram logic into Indigo as a shortcut.
-
-Wolfram is also the correct place for protocol-level details such as:
-
-- XRPC request construction;
+- XRPC;
 - Lexicon types;
-- session handling;
-- identity resolution;
+- identity/DID handling;
 - repository operations;
-- AT URI/DID handling;
-- record encoding;
-- protocol-specific error handling;
+- AT URIs;
+- session primitives;
+- protocol parsing;
 - cryptography;
 - pagination primitives;
-- protocol response parsing.
+- protocol-level error handling;
+- HTTP/TLS transport.
 
-Indigo should receive application-friendly data and status from that layer.
+Indigo's `src/atproto/` module is an application-facing adapter. It should translate between Indigo's application state and Wolfram's API.
 
----
+Wolfram already has a 3DS platform implementation. Its platform layer owns the libctru socket service and other platform primitives. Therefore Indigo must not independently call `socInit()` and then ask Wolfram to initialise the same service.
 
-## 4. Target platform and toolchain
+The old standalone `src/net/` scaffold has been removed for this reason. If another platform lifecycle boundary becomes necessary, add it only with a clearly defined owner.
 
-Indigo targets Nintendo 3DS homebrew using:
+Before adding a dependency to Indigo, check whether Wolfram already provides the required functionality.
 
-- devkitPro;
-- devkitARM;
-- libctru;
-- the 3DS portlibs where required;
-- the standard devkitPro `3ds_rules` Makefile infrastructure.
+## 4. 3DS application lifecycle
 
-The normal dependency package is the devkitPro 3DS development environment. The exact package set should follow the installed devkitPro release rather than assuming a particular host distribution.
+The normal lifecycle is:
 
-The architecture is ARM11. Do not introduce desktop-only assumptions into platform code.
+1. `gfxInitDefault()`;
+2. initialise the GPU/rendering layer;
+3. initialise application state;
+4. enter `aptMainLoop()`;
+5. call `hidScanInput()` once per frame;
+6. translate input;
+7. update application state;
+8. render;
+9. wait for VBlank;
+10. shut down subsystems in reverse ownership order;
+11. `gfxExit()`.
 
-The current Makefile uses a standard devkitARM recursive build structure. Keep one build system: do not introduce CMake solely for Indigo when the application itself is already using devkitPro Makefile rules. CMake remains appropriate for building the sibling Wolfram checkout because Wolfram's 3DS support is configured through its `.devdeps/3ds.cmake`.
+The current renderer uses citro3d/citro2d. citro2d sits on top of citro3d and provides the 2D drawing and system-font text facilities used by the shell.
 
-The normal dependency sequence is:
+Do not block the render loop on network requests.
 
-1. install the 3DS devkitPro environment;
-2. build Wolfram with its 3DS toolchain;
-3. build Indigo with `make`;
-4. copy the resulting `.3dsx` to the SD card;
-5. launch it through the chosen 3DS homebrew environment.
+START should continue to provide a predictable exit path back to the homebrew launcher.
 
-Do not claim a build works unless the relevant toolchain has actually been run.
+Do not claim that the application has been hardware-tested unless it has actually been run on a 3DS.
 
----
+## 5. Graphics
 
-## 5. Repository structure
+The current renderer is GPU-backed.
 
-The current structure is intentionally small:
+The intended stack is:
 
 ```
-indigo/
-├── AGENTS.md
-├── LICENSE
-├── Makefile
-├── README.md
-├── .gitignore
-└── src/
-    ├── main.c
-    ├── app/
-    │   ├── app.c
-    │   └── app.h
-    ├── atproto/
-    │   ├── atproto.c
-    │   └── atproto.h
-    ├── input/
-    │   ├── input.c
-    │   └── input.h
-    ├── net/
-    │   ├── net.c
-    │   └── net.h
-    ├── ui/
-    │   ├── ui.c
-    │   └── ui.h
-    └── util/
-        ├── log.c
-        └── log.h
+libctru
+  └── citro3d
+       └── citro2d
+            └── Indigo UI
 ```
 
-Keep the boundaries meaningful:
+The official devkitPro 3DS examples cover citro2d/citro3d rendering, input, networking, SDMC, ROMFS and threading. Use them as platform references rather than inventing incompatible lifecycle patterns.
 
-- `main.c` — startup, shutdown and frame-loop orchestration.
-- `app/` — application state, navigation and screen-level behaviour.
-- `ui/` — rendering and presentation.
-- `input/` — physical 3DS input translated into Indigo actions.
-- `net/` — platform network lifecycle only, if it remains necessary after Wolfram integration is completed.
-- `atproto/` — Indigo-facing adapter around Wolfram.
-- `util/` — logging and small cross-cutting helpers.
+The renderer owns:
 
-As the application grows, add modules according to responsibility rather than allowing `app.c` or `ui.c` to become catch-all files.
+- C3D initialisation/finalisation;
+- C2D initialisation/finalisation;
+- top-screen render target;
+- bottom-screen render target;
+- text buffers;
+- future textures/sprites/fonts.
 
-Avoid filenames that collide across directories when the devkitPro Makefile's flat `VPATH` can turn them into ambiguous object names. Cobalt has already encountered this class of problem. Prefer descriptive names when two modules would otherwise both become something like `profile.o`.
+Application code must not depend on `C2D_RenderTarget` details.
 
----
+The current UI is intentionally simple. It is a real renderer, not the final client design.
 
-## 6. Application lifecycle
+When adding graphics:
 
-The native application loop is based on libctru's normal 3DS lifecycle:
+- keep allocations bounded;
+- avoid recreating GPU resources every frame;
+- separate layout from drawing;
+- do not retain unnecessary decoded images;
+- use the system font initially where appropriate;
+- introduce custom fonts only with an explicit Unicode/layout reason.
 
-- `gfxInitDefault()`;
-- console/rendering setup;
-- `aptMainLoop()`;
-- per-frame input polling;
-- application update;
-- rendering;
-- `gfxFlushBuffers()`;
-- `gfxSwapBuffers()`;
-- `gspWaitForVBlank()`;
-- orderly subsystem shutdown;
-- `gfxExit()`.
+## 6. Two-screen design
 
-Keep startup and shutdown ordering explicit.
-
-Do not perform expensive network work directly in the render loop.
-
-Do not make the application unresponsive while waiting for network requests.
-
-The frame loop should remain deterministic enough that input, navigation and rendering remain responsive even when protocol operations are pending.
-
-When adding asynchronous work, keep the UI state machine separate from the transport/job implementation. A network request should produce a state transition or result rather than becoming a hidden blocking operation inside a draw function.
-
----
-
-## 7. Two-screen UI model
-
-The 3DS has two different physical displays and Indigo should treat them as two surfaces with different purposes.
-
-Do not model the screens as arbitrary desktop windows.
-
-The default design direction is:
+Treat the two displays as different surfaces.
 
 ### Top screen
 
 The top screen is the primary reading surface.
 
-It should normally carry information such as:
+Use it for:
 
-- timeline content;
+- timelines;
+- posts;
 - threads;
 - profiles;
 - media;
-- focused post content;
-- larger contextual information.
-
-The top screen has the higher-resolution visual role and should prioritise readable text and useful information density.
+- other information-heavy content.
 
 ### Bottom screen
 
 The bottom screen is the interaction surface.
 
-It should make meaningful use of:
+Use it for:
 
-- touch;
-- navigation controls;
-- contextual actions;
+- navigation;
+- actions;
 - filters;
 - compose controls;
-- navigation;
-- focused-item actions.
+- contextual controls;
+- touch interaction.
 
-Do not simply duplicate the top screen on the bottom screen.
+Do not mirror the top screen onto the bottom screen.
 
-### Touch and buttons
+The touchscreen is an additional input method, not the only interaction path.
 
-Every important operation must have a sensible button-based path. Touch is an additional interaction method, not the only way to operate the client.
+## 7. Input
 
-The application should remain usable when the user prefers physical controls.
+libctru exposes the actual 3DS input hardware. The Indigo input abstraction currently tracks:
 
-Touch coordinates should be translated in `input/`, not scattered through application code.
+- held keys;
+- pressed keys;
+- released keys;
+- Circle Pad position;
+- C-Stick position;
+- touchscreen coordinates;
+- touch down/press/release.
 
-Do not expose raw `KEY_A`, `KEY_B`, `KEY_TOUCH` and similar libctru constants to higher-level application logic.
+Keep raw libctru key constants inside `input/` where possible.
 
----
+Core navigation must work on Old 3DS hardware. New 3DS-only inputs such as C-Stick and ZL/ZR can enhance the experience but cannot be required for basic operation.
 
-## 8. Input model
+When adding a gesture or touchscreen-only interaction, provide a physical-control equivalent when the operation is important.
 
-libctru exposes the normal 3DS buttons, Circle Pad, touchscreen and New 3DS-specific controls.
+Do not make assumptions based on Cobalt's GamePad input model.
 
-The input abstraction should distinguish at least:
+## 8. Input polling order
 
-- held buttons;
-- newly pressed buttons;
-- released buttons where needed;
-- Circle Pad direction/position;
-- C-Stick direction/position when available;
-- touchscreen position;
-- touch-down state;
-- touch-start state;
-- touch-release state when needed.
+A frame should poll HID once:
 
-New 3DS-only inputs such as ZL, ZR and C-Stick must not make the basic application unusable on Old 3DS hardware.
+```c
+hidScanInput();
+indigo_input_begin_frame(&input);
+indigo_input_poll(&input);
+```
 
-When a feature can benefit from C-Stick or ZL/ZR, treat those as enhancements to the common control model.
+Do not call `hidScanInput()` from several modules.
 
-Do not assume that a particular controller mapping used by Cobalt makes sense here.
+Application code consumes Indigo input state rather than directly polling libctru.
 
-Navigation should be designed around the physical controls first, then enhanced with touch.
+## 9. Text and Unicode
 
----
+AT Protocol content is arbitrary Unicode.
 
-## 9. Rendering strategy
+Do not assume posts, display names, handles, biographies or alt text are ASCII.
 
-The current UI is deliberately a console-text scaffold. It is not the final rendering architecture.
+The citro2d system font is useful for the bootstrap shell, but it is not a guarantee that every Unicode character a server can return will have a glyph.
 
-The 3DS examples maintained by devkitPro cover libctru, citro3d and citro2d. When Indigo moves beyond the bootstrap UI, evaluate those libraries rather than immediately writing a bespoke GPU abstraction.
+The eventual text system should account for:
 
-The likely progression is:
-
-1. console text for bootstrap/debug output;
-2. a real 2D rendering layer;
-3. text layout and font rendering;
-4. images and avatars;
-5. feed/post layout;
-6. touch hit-testing;
-7. transitions and richer interaction.
-
-Do not introduce a heavyweight abstraction merely because it exists.
-
-If citro2d/citro3d is used, keep the rendering layer behind `ui/` so application code does not become coupled to GPU implementation details.
-
-Avoid rendering every screen as a web-style card grid. The 3DS's fixed screens and touch interface should influence the layout.
-
----
-
-## 10. Text, fonts and Unicode
-
-AT Protocol content is Unicode. Posts, display names, biographies, handles and alt text cannot be assumed to be ASCII.
-
-Plan for:
-
+- UTF-8;
 - emoji;
-- accented Latin characters;
-- Cyrillic;
-- Greek;
-- CJK;
+- accented Latin;
+- Greek/Cyrillic;
+- CJK where supported;
 - combining marks;
-- right-to-left text where practical;
-- long unbroken strings;
-- malformed or unexpected Unicode input.
+- long strings;
+- missing glyphs;
+- text wrapping.
 
-Do not assume that a single bundled font covers the entire Unicode range.
+Do not use byte length as rendered width.
 
-A missing glyph must degrade to a visible fallback rather than corrupting layout or crashing the application.
+Keep measurement/layout separate from drawing so feed items can calculate their height consistently.
 
-Text measurement must be separated from drawing. Feed/card heights should be calculated from the same layout rules used to render them so scrolling cannot drift.
+## 10. Application architecture
 
-Do not use byte length as a substitute for rendered width.
+Current source boundaries are:
 
----
+```
+src/
+├── main.c        libctru lifecycle and frame loop
+├── app/          application state and navigation
+├── ui/           citro2d/citro3d rendering
+├── input/        3DS buttons, sticks and touchscreen
+├── atproto/      Wolfram-backed protocol integration
+└── util/         logging and small helpers
+```
 
-## 11. AT Protocol application layer
+Keep modules responsibility-focused.
 
-Indigo should initially concentrate on the core Bluesky client loop rather than attempting to implement the entire AT Protocol ecosystem.
+Avoid turning `app.c` or `ui.c` into a catch-all.
 
-A sensible early application surface is:
+The flat VPATH used by the devkitPro Makefile means same-named source files can become ambiguous object names. Prefer descriptive filenames when two directories would otherwise both contain something such as `profile.c`.
+
+## 11. Bluesky application surface
+
+The initial useful client surface should be built incrementally:
 
 1. session/login;
 2. home timeline;
@@ -353,315 +266,301 @@ A sensible early application surface is:
 9. actor search;
 10. account/session management.
 
-Later features can be added when the basic client is stable.
+Do not attempt to implement the entire AT Protocol ecosystem before the basic client is stable.
 
-Protocol calls belong behind `src/atproto/` and Wolfram. UI modules should not manually construct XRPC requests.
+UI modules must not manually construct XRPC requests.
 
-Keep pagination explicit. A feed is not an infinite in-memory list.
+Feeds must be paginated and bounded. Do not keep an unbounded timeline in memory.
 
-Network failures, expired sessions, missing records and malformed responses must become application states rather than crashes.
+Network failures, expired sessions and malformed responses must become application states rather than crashes.
 
-Do not assume every server behaves exactly like bsky.social. Service URLs, PDS routing, DID resolution and server-provided capabilities matter.
+Do not assume that every account uses bsky.social.
 
----
+## 12. Authentication
 
-## 12. Authentication and credentials
+Never hard-code or commit:
 
-Authentication is a security-sensitive part of the project.
-
-Do not hard-code:
-
-- handles;
-- passwords;
+- account passwords;
 - app passwords;
 - access tokens;
 - refresh tokens;
-- service credentials.
+- DPoP keys;
+- OAuth secrets.
 
-Do not commit test credentials.
+Use Wolfram's authentication/session functionality where available.
 
-Prefer the authentication facilities exposed by Wolfram rather than implementing another session system in Indigo.
+The first usable milestone does not require OAuth. If OAuth is added later, treat it as a dedicated architecture change.
 
-The UX should make the distinction between an app password and a normal account password clear. Never encourage users to enter their normal account password when an app password is the intended credential.
+If credentials are persisted to SDMC:
 
-If session persistence is added:
-
-- use the SD-card application data area deliberately;
-- minimise what is stored;
-- provide a sign-out path;
-- remove credentials from memory when practical;
-- do not print tokens in logs;
-- do not display secrets in diagnostics;
-- handle corrupted session data as a normal recoverable condition.
-
-OAuth is not a prerequisite for the first usable Indigo milestone. If OAuth is eventually supported, treat it as a dedicated architecture task rather than mixing browser-based authentication into the initial client shell.
-
----
+- keep them under an Indigo-specific directory;
+- store the minimum necessary data;
+- provide sign-out;
+- do not print secrets in logs;
+- treat corrupt session files as recoverable;
+- do not silently replace user data.
 
 ## 13. Networking
 
-Networking must be resilient.
+Networking is owned by Wolfram once the protocol layer is connected.
 
-The console can lose Wi-Fi, DNS can fail, the PDS can be unavailable, TLS can fail, or a request can time out.
+Wolfram's existing 3DS implementation uses libctru's socket layer and is designed to work with the 3DS curl/portlib environment.
 
-Every network operation needs a failure path.
+Indigo must not add another HTTP/TLS/socket stack merely because those libraries are available.
 
-Do not:
+Network operations must be resilient to:
 
-- spin indefinitely while waiting for a response;
-- freeze the whole UI for a network request;
-- retry aggressively without a backoff policy;
-- assume the network is present because the console booted successfully.
+- Wi-Fi loss;
+- DNS failure;
+- TLS failure;
+- HTTP errors;
+- timeouts;
+- rate limits;
+- unavailable PDS/AppView services.
 
-The current `src/net/` module exists as a platform boundary, but its ownership must be reconciled with Wolfram's existing 3DS platform implementation before the real protocol layer is connected.
+Never spin indefinitely waiting for the network.
 
-Wolfram's current 3DS implementation uses libctru's socket service. Therefore Indigo should not independently initialise the same service and then ask Wolfram to initialise it again.
-
-Keep platform prerequisites and protocol transport separate:
-
-- Indigo owns application lifecycle and platform-specific prerequisites only where necessary.
-- Wolfram owns AT Protocol transport and protocol-level behaviour.
-
-Do not add curl, mbedTLS, sockets or another HTTP stack to Indigo simply because those libraries are available. First determine whether Wolfram already provides the required path.
-
----
+Long operations should be represented as jobs/state transitions rather than hidden inside rendering.
 
 ## 14. Storage
 
-The 3DS SD card is persistent but removable and can contain damaged or unexpected data.
+Use SDMC for persistent application state when required.
 
-If Indigo adds persistent state, isolate it under an application-specific directory rather than scattering files across the SD card.
+Keep Indigo data in an application-specific directory.
 
-Potential persistent data includes:
+Potential state includes:
 
-- session state;
 - settings;
-- cached profile/feed data;
+- session state;
+- cached data;
 - drafts;
-- offline post queue;
-- logs when explicitly enabled.
+- explicit offline queues;
+- optional diagnostic logs.
 
-Do not make cached data a prerequisite for starting the application.
+Persistent formats must tolerate missing, empty, truncated and malformed files.
 
-Every persisted format needs to tolerate:
+Version any format that is likely to survive an application update.
 
-- missing files;
-- empty files;
-- truncated files;
-- malformed contents;
-- version changes;
-- SD-card removal or write failure.
+Never silently discard a user's draft.
 
-If a file format is introduced, include a version field or another migration strategy before shipping it.
+Do not make cached data a prerequisite for booting.
 
-Do not silently overwrite user-authored drafts.
+## 15. Offline behaviour
 
----
+Separate:
 
-## 15. Caching and offline behaviour
-
-Network-backed data should not be assumed to be available every frame.
-
-Where caching is useful, separate:
-
-- authoritative remote state;
-- local cached state;
+- remote authoritative state;
+- local cache;
 - optimistic UI state;
 - pending mutations.
 
-For actions such as likes or reposts, it can be reasonable to update the UI optimistically and reconcile later, but a failed mutation must eventually be visible to the application.
+Do not create an implicit queue that publishes old actions without the user understanding that they were queued.
 
-Offline support should be deliberate. Do not build an implicit offline queue that can publish old user actions unexpectedly.
+If an offline compose queue is added, provide explicit inspection, retry and discard controls.
 
-If an offline post queue is eventually added, the UI must make queued posts explicit and provide a way to inspect, retry and discard them.
+## 16. Accessibility
 
----
+There is no assumption that a custom Indigo UI will automatically inherit a modern desktop accessibility layer.
 
-## 16. Accessibility and constrained hardware
+Design for:
 
-The 3DS has no modern system-wide accessibility layer that Indigo can assume will read every custom UI element.
+- readable text;
+- strong focus indication;
+- predictable navigation;
+- physical-button alternatives;
+- meaningful labels;
+- image alt text where available;
+- no colour-only status indicators;
+- sufficiently large touch targets;
+- restrained animation.
 
-Therefore accessibility has to be designed into the client.
+Do not sacrifice basic readability to increase feed density.
 
-Priorities include:
+## 17. Performance and memory
 
-- readable text sizes;
-- strong visual focus indication;
-- consistent navigation;
-- button-based alternatives to touch;
-- meaningful labels for icons;
-- alt text for images where available;
-- avoiding information conveyed only through colour;
-- avoiding tiny touch targets;
-- avoiding unnecessary animation;
-- keeping interaction predictable.
-
-Do not sacrifice basic readability to fit more posts on screen.
-
-The application should respect the hardware's limitations rather than imitating a desktop social-media dashboard.
-
----
-
-## 17. Error handling and diagnostics
-
-Errors should be structured enough that the application can distinguish:
-
-- no network;
-- DNS failure;
-- TLS failure;
-- HTTP failure;
-- authentication failure;
-- expired session;
-- invalid server response;
-- rate limiting;
-- malformed local state;
-- unsupported protocol feature;
-- internal application failure.
-
-User-facing errors should be understandable without exposing raw implementation details.
-
-Logs are for diagnostics. Never log credentials, session tokens, cookies, or full authenticated request headers.
-
-The current `util/log` layer is intentionally minimal. It can grow as diagnostics become necessary, but logging must remain cheap enough for hardware.
-
-A debug build may be more verbose than a release build.
-
----
-
-## 18. Memory and performance
-
-The 3DS is an embedded console, not a desktop machine.
+Treat the 3DS as constrained hardware.
 
 Be deliberate with:
 
 - heap allocations;
-- large JSON buffers;
-- decoded images;
-- cached posts;
-- font glyph data;
-- duplicated strings;
-- network response bodies.
+- large JSON responses;
+- image decoding;
+- glyph storage;
+- duplicate strings;
+- feed caches.
 
-Do not retain entire network responses after extracting the information needed by the UI unless there is a concrete reason.
+Do not retain complete network responses when only a small subset is needed.
 
-Prefer bounded collections for scrolling content.
+Use bounded collections for timelines and notifications.
 
-Large images should not remain decoded indefinitely.
+Do not decode and retain every image in a feed simultaneously.
 
-When implementing feeds, avoid an architecture that requires the entire timeline, every avatar and every image to remain resident simultaneously.
+Measure before introducing complicated optimisation, but avoid obviously unbounded structures.
 
-Measure before introducing complicated optimisations, but do not ignore obvious unbounded growth.
+## 18. Threading
 
----
+Threads are optional, not mandatory.
 
-## 19. Threading and asynchronous work
+If background work is introduced:
 
-The application does not need a thread for every operation.
-
-Use background work only when it improves responsiveness or is required by the underlying SDK.
-
-If threading is introduced:
-
-- define ownership of every shared object;
-- define which thread owns UI state;
-- do not touch rendering state from worker threads;
+- define ownership of shared state;
+- keep rendering on the main thread;
 - synchronise shared queues;
 - make shutdown deterministic;
-- ensure worker threads cannot outlive the objects they reference.
+- ensure worker threads cannot outlive referenced objects.
 
-Wolfram's 3DS platform already provides its own platform primitives. Do not invent another mutex abstraction inside Indigo unless the application actually needs one.
+Prefer Wolfram's existing 3DS platform primitives over introducing another threading abstraction.
 
-The main UI/render thread should remain the owner of presentation state.
+## 19. Homebrew packaging and distribution
 
----
+The normal development output is a `.3dsx` with embedded SMDH metadata.
 
-## 20. Media and images
+The application bundle layout is:
 
-Bluesky content can contain images and other embeds.
+```
+sdmc:/3ds/indigo/indigo.3dsx
+```
 
-Do not make media decoding part of the first boot milestone.
+The Homebrew Menu recognises this as an application bundle and uses embedded SMDH metadata for the displayed name, description and icon when present.
 
-When media support is added:
+Do not add a CIA target merely because `.cia` files exist in the 3DS ecosystem. It is outside the current scope.
 
-- fetch asynchronously;
-- validate response size/type;
-- decode off the critical render path;
-- cap decoded dimensions and memory use;
-- provide placeholders while loading;
-- provide a failure state;
-- preserve alt text;
-- avoid retaining every decoded image forever.
+For development, 3dslink/netloader is a useful alternative to repeatedly removing the SD card. Do not hot-swap the SD card while homebrew is running.
 
-Do not assume every embed is an image. AT Protocol records can contain different embed types and new types can appear.
+If an icon is added, wire it through the standard `APP_ICON`/SMDH path supplied by `3ds_rules` rather than inventing an application-specific packaging format.
 
-Unknown embeds should degrade gracefully.
+## 20. Debugging
 
----
+Luma3DS/Rosalina is the preferred modern homebrew launch environment and provides facilities useful for development, including remote debugging.
 
-## 21. UI state and navigation
+Keep diagnostics useful without leaking credentials.
 
-Keep navigation explicit.
+The logging module may remain lightweight. Do not dump authenticated request headers, tokens or session objects.
 
-A screen should know:
+A debug build can be more verbose than a release build.
 
-- what application state it represents;
-- where Back returns;
-- what data it owns;
-- what asynchronous operations are active;
-- how it behaves while loading;
-- what happens on failure.
+## 21. Build system
 
-Avoid global booleans that gradually become an undocumented navigation state machine.
+The Makefile intentionally follows the current devkitPro 3DS application template.
 
-If a screen can be entered from multiple places, model its return destination explicitly instead of hard-coding one parent.
+Important assumptions:
 
-Do not duplicate an entire screen solely because two callers need slightly different return behaviour.
+- `DEVKITARM` points at devkitARM;
+- `DEVKITPRO` points at the devkitPro installation;
+- `3ds_rules` supplies the standard recursive build/package rules;
+- ARMv6K is the target architecture;
+- citro2d/citro3d come from the 3DS development environment;
+- Wolfram is separately built for 3DS.
 
----
+The normal build sequence is:
 
-## 22. Application feature progression
+```sh
+cd ../wolfram
+cmake -S . -B build-3ds \
+  -DCMAKE_TOOLCHAIN_FILE=$PWD/.devdeps/3ds.cmake \
+  -DWOLFRAM_BUILD_3DS=ON \
+  -DWOLFRAM_BUILD_TESTS=OFF \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-3ds
 
-A reasonable development sequence is:
+cd ../indigo
+make
+```
+
+Do not claim a build succeeded without actually running it.
+
+Do not silently substitute a host compiler or desktop libraries.
+
+## 22. Testing
+
+Validation has distinct levels.
+
+### Source/build validation
+
+Run the relevant Makefile target with the intended devkitPro environment.
+
+### Hardware validation
+
+A successful cross-build does not prove hardware behaviour.
+
+When hardware is available, test:
+
+- launch through Homebrew Menu;
+- both screens;
+- physical buttons;
+- Circle Pad;
+- C-Stick where applicable;
+- touchscreen;
+- START exit;
+- SDMC access;
+- network connectivity;
+- protocol/session behaviour;
+- long-running feed scrolling;
+- clean shutdown.
+
+Do not call emulator or host testing hardware testing.
+
+### Regression validation
+
+When changing Wolfram's 3DS integration, build Wolfram's 3DS target as well as Indigo.
+
+## 23. Common mistakes
+
+Watch for:
+
+- missing devkitARM/devkitPro environment;
+- missing citro2d/citro3d;
+- missing 3DS portlibs;
+- Wolfram built for the host instead of ARM;
+- wrong sibling Wolfram path;
+- duplicate socket initialisation;
+- desktop libraries accidentally entering the link;
+- flat-VPATH object collisions;
+- C/C++ linker selection errors;
+- New 3DS-only controls becoming mandatory;
+- unbounded feed/image allocations;
+- blocking network requests on the render thread;
+- treating a cross-build as proof of hardware compatibility.
+
+## 24. Development phases
+
+The intended progression is:
 
 ### Phase 1 — native shell
 
-- boot;
-- top/bottom rendering;
-- physical input;
-- clean exit;
-- logging;
-- network lifecycle;
-- build/install loop.
+- libctru lifecycle;
+- citro2d/citro3d renderer;
+- two-screen layout;
+- complete input abstraction.
 
-### Phase 2 — rendering foundation
+### Phase 2 — application state
 
-- real 2D renderer;
-- text layout;
-- font handling;
-- touch hit-testing;
-- reusable UI primitives.
+- navigation;
+- focus model;
+- scrolling;
+- screen transitions;
+- input routing.
 
-### Phase 3 — Wolfram session
+### Phase 3 — Wolfram integration
 
-- initialise the SDK exactly once;
-- establish the 3DS transport/platform relationship;
-- authenticate;
-- represent loading/error/session states.
+- resolve the actual Indigo/Wolfram session boundary;
+- remove remaining scaffold assumptions;
+- connect network lifecycle through Wolfram;
+- session/authentication state.
 
 ### Phase 4 — first Bluesky surface
 
-- home timeline;
-- post cards;
+- timeline;
+- post rendering;
 - pagination;
-- profile viewing;
-- thread viewing.
+- profile;
+- threads.
 
 ### Phase 5 — interaction
 
 - compose;
 - replies;
-- likes;
-- reposts;
+- likes/reposts;
 - notifications;
 - search.
 
@@ -669,209 +568,82 @@ A reasonable development sequence is:
 
 - settings;
 - session persistence;
-- caching;
+- cache;
 - drafts;
 - media;
-- accessibility refinement;
-- performance work.
+- accessibility;
+- performance;
+- distribution metadata.
 
-Do not skip directly from a text-mode shell to a full-featured social client without establishing the rendering and state-management foundations.
-
----
-
-## 23. Testing and validation
-
-There are several distinct levels of validation. Do not confuse them.
-
-### Static/code validation
-
-At minimum, compile touched source with the intended warnings enabled where the required toolchain is available.
-
-### Native 3DS build
-
-Run:
-
-```sh
-make clean
-make
-```
-
-and verify the expected `.3dsx` output.
-
-If Wolfram is involved, ensure the actual 3DS Wolfram build used by Indigo is the one being linked.
-
-### Hardware validation
-
-A successful cross-build does not prove that Indigo works on a 3DS.
-
-Hardware acceptance should include, as applicable:
-
-- application launches;
-- both screens initialise correctly;
-- buttons work;
-- touchscreen works;
-- application exits cleanly;
-- network initialisation succeeds;
-- DNS/HTTPS requests work;
-- session creation works;
-- feed loading works;
-- long scrolling does not leak memory;
-- losing network connectivity does not hang the UI.
-
-When a feature depends on real hardware behaviour, mark it hardware-tested only after it has actually run on a console.
-
-### Regression validation
-
-When changing a shared Wolfram integration point, build Wolfram's 3DS target as well as Indigo.
-
-Do not claim emulator or host success as hardware success.
-
----
-
-## 24. Build and dependency pitfalls
-
-Watch for these recurring failure modes:
-
-- missing `DEVKITPRO`;
-- missing devkitARM/libctru;
-- missing 3DS portlibs;
-- Wolfram built for the host instead of 3DS;
-- incorrect sibling Wolfram path;
-- duplicate socket initialisation;
-- accidentally linking desktop libraries;
-- object-name collisions caused by flat `VPATH`;
-- assuming C++ runtime symbols are linked when the target is built as C;
-- using APIs available on desktop but absent from libctru;
-- relying on New 3DS-only input on Old 3DS;
-- allocating large temporary buffers per frame;
-- blocking the main loop on network I/O.
-
-When the linker reports an apparently unrelated symbol failure, check the actual target language, library ordering, object naming and recursive Makefile exports before changing source code.
-
----
+Do not skip the platform foundations by implementing a web-client-shaped UI first.
 
 ## 25. Code conventions
 
-Keep the existing C style:
+Use the existing C style:
 
-- C source unless C++ is justified;
-- simple structs;
+- C unless C++ is justified;
+- small structs;
 - explicit ownership;
-- clear init/shutdown pairs;
+- init/shutdown pairs;
 - `bool` for boolean state;
-- small functions with one responsibility;
-- descriptive module prefixes such as `indigo_app_*`;
-- headers that expose only the module's public surface;
-- no unnecessary global state.
+- descriptive `indigo_*` names;
+- narrow public headers;
+- platform includes kept in platform-facing modules where practical.
 
-Keep platform-specific includes in platform-specific modules where possible.
+Comments should explain decisions and hardware constraints rather than restating the code.
 
-Do not leak libctru types through every application-facing API if a small Indigo abstraction is sufficient.
+Do not introduce SDL merely for API familiarity.
 
-Comments should explain decisions and hardware constraints, not restate obvious code.
+## 26. Security
 
----
+Never commit credentials or private key material.
 
-## 26. Security rules
+Never log:
 
-Treat AT Protocol credentials and session state as sensitive.
-
-Never commit:
-
-- app passwords;
 - access tokens;
 - refresh tokens;
+- app passwords;
 - DPoP keys;
 - OAuth secrets;
-- private test fixtures containing credentials.
+- authenticated cookies/headers.
 
-Do not add debug endpoints that expose session state.
+Use Wolfram's existing cryptographic implementation.
 
-Do not dump complete authenticated HTTP requests to logs.
-
-When adding cryptographic functionality, prefer Wolfram's existing implementation rather than introducing another crypto library or implementation in Indigo.
-
----
-
-## 27. Working with the repository
+## 27. Agent workflow
 
 Before editing:
 
 1. Read this file.
 2. Read the README.
-3. Inspect the relevant module and its callers.
-4. Inspect Wolfram's corresponding API if the change crosses the protocol boundary.
-5. Check the Makefile if the change affects build inputs or dependencies.
-6. Check existing Cobalt behaviour when the requested feature is intentionally shared at the product level.
+3. Inspect the relevant source and callers.
+4. Inspect Wolfram if the change crosses the protocol boundary.
+5. Inspect the Makefile if build inputs change.
+6. Check Cobalt for product-level behaviour only.
 7. Keep the change scoped.
 
 After editing:
 
-- build what can actually be built;
+- run the build when the toolchain is available;
 - run relevant tests;
-- inspect the resulting diff;
-- update this file when the architecture changes;
-- never claim a check was run when it was not.
+- inspect the diff;
+- update AGENTS.md when architecture changes;
+- never claim checks that were not run.
 
-Use focused commits. Avoid mixing an unrelated cleanup into a feature change.
+Prefer focused commits.
 
----
+## 28. Current state
 
-## 28. What not to do
+The current repository has:
 
-Do not:
+- a standard libctru/devkitARM application entry point;
+- GPU-backed citro2d rendering on both physical screens;
+- native buttons, Circle Pad, C-Stick and touchscreen polling;
+- a small application/navigation state machine;
+- a Wolfram adapter boundary;
+- no Bluesky session/feed implementation yet.
 
-- port Cobalt wholesale;
-- recreate Wolfram inside Indigo;
-- introduce SDL just for API familiarity;
-- make the bottom screen a mirrored afterthought;
-- make touch the only input path;
-- block the render loop on network requests;
-- assume permanent network access;
-- store credentials in source;
-- log session tokens;
-- depend on New 3DS-only controls for core navigation;
-- make the entire feed resident in memory;
-- treat a clean cross-compile as hardware validation;
-- add a dependency without checking whether devkitPro actually supplies it;
-- silently invent protocol behaviour when Wolfram or the AT Protocol specification already defines it.
+The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
----
+The next major architectural step is wiring the adapter to Wolfram's real 3DS session/transport API without reintroducing duplicate socket ownership.
 
-## 29. Current known state
-
-As of the current scaffold:
-
-- the application has a native `aptMainLoop()`;
-- libctru graphics/input initialisation exists;
-- top and bottom consoles are separate;
-- A/B/START and touchscreen input are translated through `input/`;
-- a network module exists;
-- an AT Protocol adapter boundary exists;
-- Wolfram is not yet called by the AT Protocol adapter;
-- the UI is still console-text based;
-- Bluesky functionality is not implemented;
-- no hardware-tested claim should be made for the scaffold.
-
-The network ownership issue described in §13 must be resolved before the real Wolfram session lifecycle is wired into the application.
-
----
-
-## 30. Keep this document current
-
-This file is intentionally more detailed than a generic coding-agent guide because Indigo has several platform constraints that are easy to lose when the codebase grows.
-
-When an architectural decision changes — for example:
-
-- choosing citro2d/citro3d or another renderer;
-- changing the networking ownership model;
-- adding persistent storage;
-- adding an offline queue;
-- adding OAuth;
-- defining a concrete screen/navigation architecture;
-- adding CI or host-side tests;
-- changing the Wolfram integration boundary;
-
-update the relevant section of this file in the same change.
-
-The code, README and AGENTS.md should describe the same project.
+Keep this document current whenever those boundaries change.
