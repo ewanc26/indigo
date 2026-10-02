@@ -114,4 +114,4 @@ Wolfram is the shared protocol layer between them because AT Protocol should not
 
 ## Licence
 
-Indigo is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+Indigo is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
