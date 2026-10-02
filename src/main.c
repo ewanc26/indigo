@@ -1,13 +1,11 @@
 #include "app/app.h"
+#include "atproto/atproto.h"
 #include "input/input.h"
 #include "net/net.h"
 #include "ui/ui.h"
 #include "util/log.h"
 
 #include <3ds.h>
-
-#include <stdbool.h>
-#include <stdio.h>
 
 int
 main(void)
@@ -18,6 +16,8 @@ main(void)
         indigo_log_warn("network initialisation unavailable");
     }
 
+    indigo_atproto_init();
+
     gfxInitDefault();
 
     PrintConsole top;
@@ -26,6 +26,7 @@ main(void)
     consoleInit(GFX_BOTTOM, &bottom);
 
     indigo_ui_init(&top, &bottom);
+
     indigo_input input;
     indigo_input_init(&input);
 
@@ -34,6 +35,7 @@ main(void)
 
     while (aptMainLoop() && !indigo_app_should_quit(&app)) {
         hidScanInput();
+
         indigo_input_begin_frame(&input);
         indigo_input_poll(&input);
 
@@ -48,6 +50,7 @@ main(void)
     indigo_app_shutdown(&app);
     indigo_input_shutdown(&input);
     indigo_ui_shutdown();
+    indigo_atproto_shutdown();
     gfxExit();
     indigo_net_shutdown();
     indigo_log_shutdown();
