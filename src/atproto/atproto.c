@@ -9,12 +9,13 @@ bool
 indigo_atproto_init(void)
 {
     /*
-     * Wolfram integration starts here. Keep the boundary platform-specific:
-     * the application should not know whether Wolfram is using 3DS curl,
-     * mbedTLS or another transport.
+     * This is the application-facing boundary for Wolfram.
      *
-     * The first scaffold does not create a session yet. That comes after the
-     * native platform shell is established.
+     * The adapter must not own the 3DS socket service or another HTTP/TLS
+     * stack. Wolfram already provides the 3DS platform transport layer.
+     *
+     * The scaffold does not create a session yet. Real Wolfram integration
+     * comes after the native application shell is established.
      */
     s_initialised = true;
     indigo_log_info("AT Protocol layer ready");
