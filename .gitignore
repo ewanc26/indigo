@@ -1,0 +1,9 @@
+build/
+*.3dsx
+*.elf
+*.smdh
+*.cia
+*.3ds
+*.3dsx
+*.map
+compile_commands.json
