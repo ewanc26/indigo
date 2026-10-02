@@ -4,15 +4,11 @@
 
 TOPDIR ?= $(CURDIR)
 
-ifeq ($(strip $(DEVKITPRO)),)
-$(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>devkitPro")
-endif
+#---------------------------------------------------------------------------------
+# 3DS toolchain rules
+#---------------------------------------------------------------------------------
 
-ifeq ($(strip $(DEVKITARM)),)
-$(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
-endif
-
-include $(DEVKITARM)/base_rules
+include $(DEVKITPRO)/devkitARM/3ds_rules
 
 TARGET := indigo
 BUILD := build
@@ -20,34 +16,47 @@ SOURCES := src src/app src/ui src/input src/net src/atproto src/util
 DATA :=
 INCLUDES := src
 
-WOLFRAM_ROOT ?= $(TOPDIR)/../wolfram
-WOLFRAM_BUILD ?= $(WOLFRAM_ROOT)/build-3ds
-WOLFRAM_LIB := $(WOLFRAM_BUILD)/libwolfram.a
+APP_TITLE := Indigo
+APP_DESCRIPTION := Native AT Protocol / Bluesky client for Nintendo 3DS
+APP_AUTHOR := Ewan C
 
 LIBCTRU := $(DEVKITPRO)/libctru
 PORTLIBS := $(DEVKITPRO)/portlibs/3ds
 
-# Wolfram is optional for the first native shell. Once protocol code starts
-# referencing it, the missing library should become a hard build error rather
-# than silently producing a client without AT Protocol support.
+#---------------------------------------------------------------------------------
+# Wolfram — Ewan's C AT Protocol SDK, built for 3DS as a sibling checkout.
+#
+# The protocol layer is deliberately shared with Cobalt through Wolfram, while
+# the application and platform code remains native to the 3DS.
+#---------------------------------------------------------------------------------
+
+WOLFRAM_ROOT ?= $(TOPDIR)/../wolfram
+WOLFRAM_BUILD ?= $(WOLFRAM_ROOT)/build-3ds
+WOLFRAM_LIB := $(WOLFRAM_BUILD)/libwolfram.a
+
 ifneq ($(wildcard $(WOLFRAM_LIB)),)
-  WOLFRAM_CFLAGS := -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src -DWOLFRAM_3DS
-  WOLFRAM_LIBS := $(WOLFRAM_LIB)
+  WOLFRAM_CFLAGS := -DWOLFRAM_3DS -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
+  WOLFRAM_LIBS := $(WOLFRAM_LIB) \
+                  $(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a \
+                  $(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a
 else
   WOLFRAM_CFLAGS :=
   WOLFRAM_LIBS :=
 endif
 
 CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections -fdata-sections \
-          $(INCLUDE) $(WOLFRAM_CFLAGS)
+          $(WOLFRAM_CFLAGS)
 
 CXXFLAGS := $(CFLAGS) -std=gnu++17
 
-ASFLAGS := -g $(ARCH)
-
-LIBS := $(WOLFRAM_LIBS) -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lctru
+LIBS := $(WOLFRAM_LIBS) \
+        -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lctru
 
 LIBDIRS := $(LIBCTRU) $(PORTLIBS)
+
+#---------------------------------------------------------------------------------
+# Standard devkitARM recursive build layout
+#---------------------------------------------------------------------------------
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
@@ -72,38 +81,29 @@ export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
-export APP_TITLE := Indigo
-export APP_DESCRIPTION := Native AT Protocol / Bluesky client for Nintendo 3DS
-export APP_AUTHOR := Ewan C
+ifneq ($(strip $(WOLFRAM_LIBS)),)
+export LD := $(CXX)
+else
+export LD := $(CC)
+endif
 
 .PHONY: all clean run
 
-all: $(BUILD)
+all: $(BUILD) $(TARGET).3dsx
 
 $(BUILD):
 	@mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 clean:
-	@rm -rf $(BUILD) $(OUTPUT).elf $(OUTPUT).3dsx $(OUTPUT).smdh
+	@rm -rf $(BUILD) $(TARGET).elf $(TARGET).3dsx $(TARGET).smdh $(TARGET).lst
 
 run: all
-	@echo "Copy $(OUTPUT).3dsx to sd:/3ds/indigo/indigo.3dsx"
+	@echo "Copy $(TARGET).3dsx to sd:/3ds/indigo/indigo.3dsx"
 
 else
 
-export LD := $(CC)
-export LIBS := $(LIBS)
-export LIBPATHS := $(LIBPATHS)
+# base_rules/3ds_rules supplies compilation, dependency tracking, ELF linking
+# and 3DSX/SMDH packaging from the exported variables above.
 
 endif
-
-#---------------------------------------------------------------------------------
-# 3DSX packaging
-#---------------------------------------------------------------------------------
-
-$(TARGET).3dsx: $(OUTPUT).elf
-	3dsxtool $< $@
-
-# The base rules provide the ELF link target from OFILES/OUTPUT.
-all: $(TARGET).3dsx
