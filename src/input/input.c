@@ -12,10 +12,11 @@ void
 indigo_input_begin_frame(indigo_input *input)
 {
     input->pressed = hidKeysDown();
+    input->released = hidKeysUp();
+
     input->confirm = (input->pressed & KEY_A) != 0;
     input->back = (input->pressed & KEY_B) != 0;
     input->quit = (input->pressed & KEY_START) != 0;
-    input->touch_pressed = false;
 }
 
 void
@@ -23,14 +24,24 @@ indigo_input_poll(indigo_input *input)
 {
     input->held = hidKeysHeld();
 
+    circlePosition circle;
+    hidCircleRead(&circle);
+    input->circle_x = circle.dx;
+    input->circle_y = circle.dy;
+
+    circlePosition cstick;
+    hidCstickRead(&cstick);
+    input->cstick_x = cstick.dx;
+    input->cstick_y = cstick.dy;
+
     touchPosition touch;
     hidTouchRead(&touch);
 
     input->touch_x = touch.px;
     input->touch_y = touch.py;
     input->touch_down = (input->held & KEY_TOUCH) != 0;
-    input->touch_pressed = input->touch_down &&
-                          (input->pressed & KEY_TOUCH) != 0;
+    input->touch_pressed = (input->pressed & KEY_TOUCH) != 0;
+    input->touch_released = (input->released & KEY_TOUCH) != 0;
 }
 
 void
