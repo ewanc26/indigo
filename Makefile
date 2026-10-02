@@ -24,7 +24,7 @@ LIBCTRU := $(DEVKITPRO)/libctru
 PORTLIBS := $(DEVKITPRO)/portlibs/3ds
 
 #---------------------------------------------------------------------------------
-# Wolfram — Ewan's C AT Protocol SDK, built for 3DS as a sibling checkout.
+# Wolfram — my C AT Protocol SDK, built for 3DS as a sibling checkout.
 #
 # The protocol layer is deliberately shared with Cobalt through Wolfram, while
 # the application and platform code remains native to the 3DS.
