@@ -4,9 +4,9 @@
 #include "app/app.h"
 #include "input/input.h"
 
-#include <3ds.h>
+#include <stdbool.h>
 
-void indigo_ui_init(PrintConsole *top, PrintConsole *bottom);
+bool indigo_ui_init(void);
 void indigo_ui_draw(const indigo_app *app, const indigo_input *input);
 void indigo_ui_shutdown(void);
 
