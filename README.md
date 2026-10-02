@@ -4,9 +4,9 @@ A native AT Protocol / Bluesky client for the Nintendo 3DS.
 
 **Version 0.1.0**
 
-Indigo is the 3DS counterpart to [Cobalt](https://github.com/ewanc26/cobalt), but it is **not a port** of Cobalt. It is being designed around the 3DS's own hardware, input model and two-screen layout rather than trying to reproduce the Wii U implementation on different hardware.
+Indigo is the 3DS counterpart to [Cobalt](https://github.com/ewanc26/cobalt), but it is **not a port** of Cobalt. I am designing it around the 3DS's own hardware, input model and two-screen layout rather than trying to reproduce the Wii U implementation on different hardware.
 
-The project uses [Wolfram](https://github.com/ewanc26/wolfram), Ewan's C AT Protocol SDK, for protocol functionality.
+The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality.
 
 ## Status
 
