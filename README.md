@@ -1,6 +1,6 @@
 # Indigo
 
-A native AT Protocol / Bluesky client for the Nintendo 3DS.
+A native Bluesky client for the Nintendo 3DS.
 
 **Version 0.1.0**
 
