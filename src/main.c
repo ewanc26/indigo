@@ -13,7 +13,12 @@ main(void)
 
     gfxInitDefault();
 
-    indigo_ui_init();
+    if (!indigo_ui_init()) {
+        indigo_log_error("could not initialise the 3DS renderer");
+        gfxExit();
+        indigo_log_shutdown();
+        return 1;
+    }
 
     indigo_atproto_init();
 
