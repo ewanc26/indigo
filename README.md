@@ -4,7 +4,16 @@ A native Bluesky client for the Nintendo 3DS.
 
 **Version 0.1.0**
 
-Indigo is the 3DS counterpart to [Cobalt](https://github.com/ewanc26/cobalt), but it is **not a port** of Cobalt. I am designing it around the 3DS's own hardware, input model and two-screen layout.
+Indigo exists because apparently making a Wii U post to Bluesky was not enough.
+
+After forcing a PowerPC tri-core console to participate in the modern social
+web with [Cobalt](https://github.com/ewanc26/cobalt), I decided that the next
+reasonable target was a Nintendo 3DS: another machine with absolutely no
+business being a Bluesky client.
+
+The goal is the same kind of hardware-first absurdity, but the implementation
+is deliberately different. Indigo is **not a port** of Cobalt. I am designing
+it around the 3DS's own hardware, input model and two-screen layout.
 
 The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality.
 
