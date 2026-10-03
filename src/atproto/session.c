@@ -11,6 +11,7 @@
 
 #include <3ds.h>
 #include <wolfram/3ds.h>
+#include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
 #include <wolfram/post_display.h>
 #include <wolfram/thread_typed.h>
@@ -29,6 +30,7 @@ typedef enum {
     JOB_PROFILE,
     JOB_NOTIFICATIONS,
     JOB_PUBLISH,
+    JOB_SEARCH,
 } job_kind;
 
 typedef struct {
@@ -45,6 +47,7 @@ typedef struct {
     char text[INDIGO_DRAFT_MAX];
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
+    char query[INDIGO_SEARCH_QUERY_MAX];
 } job;
 
 static char s_path[256];
@@ -71,6 +74,8 @@ static unsigned s_page_count;
 static indigo_profile s_profile;
 static indigo_notification s_notes[INDIGO_NOTIFICATION_MAX];
 static unsigned s_note_count;
+static indigo_actor s_actors[INDIGO_SEARCH_MAX];
+static unsigned s_actor_count;
 
 static indigo_failure
 classify(wf_status st)
@@ -672,6 +677,59 @@ note_kind(const char *reason)
 }
 
 static void
+do_search(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_actor_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    if (!j->query[0]) {
+        /* The app refuses to submit an empty query, so reaching this is a bug
+         * rather than something a person did. */
+        ev.failure = INDIGO_FAIL_OTHER;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_search_actors_typed(s_agent, j->query, INDIGO_SEARCH_MAX, NULL, &list);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("search failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_actor_count = 0;
+    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+        const wf_agent_profile_view *a = &list.actors[i];
+        indigo_actor *o = &s_actors[s_actor_count];
+
+        if (!a->handle || !a->handle[0]) {
+            /* A profile with no handle cannot be opened, and a row that does
+             * nothing is worse than a missing one. */
+            continue;
+        }
+        memset(o, 0, sizeof *o);
+        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
+        indigo_copy_utf8(o->display_name, sizeof o->display_name,
+                         a->display_name ? a->display_name : "");
+        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
+        s_actor_count++;
+    }
+    wf_agent_actor_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+    ev.page_count = s_actor_count;
+    indigo_log_info("search '%s': %u", j->query, s_actor_count);
+    publish_event(&ev);
+}
+
+static void
 do_notifications(void)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
@@ -817,6 +875,9 @@ worker(void *arg)
             break;
         case JOB_NOTIFICATIONS:
             do_notifications();
+            break;
+        case JOB_SEARCH:
+            do_search(&j);
             break;
         case JOB_PUBLISH:
             do_publish(&j);
@@ -994,6 +1055,25 @@ const indigo_profile *
 indigo_session_profile(void)
 {
     return &s_profile;
+}
+
+bool
+indigo_session_submit_search(const char *query)
+{
+    job j = {.kind = JOB_SEARCH};
+
+    if (!query) {
+        return false;
+    }
+    indigo_copy_utf8(j.query, sizeof j.query, query);
+    return submit(&j);
+}
+
+const indigo_actor *
+indigo_session_search_results(unsigned *count)
+{
+    *count = s_actor_count;
+    return s_actors;
 }
 
 const indigo_notification *
@@ -1174,6 +1254,20 @@ indigo_session_profile(void)
 
 const indigo_notification *
 indigo_session_notifications(unsigned *count)
+{
+    *count = 0;
+    return NULL;
+}
+
+bool
+indigo_session_submit_search(const char *query)
+{
+    (void) query;
+    return false;
+}
+
+const indigo_actor *
+indigo_session_search_results(unsigned *count)
 {
     *count = 0;
     return NULL;

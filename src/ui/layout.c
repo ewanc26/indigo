@@ -52,6 +52,10 @@ static const indigo_rect s_field_handle = {14, 98, 292, 38};
 static const indigo_rect s_field_password = {14, 144, 292, 38};
 static const indigo_rect s_sign_in_button = {14, 192, 292, 36};
 
+/* Search: the query box sits in the header bar beside Back, so the result
+ * rows keep the standard list geometry below it. */
+static const indigo_rect s_query_button = {14, 6, 210, 30};
+
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
 {
@@ -83,6 +87,8 @@ indigo_layout_button_rect(indigo_action action)
                               MENU_W, MENU_H};
     case INDIGO_ACTION_EDIT:
         return s_edit_button;
+    case INDIGO_ACTION_FIELD_QUERY:
+        return s_query_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -131,6 +137,11 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
     static const indigo_action compose_actions[] = {
         INDIGO_ACTION_EDIT, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
+    /* AUTHOR is the same pill rect as REFRESH and means the same thing here:
+     * open the selected person's profile. */
+    static const indigo_action search_actions[] = {
+        INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
+        INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
     const indigo_action *list = signin_actions;
     unsigned count = 0;
 
@@ -156,6 +167,9 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
         break;
     case INDIGO_SCREEN_COMPOSE:
         USE(compose_actions);
+        break;
+    case INDIGO_SCREEN_SEARCH:
+        USE(search_actions);
         break;
     }
 #undef USE
@@ -402,6 +416,39 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_search(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_search *s = &app->search;
+    const indigo_actor *sel = indigo_search_selected(s);
+
+    top_title(c, "Search", "A  Type   SEL  Open");
+    if (s->loading) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Searching...");
+        return;
+    }
+    if (!sel) {
+        if (s->status[0]) {
+            indigo_canvas_text(c, 18, 84, 0.7f, s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+                               "%.40s", s->status);
+        } else if (!s->searched) {
+            indigo_canvas_text(c, 18, 76, 0.7f, COL_TEXT_SOFT,
+                               "Find people by name or handle.");
+            indigo_canvas_text(c, 18, 104, 0.6f, COL_TEXT_DIM,
+                               "Press A, or tap the box, to type.");
+        } else {
+            indigo_canvas_text(c, 18, 90, 0.7f, COL_TEXT_SOFT, "No results.");
+        }
+        return;
+    }
+    indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", s->selected + 1, s->count);
+    indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s",
+                       sel->display_name[0] ? sel->display_name : sel->handle);
+    indigo_canvas_text(c, 18, 82, 0.65f, COL_TEXT_DIM, "@%s", sel->handle);
+    indigo_canvas_text(c, 18, 112, 0.55f, COL_TEXT_DIM, "%.44s", sel->did);
+    indigo_canvas_text(c, 18, 140, 0.6f, COL_TEXT_SOFT, "SEL  Open profile");
+}
+
+static void
 build_top_menu(const indigo_app *app, indigo_canvas *c)
 {
     top_title(c, "Menu", "B  Close");
@@ -484,6 +531,9 @@ build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_COMPOSE:
         build_top_compose(app, c);
+        return;
+    case INDIGO_SCREEN_SEARCH:
+        build_top_search(app, c);
         return;
     default:
         break;
@@ -715,6 +765,39 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_search(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_search *s = &app->search;
+    indigo_rect q = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
+
+    indigo_canvas_rect(c, q.x, q.y, q.w, q.h, s->query[0] ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, s->query[0] ? COL_TEXT : COL_TEXT_DIM, "%s",
+                       s->query[0] ? s->query : "Tap to type a name");
+    back_button(c, INDIGO_ACTION_BACK, "Back");
+
+    for (unsigned row = 0; row < INDIGO_SEARCH_ROWS; row++) {
+        unsigned idx = s->scroll + row;
+        const indigo_actor *it = indigo_search_row(s, row, INDIGO_SEARCH_ROWS);
+        char title[96];
+
+        if (!it) {
+            break;
+        }
+        snprintf(title, sizeof title, "%.30s",
+                 it->display_name[0] ? it->display_name : it->handle);
+        list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
+                 it->handle);
+    }
+    /* Only one pill: typing is the header box, and a second "A Type" pill at
+     * the bottom would either overlap that box or need an action that means
+     * something else to the touch handler. Same label as the thread screen's
+     * author pill: SEL opens a profile there too, and "SEL Open" does not fit
+     * a 74px pill in the baked font. */
+    action_pill(c, INDIGO_ACTION_AUTHOR, indigo_search_selected(s) != NULL, s->loading,
+                COL_PILL_ACTIVE, "Profile");
+}
+
+static void
 build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
 {
     (void) input;
@@ -740,6 +823,9 @@ build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
         break;
     case INDIGO_SCREEN_COMPOSE:
         build_bottom_compose(app, c);
+        break;
+    case INDIGO_SCREEN_SEARCH:
+        build_bottom_search(app, c);
         break;
     }
 }

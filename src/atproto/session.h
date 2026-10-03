@@ -1,6 +1,7 @@
 #ifndef INDIGO_SESSION_H
 #define INDIGO_SESSION_H
 
+#include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
@@ -24,6 +25,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED,
     INDIGO_SESSION_EVENT_PUBLISHED,
     INDIGO_SESSION_EVENT_PUBLISH_FAILED,
+    INDIGO_SESSION_EVENT_SEARCH_PAGE,
+    INDIGO_SESSION_EVENT_SEARCH_FAILED,
 } indigo_session_event_kind;
 
 typedef enum {
@@ -89,6 +92,10 @@ bool indigo_session_submit_notifications(void);
 bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *target_uri, const char *target_cid,
                                    const char *root_uri, const char *root_cid);
+/* Find people by name or handle. Results are bounded to INDIGO_SEARCH_MAX;
+ * there is no paging, because a 3DS list that cannot show page two is not a
+ * list worth paging. */
+bool indigo_session_submit_search(const char *query);
 
 /* True while a job is running or its event has not been polled. */
 bool indigo_session_busy(void);
@@ -101,6 +108,7 @@ const indigo_post *indigo_session_page(unsigned *count);
  * lifetime rule as indigo_session_page(). */
 const indigo_profile *indigo_session_profile(void);
 const indigo_notification *indigo_session_notifications(unsigned *count);
+const indigo_actor *indigo_session_search_results(unsigned *count);
 
 /* Returns true and fills `out` when a job finished since the last poll. */
 bool indigo_session_poll(indigo_session_event *out);

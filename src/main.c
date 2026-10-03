@@ -109,6 +109,20 @@ start_publish(indigo_app *app)
     }
 }
 
+/* Accepting the keyboard runs the search: the prompt and the search are one
+ * action, so there is no second confirm on a list screen. */
+static void
+handle_edit_query(indigo_app *app)
+{
+    char text[INDIGO_SEARCH_QUERY_MAX];
+    indigo_text_result r = indigo_text_edit("Name or handle", app->search.query, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_query(app, text);
+    }
+}
+
 static void
 handle_requests(indigo_app *app)
 {
@@ -176,6 +190,14 @@ handle_requests(indigo_app *app)
         break;
     case INDIGO_REQUEST_PUBLISH:
         start_publish(app);
+        break;
+    case INDIGO_REQUEST_EDIT_QUERY:
+        handle_edit_query(app);
+        break;
+    case INDIGO_REQUEST_SEARCH:
+        if (!indigo_session_submit_search(app->search.query)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
         break;
     case INDIGO_REQUEST_NONE:
         break;
@@ -268,6 +290,16 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
             indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_SEARCH_PAGE: {
+            unsigned n;
+            const indigo_actor *actors = indigo_session_search_results(&n);
+
+            indigo_app_search_loaded(app, actors, n);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_SEARCH_FAILED:
+            indigo_app_search_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_NONE:
             break;

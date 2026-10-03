@@ -191,7 +191,7 @@ test_layout_invariants(void)
     static indigo_canvas top;
     static indigo_canvas bottom;
 
-    for (int screen = 0; screen <= INDIGO_SCREEN_COMPOSE; screen++) {
+    for (int screen = 0; screen <= INDIGO_SCREEN_SEARCH; screen++) {
         indigo_app app;
         indigo_input in = {0};
 
@@ -520,7 +520,8 @@ test_signin_flow(void)
     CHECK(strcmp(app.signin.account, "ewancroft.uk") == 0);
 
     /* Open the More menu the way the person does: with nothing selected it
-     * holds only the app actions, and Sign out is the fourth. */
+     * holds only the app actions, and Sign out is the fifth (Find people sits
+     * between Notifications and My profile). */
     in = (indigo_input) {0};
     r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
     in.touch_pressed = true;
@@ -528,12 +529,12 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 5);
-    CHECK(app.menu.items[3].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[2].label, "My profile") == 0);
+    CHECK(app.menu.count == 6);
+    CHECK(app.menu.items[4].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[3].label, "My profile") == 0);
 
     in = (indigo_input) {0};
-    r = indigo_layout_button_rect(INDIGO_ACTION_MENU3);
+    r = indigo_layout_button_rect(INDIGO_ACTION_MENU4);
     in.touch_pressed = true;
     in.touch_x = (int) (r.x + 4);
     in.touch_y = (int) (r.y + 4);
@@ -994,8 +995,8 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the five app actions. */
-    CHECK(menu.count == 8);
+    /* Three facet targets first, then the six app actions. */
+    CHECK(menu.count == 9);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1004,7 +1005,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[7].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[8].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1022,7 +1023,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 8);
+    CHECK(app.menu.count == 9);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1043,7 +1044,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 5);
+    CHECK(menu.count == 6);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1051,13 +1052,13 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 5);
+    CHECK(menu.count == 6);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 5);
-    CHECK(strcmp(menu.items[2].label, "Your profile") == 0);
-    CHECK(strcmp(menu.items[2].payload, "") == 0);
+    CHECK(menu.count == 6);
+    CHECK(strcmp(menu.items[3].label, "Your profile") == 0);
+    CHECK(strcmp(menu.items[3].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
     {
@@ -1081,8 +1082,8 @@ test_facet_menu_edges(void)
         indigo_copy_utf8(big.text, sizeof big.text, text);
 
         indigo_menu_build(&menu, &big, "me.example.com");
-        /* Eight facets plus the five app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 5);
+        /* Eight facets plus the six app actions, and no more than the cap. */
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 6);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -1178,7 +1179,7 @@ test_no_duplicate_back_hints(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,  INDIGO_SCREEN_HOME,       INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE, INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE};
+        INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH};
     indigo_app app;
     indigo_input in = {0};
 
@@ -1214,7 +1215,7 @@ test_text_stays_on_screen(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE};
+        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH};
     indigo_app app;
     indigo_input in = {0};
 
@@ -1255,6 +1256,230 @@ test_text_stays_on_screen(void)
     }
 }
 
+static void
+test_search_model(void)
+{
+    indigo_search s;
+    indigo_actor one;
+
+    memset(&s, 0, sizeof s);
+    /* Nothing to search for, and a search already running, both refuse. */
+    CHECK(!indigo_search_can_submit(&s));
+    indigo_copy_utf8(s.query, sizeof s.query, "alice");
+    CHECK(indigo_search_can_submit(&s));
+    s.loading = true;
+    CHECK(!indigo_search_can_submit(&s));
+    s.loading = false;
+
+    /* Moving an empty list does nothing rather than selecting row 0. */
+    CHECK(!indigo_search_move(&s, 1, INDIGO_TIMELINE_ROWS));
+    CHECK(indigo_search_selected(&s) == NULL);
+    CHECK(indigo_search_row(&s, 0, INDIGO_TIMELINE_ROWS) == NULL);
+
+    memset(&one, 0, sizeof one);
+    indigo_copy_utf8(one.handle, sizeof one.handle, "alice.example.com");
+    s.items[0] = one;
+    s.count = 1;
+    CHECK(indigo_search_selected(&s) == &s.items[0]);
+
+    /* The selection stops at both ends instead of running off the list. */
+    CHECK(!indigo_search_move(&s, -1, INDIGO_TIMELINE_ROWS));
+    CHECK(!indigo_search_move(&s, 1, INDIGO_TIMELINE_ROWS));
+    CHECK(s.selected == 0);
+
+    /* Rows outside the count are empty rather than stale. */
+    CHECK(indigo_search_row(&s, 1, INDIGO_TIMELINE_ROWS) == NULL);
+    CHECK(indigo_search_row(&s, 0, 0) == NULL);
+
+    /* Clear forgets the results but keeps the typed query: reopening search
+     * should not make the person type the name again. */
+    indigo_search_clear(&s);
+    CHECK(s.count == 0 && s.selected == 0 && s.scroll == 0);
+    CHECK(!s.searched && !s.loading && s.status[0] == '\0');
+    CHECK(strcmp(s.query, "alice") == 0);
+}
+
+/* The list scrolls to keep a long result set inside the visible rows. */
+static void
+test_search_selection_scroll(void)
+{
+    indigo_search s;
+    char handle[32];
+
+    memset(&s, 0, sizeof s);
+    for (unsigned i = 0; i < INDIGO_SEARCH_MAX; i++) {
+        snprintf(handle, sizeof handle, "person%02u.example.com", i);
+        indigo_copy_utf8(s.items[i].handle, sizeof s.items[i].handle, handle);
+        s.count++;
+    }
+
+    for (unsigned i = 0; i < INDIGO_SEARCH_ROWS; i++) {
+        CHECK(indigo_search_move(&s, 1, INDIGO_SEARCH_ROWS));
+    }
+    CHECK(s.selected == INDIGO_SEARCH_ROWS);
+    CHECK(s.scroll == 1);
+    CHECK(indigo_search_row(&s, 0, INDIGO_SEARCH_ROWS) == &s.items[1]);
+
+    /* Already at the top: up does nothing rather than going negative. */
+    s.selected = 0;
+    s.scroll = 0;
+    CHECK(!indigo_search_move(&s, -1, INDIGO_SEARCH_ROWS));
+    CHECK(s.scroll == 0);
+    CHECK(s.selected == 0);
+}
+
+static void
+test_search_flow(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_rect r;
+    indigo_actor actors[2] = {0};
+
+    indigo_app_init(&app);
+    /* Signing in lands on Home and asks for the first page; take it so the
+     * menu is free to answer. */
+    indigo_app_sign_in_succeeded(&app, "me.example.com");
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+
+    /* Reached from the More menu, the same way Notifications is. */
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+
+    /* A opens the keyboard; the search itself is not started without a query. */
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_QUERY);
+
+    /* Accepting the query runs the search in the same step. */
+    indigo_app_set_query(&app, "alice");
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_SEARCH);
+    CHECK(strcmp(app.search.query, "alice") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SEARCH);
+
+    indigo_copy_utf8(actors[0].handle, sizeof actors[0].handle, "alice.example.com");
+    indigo_copy_utf8(actors[0].display_name, sizeof actors[0].display_name, "Alice");
+    indigo_copy_utf8(actors[1].handle, sizeof actors[1].handle, "alice2.example.com");
+    indigo_app_search_loaded(&app, actors, 2);
+    CHECK(app.search.count == 2);
+    CHECK(app.search.searched);
+    CHECK(!app.search.loading);
+
+    /* SEL opens the selected person's profile, as it does on a thread. */
+    in = (indigo_input) {0};
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE);
+    CHECK(strcmp(app.request_post_uri, "alice.example.com") == 0);
+
+    /* And back again returns to the results, not to Home. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.count == 2);
+
+    /* Touch does the same two things the buttons do: the query box types, and
+     * the SEL pill opens the profile. */
+    r = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_QUERY);
+
+    r = indigo_layout_button_rect(INDIGO_ACTION_AUTHOR);
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(strcmp(app.request_post_uri, "alice.example.com") == 0);
+}
+
+/* A new query must not leave the previous results selectable. */
+static void
+test_search_query_resets_results(void)
+{
+    indigo_app app;
+    indigo_actor actors[2] = {0};
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    indigo_copy_utf8(actors[0].handle, sizeof actors[0].handle, "alice.example.com");
+    indigo_copy_utf8(actors[1].handle, sizeof actors[1].handle, "alice2.example.com");
+    indigo_app_set_query(&app, "alice");
+    indigo_app_take_request(&app, &f);
+    indigo_app_search_loaded(&app, actors, 2);
+    CHECK(app.search.count == 2);
+
+    indigo_app_set_query(&app, "bob");
+    CHECK(app.search.count == 0);
+    CHECK(indigo_search_selected(&app.search) == NULL);
+    CHECK(!app.search.searched);
+}
+
+/* Nobody matching is a real outcome, distinct from not having searched. */
+static void
+test_search_empty_and_failure(void)
+{
+    indigo_app app;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    CHECK(!app.search.searched && app.search.status[0] == '\0');
+
+    indigo_app_search_loaded(&app, NULL, 0);
+    CHECK(app.search.searched);
+    CHECK(app.search.count == 0);
+    CHECK(strcmp(app.search.status, "Nobody matched that.") == 0);
+    CHECK(!app.search.status_is_error);
+
+    indigo_app_search_failed(&app, "No connection.");
+    CHECK(!app.search.loading);
+    CHECK(app.search.status_is_error);
+    CHECK(strcmp(app.search.status, "No connection.") == 0);
+}
+
+/* More results than the list can hold are dropped, not overflowed. */
+static void
+test_search_results_bounded(void)
+{
+    indigo_app app;
+    indigo_actor many[INDIGO_SEARCH_MAX + 5];
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    for (unsigned i = 0; i < sizeof many / sizeof many[0]; i++) {
+        memset(&many[i], 0, sizeof many[i]);
+        snprintf(many[i].handle, sizeof many[i].handle, "p%03u.example.com", i);
+    }
+    indigo_app_set_query(&app, "p");
+    indigo_app_take_request(&app, &f);
+    indigo_app_search_loaded(&app, many, sizeof many / sizeof many[0]);
+    CHECK(app.search.count == INDIGO_SEARCH_MAX);
+}
+
 int
 main(void)
 {
@@ -1288,6 +1513,12 @@ main(void)
     test_facet_menu();
     test_facet_menu_edges();
     test_menu_rows_on_screen();
+    test_search_model();
+    test_search_selection_scroll();
+    test_search_flow();
+    test_search_query_resets_results();
+    test_search_empty_and_failure();
+    test_search_results_bounded();
     test_no_duplicate_back_hints();
     test_text_stays_on_screen();
 

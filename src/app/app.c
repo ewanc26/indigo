@@ -235,12 +235,42 @@ open_notifications(indigo_app *app)
 static void
 open_menu(indigo_app *app)
 {
-    /* Built before the screen changes: the facet targets come from whichever
-     * list is being read now. */
-    indigo_menu_build(&app->menu, indigo_timeline_selected(indigo_app_active_list(app)),
-                      app->signin.account);
     push_screen(app);
     app->screen = INDIGO_SCREEN_MENU;
+    indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
+                      app->signin.account);
+}
+
+/* Search keeps its query and results across visits: retyping a name to reach
+ * the same list again would be the wrong trade on a system keyboard. */
+static void
+open_search(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.loading = false;
+}
+
+static void
+submit_search(indigo_app *app)
+{
+    indigo_search *s = &app->search;
+
+    if (!indigo_search_can_submit(s) || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    s->loading = true;
+    s->status[0] = '\0';
+    app->request = INDIGO_REQUEST_SEARCH;
+}
+
+static void
+edit_query(indigo_app *app)
+{
+    if (app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    app->request = INDIGO_REQUEST_EDIT_QUERY;
 }
 
 /* The draft text is kept across cancel and failure: nothing typed is lost. */
@@ -535,6 +565,10 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         open_notifications(app);
         break;
+    case INDIGO_MENU_FIND_PEOPLE:
+        go_back(app);
+        open_search(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         go_back(app);
         open_profile(app, app->signin.account);
@@ -574,6 +608,65 @@ update_menu(indigo_app *app, const indigo_input *input)
             unsigned row = (unsigned) (a - INDIGO_ACTION_MENU0);
 
             menu_choose(app, app->menu.scroll + row);
+        }
+    }
+}
+
+static void
+update_search(indigo_app *app, const indigo_input *input)
+{
+    indigo_search *s = &app->search;
+    const indigo_actor *sel = indigo_search_selected(s);
+
+    if (input->up) {
+        indigo_search_move(s, -1, INDIGO_SEARCH_ROWS);
+    }
+    if (input->down) {
+        indigo_search_move(s, 1, INDIGO_SEARCH_ROWS);
+    }
+    if (input->page_up) {
+        indigo_search_move(s, -INDIGO_SEARCH_ROWS, INDIGO_SEARCH_ROWS);
+    }
+    if (input->page_down) {
+        indigo_search_move(s, INDIGO_SEARCH_ROWS, INDIGO_SEARCH_ROWS);
+    }
+    if (input->back) {
+        go_back(app);
+        return;
+    }
+    /* Typing the query and running it are one action: the keyboard blocks, so
+     * making the person confirm again on a list screen would be a wasted
+     * round trip through a system dialog. */
+    if (input->confirm) {
+        edit_query(app);
+    }
+    /* SEL already opens the selected person's profile on the thread screen. */
+    if (input->refresh && sel) {
+        open_profile(app, sel->handle);
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+
+        switch (a) {
+        case INDIGO_ACTION_ROW0:
+        case INDIGO_ACTION_ROW1:
+        case INDIGO_ACTION_ROW2:
+            indigo_search_select(s, s->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
+                                 INDIGO_SEARCH_ROWS);
+            break;
+        case INDIGO_ACTION_FIELD_QUERY:
+            edit_query(app);
+            break;
+        case INDIGO_ACTION_AUTHOR:
+            if (sel) {
+                open_profile(app, sel->handle);
+            }
+            break;
+        case INDIGO_ACTION_BACK:
+            go_back(app);
+            break;
+        default:
+            break;
         }
     }
 }
@@ -649,6 +742,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_COMPOSE:
         update_compose(app, input);
+        break;
+    case INDIGO_SCREEN_SEARCH:
+        update_search(app, input);
         break;
     }
 }
@@ -792,6 +888,46 @@ indigo_app_notifications_failed(indigo_app *app, const char *message)
     app->notifications.loading = false;
     indigo_copy_utf8(app->notifications.status, sizeof app->notifications.status, message);
     app->notifications.status_is_error = true;
+}
+
+void
+indigo_app_set_query(indigo_app *app, const char *text)
+{
+    indigo_search *s = &app->search;
+
+    indigo_copy_utf8(s->query, sizeof s->query, text ? text : "");
+    /* A changed query makes the old results stale, and leaving them up would
+     * invite opening a profile for someone the new query never matched. */
+    s->count = 0;
+    s->selected = 0;
+    s->scroll = 0;
+    s->searched = false;
+    s->status[0] = '\0';
+    s->status_is_error = false;
+    submit_search(app);
+}
+
+void
+indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count)
+{
+    indigo_search *s = &app->search;
+
+    indigo_search_clear(s);
+    for (unsigned i = 0; actors && i < count && i < INDIGO_SEARCH_MAX; i++) {
+        s->items[s->count++] = actors[i];
+    }
+    s->searched = true;
+    if (s->count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status, "Nobody matched that.");
+    }
+}
+
+void
+indigo_app_search_failed(indigo_app *app, const char *message)
+{
+    app->search.loading = false;
+    indigo_copy_utf8(app->search.status, sizeof app->search.status, message);
+    app->search.status_is_error = true;
 }
 
 void
