@@ -17,8 +17,9 @@ include $(DEVKITARM)/3ds_rules
 TARGET := indigo
 BUILD := build
 
-SOURCES := src src/app src/ui src/input src/atproto src/util src/gfx
+SOURCES := src src/app src/ui src/input src/atproto src/store src/util src/gfx
 DATA :=
+ROMFS := romfs
 INCLUDES := src
 GRAPHICS :=
 GFXBUILD := $(BUILD)
@@ -51,6 +52,9 @@ CFLAGS := -g -Wall -Wextra -O2 -mword-relocations           -ffunction-sections 
 
 CXXFLAGS := $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++17
 CFLAGS += $(INCLUDE) -D__3DS__
+ifneq ($(strip $(DEV_AUTOFILL)),)
+  CFLAGS += -DINDIGO_DEV_AUTOFILL
+endif
 
 ASFLAGS := -g $(ARCH)
 LDFLAGS = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
@@ -102,6 +106,10 @@ endif
 
 ifeq ($(strip $(NO_SMDH)),)
   export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh
+endif
+
+ifneq ($(strip $(ROMFS)),)
+  export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
 ifneq ($(strip $(CPPFILES)),)

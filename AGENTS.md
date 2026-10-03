@@ -242,8 +242,11 @@ src/
 ├── gfx/          platform-neutral display lists (canvas)
 ├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
-├── atproto/      Wolfram-backed protocol integration
-└── util/         logging and small helpers
+├── atproto/      Wolfram-backed integration; session.c runs login on a worker thread
+├── store/        session file codec and atomic store on sdmc
+└── util/         logging (file + stderr) and small helpers
+
+romfs/            cacert.pem, curated by tools/make_cabundle.py
 ```
 
 Keep modules responsibility-focused.

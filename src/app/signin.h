@@ -36,6 +36,12 @@ bool indigo_signin_ready(const indigo_signin *s);
 void indigo_signin_display(const indigo_signin *s, indigo_field f, char *out,
                            size_t cap);
 
+/*
+ * Development aid for emulators with no keyboard: fill fields from
+ * "service=", "handle=" and "password=" lines. Returns how many applied.
+ */
+int indigo_signin_apply_autofill(indigo_signin *s, const char *text);
+
 const char *indigo_input_status_message(indigo_input_status st);
 
 #endif

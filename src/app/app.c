@@ -46,6 +46,25 @@ try_sign_in(indigo_app *app)
     app->request = INDIGO_REQUEST_SIGN_IN;
 }
 
+bool
+indigo_app_set_field(indigo_app *app, indigo_field f, const char *text)
+{
+    indigo_input_status st = indigo_signin_set_field(&app->signin, f, text);
+
+    if (st != INDIGO_INPUT_OK) {
+        set_status(&app->signin, indigo_input_status_message(st), true);
+        return false;
+    }
+    set_status(&app->signin, "", false);
+    return true;
+}
+
+void
+indigo_app_submit(indigo_app *app)
+{
+    try_sign_in(app);
+}
+
 static void
 update_signin(indigo_app *app, const indigo_input *input)
 {

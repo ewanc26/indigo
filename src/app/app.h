@@ -70,6 +70,12 @@ bool indigo_app_should_quit(const indigo_app *app);
 indigo_request_kind indigo_app_take_request(indigo_app *app,
                                             indigo_field *field);
 
+/* Store text the person entered; a rejected entry becomes a status message. */
+bool indigo_app_set_field(indigo_app *app, indigo_field f, const char *text);
+
+/* Start sign-in as if the button were pressed (no-op if incomplete or busy). */
+void indigo_app_submit(indigo_app *app);
+
 /* Results fed back by the platform glue. */
 void indigo_app_begin_sign_in(indigo_app *app, const char *status);
 void indigo_app_sign_in_succeeded(indigo_app *app, const char *account);

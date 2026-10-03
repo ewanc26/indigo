@@ -250,3 +250,37 @@ indigo_input_status_message(indigo_input_status st)
     }
     return "";
 }
+
+int
+indigo_signin_apply_autofill(indigo_signin *s, const char *text)
+{
+    static const struct {
+        const char *key;
+        indigo_field field;
+    } keys[] = {{"service=", INDIGO_FIELD_SERVICE},
+                {"handle=", INDIGO_FIELD_HANDLE},
+                {"password=", INDIGO_FIELD_PASSWORD}};
+    int applied = 0;
+    const char *p = text;
+
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t) (nl - p) : strlen(p);
+        char line[INDIGO_SERVICE_MAX + 16];
+
+        if (len < sizeof line) {
+            memcpy(line, p, len);
+            line[len] = '\0';
+            for (size_t i = 0; i < sizeof keys / sizeof keys[0]; i++) {
+                size_t kl = strlen(keys[i].key);
+
+                if (strncmp(line, keys[i].key, kl) == 0 &&
+                    indigo_signin_set_field(s, keys[i].field, line + kl) == INDIGO_INPUT_OK) {
+                    applied++;
+                }
+            }
+        }
+        p = nl ? nl + 1 : p + len;
+    }
+    return applied;
+}

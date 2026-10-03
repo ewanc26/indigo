@@ -2,6 +2,7 @@
 #include "app/signin.h"
 #include "atproto/errors.h"
 #include "store/session_codec.h"
+#include "util/log.h"
 #include "store/session_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
@@ -279,6 +280,14 @@ test_signin_flow(void)
     CHECK(f == INDIGO_FIELD_HANDLE);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
 
+    CHECK(!indigo_app_set_field(&app, INDIGO_FIELD_SERVICE, "http://pds.example.org"));
+    CHECK(app.signin.status_is_error);
+    CHECK(strcmp(app.signin.service, INDIGO_DEFAULT_SERVICE) == 0);
+    CHECK(indigo_app_set_field(&app, INDIGO_FIELD_SERVICE, "pds.example.org"));
+    CHECK(!app.signin.status_is_error && app.signin.status[0] == '\0');
+    CHECK(strcmp(app.signin.service, "https://pds.example.org") == 0);
+    indigo_signin_set_field(&app.signin, INDIGO_FIELD_SERVICE, INDIGO_DEFAULT_SERVICE);
+
     /* Signing in with an empty form is refused with a message, not sent. */
     r = indigo_layout_button_rect(INDIGO_ACTION_SIGN_IN);
     in.touch_x = (int) (r.x + 4);
@@ -464,6 +473,56 @@ test_failures(void)
     }
 }
 
+static void
+test_log_file(void)
+{
+    char buf[128];
+    FILE *f;
+
+    system("mkdir -p build-host");
+    remove("build-host/test.log.old");
+    CHECK(indigo_log_open_file("build-host/test.log"));
+    indigo_log_info("first run %d", 1);
+    indigo_log_shutdown();
+
+    CHECK(indigo_log_open_file("build-host/test.log"));
+    indigo_log_error("second run");
+    indigo_log_shutdown();
+
+    f = fopen("build-host/test.log.old", "r");
+    CHECK(f != NULL);
+    if (f) {
+        CHECK(fgets(buf, sizeof buf, f) != NULL && strstr(buf, "first run 1") != NULL);
+        fclose(f);
+    }
+    f = fopen("build-host/test.log", "r");
+    CHECK(f != NULL);
+    if (f) {
+        CHECK(fgets(buf, sizeof buf, f) != NULL && strstr(buf, "second run") != NULL);
+        fclose(f);
+    }
+    CHECK(!indigo_log_open_file("/nonexistent-dir/x.log"));
+}
+
+static void
+test_autofill(void)
+{
+    indigo_signin s;
+
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_apply_autofill(&s, "service=pds.example.org\nhandle=@me.example\npassword=abcd-efgh\n") == 3);
+    CHECK(strcmp(s.service, "https://pds.example.org") == 0);
+    CHECK(strcmp(s.handle, "me.example") == 0);
+    CHECK(strcmp(s.password, "abcd-efgh") == 0);
+    CHECK(indigo_signin_ready(&s));
+
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_apply_autofill(&s, "junk\nhandle=\npassword=x") == 1);
+    CHECK(strcmp(s.service, INDIGO_DEFAULT_SERVICE) == 0);
+    CHECK(!indigo_signin_ready(&s));
+    CHECK(indigo_signin_apply_autofill(&s, "") == 0);
+}
+
 int
 main(void)
 {
@@ -481,6 +540,8 @@ main(void)
     test_session_codec();
     test_session_store();
     test_failures();
+    test_log_file();
+    test_autofill();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;
