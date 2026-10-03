@@ -456,10 +456,24 @@ update_profile(indigo_app *app, const indigo_input *input)
     if ((input->confirm || input->like) && p->loaded && !p->loading) {
         indigo_app_toggle_follow(app);
     }
+    /* X is repost on the post screen, but this screen has no posts, so it
+     * takes the moderation actions instead. */
+    if (input->repost && p->loaded && !p->loading) {
+        indigo_app_toggle_mute(app);
+    }
+    if (input->page_down && p->loaded && !p->loading) {
+        indigo_app_toggle_block(app);
+    }
     if (input->touch_pressed) {
         switch (indigo_layout_hit(app->screen, input->touch_x, input->touch_y)) {
         case INDIGO_ACTION_FOLLOW:
             indigo_app_toggle_follow(app);
+            break;
+        case INDIGO_ACTION_MUTE:
+            indigo_app_toggle_mute(app);
+            break;
+        case INDIGO_ACTION_BLOCK:
+            indigo_app_toggle_block(app);
             break;
         case INDIGO_ACTION_BACK:
             go_back(app);
@@ -1000,6 +1014,109 @@ indigo_app_follow_failed(indigo_app *app, const char *message)
 
     p->follow_busy = false;
     p->following = !p->following;
+    indigo_copy_utf8(p->status, sizeof p->status, message);
+    p->status_is_error = true;
+}
+
+/* Mute and block share a shape: flip the flag optimistically, mark the
+ * request, and put it back if the write fails. Blocking needs the record URI
+ * to undo itself, so like unfollowing it refuses without one. */
+void
+indigo_app_toggle_mute(indigo_app *app)
+{
+    indigo_profile *p = &app->profile;
+
+    if (!p->loaded || p->loading || p->mute_busy || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    p->muted = !p->muted;
+    p->mute_busy = true;
+    app->request_graph = p->muted ? INDIGO_GRAPH_MUTE : INDIGO_GRAPH_UNMUTE;
+    app->request = INDIGO_REQUEST_GRAPH;
+}
+
+void
+indigo_app_toggle_block(indigo_app *app)
+{
+    indigo_profile *p = &app->profile;
+
+    if (!p->loaded || p->loading || p->block_busy || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    if (p->blocked) {
+        /* Unblocking deletes a record by URI, so without one there is nothing
+         * to delete and the press is refused rather than failing after it. */
+        if (!p->block_uri[0]) {
+            indigo_copy_utf8(p->status, sizeof p->status, "Reload the profile first.");
+            p->status_is_error = true;
+            return;
+        }
+        app->request_graph = INDIGO_GRAPH_UNBLOCK;
+        p->blocked = false;
+    } else {
+        p->blocked = true;
+        app->request_graph = INDIGO_GRAPH_BLOCK;
+    }
+    p->block_busy = true;
+    app->request = INDIGO_REQUEST_GRAPH;
+}
+
+void
+indigo_app_graph_done(indigo_app *app, indigo_graph_action action, const char *block_uri)
+{
+    indigo_profile *p = &app->profile;
+
+    switch (action) {
+    case INDIGO_GRAPH_MUTE:
+        p->mute_busy = false;
+        p->muted = true;
+        break;
+    case INDIGO_GRAPH_UNMUTE:
+        p->mute_busy = false;
+        p->muted = false;
+        break;
+    case INDIGO_GRAPH_BLOCK:
+        p->block_busy = false;
+        p->blocked = true;
+        indigo_copy_utf8(p->block_uri, sizeof p->block_uri,
+                         block_uri && block_uri[0] ? block_uri : "");
+        break;
+    case INDIGO_GRAPH_UNBLOCK:
+        p->block_busy = false;
+        p->blocked = false;
+        p->block_uri[0] = '\0';
+        break;
+    case INDIGO_GRAPH_NONE:
+        break;
+    }
+}
+
+void
+indigo_app_graph_failed(indigo_app *app, indigo_graph_action action, const char *message)
+{
+    indigo_profile *p = &app->profile;
+
+    switch (action) {
+    case INDIGO_GRAPH_MUTE:
+        p->mute_busy = false;
+        p->muted = false;
+        break;
+    case INDIGO_GRAPH_UNMUTE:
+        p->mute_busy = false;
+        p->muted = true;
+        break;
+    case INDIGO_GRAPH_BLOCK:
+        p->block_busy = false;
+        p->blocked = false;
+        p->block_uri[0] = '\0';
+        break;
+    case INDIGO_GRAPH_UNBLOCK:
+        p->block_busy = false;
+        p->blocked = true;
+        break;
+    case INDIGO_GRAPH_NONE:
+        break;
+    }
     indigo_copy_utf8(p->status, sizeof p->status, message);
     p->status_is_error = true;
 }

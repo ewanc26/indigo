@@ -59,6 +59,7 @@ typedef enum {
     INDIGO_REQUEST_EDIT_QUERY,
     INDIGO_REQUEST_SEARCH,
     INDIGO_REQUEST_FOLLOW,
+    INDIGO_REQUEST_GRAPH,
 } indigo_request_kind;
 
 typedef struct {
@@ -89,6 +90,8 @@ typedef struct {
     /* The state INDIGO_REQUEST_FOLLOW is asking for, so main.c can turn the
      * optimistic toggle into a follow or an unfollow. */
     bool request_follow;
+    /* The state INDIGO_REQUEST_GRAPH is asking for. */
+    indigo_graph_action request_graph;
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -149,6 +152,14 @@ void indigo_app_search_failed(indigo_app *app, const char *message);
 void indigo_app_toggle_follow(indigo_app *app);
 void indigo_app_follow_done(indigo_app *app, bool following, const char *follow_uri);
 void indigo_app_follow_failed(indigo_app *app, const char *message);
+/* Mute/unmute and block/unblock. Mute flips optimistically like follow; block
+ * is a record, so it also has to carry the URI an unblock deletes. */
+void indigo_app_toggle_mute(indigo_app *app);
+void indigo_app_toggle_block(indigo_app *app);
+void indigo_app_graph_done(indigo_app *app, indigo_graph_action action,
+                           const char *block_uri);
+void indigo_app_graph_failed(indigo_app *app, indigo_graph_action action,
+                             const char *message);
 /* The draft text came back from the keyboard. */
 void indigo_app_set_draft(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);

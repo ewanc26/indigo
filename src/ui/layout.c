@@ -60,6 +60,10 @@ static const indigo_rect s_query_button = {14, 6, 210, 30};
  * width a compose box uses rather than one of the four post-screen pills,
  * which the profile does not otherwise need. */
 static const indigo_rect s_follow_button = {14, 52, 292, 40};
+/* Mute and block sit under Follow as a pair of halves, so the moderation
+ * actions read as one group rather than two more full-width bars. */
+static const indigo_rect s_mute_button = {14, 100, 142, 36};
+static const indigo_rect s_block_button = {164, 100, 142, 36};
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
@@ -96,6 +100,10 @@ indigo_layout_button_rect(indigo_action action)
         return s_query_button;
     case INDIGO_ACTION_FOLLOW:
         return s_follow_button;
+    case INDIGO_ACTION_MUTE:
+        return s_mute_button;
+    case INDIGO_ACTION_BLOCK:
+        return s_block_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -135,7 +143,8 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
         INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
-    static const indigo_action profile_actions[] = {INDIGO_ACTION_FOLLOW, INDIGO_ACTION_BACK};
+    static const indigo_action profile_actions[] = {INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE,
+                                                INDIGO_ACTION_BLOCK, INDIGO_ACTION_BACK};
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
@@ -351,7 +360,7 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_profile *p = &app->profile;
 
-    top_title(c, "Profile", "Y  Follow");
+    top_title(c, "Profile", "Y  Follow   X  Mute   R  Block");
     if (!p->loaded) {
         indigo_canvas_text(c, 18, 60, 0.75f, COL_TEXT_SOFT, "%s",
                            p->loading ? "Loading profile..." : "Profile not loaded.");
@@ -673,28 +682,45 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     }
 }
 
+/* A toggle pair: the button names the action it performs, not the state it is
+ * in, so the label never has to change under the reader. */
+static void
+toggle_button(indigo_canvas *c, indigo_action action, bool enabled, bool busy,
+              const char *on_label, const char *off_label)
+{
+    indigo_rect r = indigo_layout_button_rect(action);
+
+    indigo_canvas_rect(c, r.x, r.y, r.w, r.h, enabled && !busy ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, r.x + 10, r.y + 11, 0.6f, enabled && !busy ? COL_TEXT : COL_TEXT_DIM,
+                       "%s", busy ? "..." : (enabled ? off_label : on_label));
+}
+
 static void
 build_bottom_profile(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_profile *p = &app->profile;
-    indigo_rect f = indigo_layout_button_rect(INDIGO_ACTION_FOLLOW);
+    bool ready = p->loaded && !p->loading;
 
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Profile");
     back_button(c, INDIGO_ACTION_BACK, "Back");
 
-    /* Greyed until the profile has loaded: following needs the did, which only
-     * the profile response carries. */
-    indigo_canvas_rect(c, f.x, f.y, f.w, f.h,
-                       p->loaded && !p->loading && !p->follow_busy ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, f.x + 100, f.y + 12, 0.7f,
-                       p->loaded && !p->follow_busy ? COL_TEXT : COL_TEXT_DIM, "%s",
-                       !p->loaded              ? "Loading..."
-                       : p->follow_busy        ? (p->following ? "Following..." : "Unfollowing...")
-                       : p->following          ? "Following"
-                                               : "Follow");
+    /* Greyed until the profile has loaded: follow, mute and block all address
+     * the subject by did, which only the profile response carries. */
+    indigo_canvas_rect(c, s_follow_button.x, s_follow_button.y, s_follow_button.w,
+                       s_follow_button.h,
+                       ready && !p->follow_busy ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, s_follow_button.x + 100, s_follow_button.y + 12, 0.7f,
+                       ready && !p->follow_busy ? COL_TEXT : COL_TEXT_DIM, "%s",
+                       !p->loaded           ? "Loading..."
+                       : p->follow_busy     ? (p->following ? "Following..." : "Unfollowing...")
+                       : p->following       ? "Following"
+                                             : "Follow");
+
+    toggle_button(c, INDIGO_ACTION_MUTE, ready, p->mute_busy, "Unmute", "Mute");
+    toggle_button(c, INDIGO_ACTION_BLOCK, ready, p->block_busy, "Unblock", "Block");
 
     if (p->status[0] && p->loaded) {
-        indigo_canvas_text(c, 14, 110, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+        indigo_canvas_text(c, 14, 150, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                            "%.44s", p->status);
     }
 }

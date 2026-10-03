@@ -205,6 +205,12 @@ handle_requests(indigo_app *app)
             indigo_app_follow_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_GRAPH:
+        if (!indigo_session_submit_graph(app->request_graph, app->profile.did,
+                                         app->profile.block_uri)) {
+            indigo_app_graph_failed(app, app->request_graph, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -312,6 +318,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_FOLLOW_FAILED:
             indigo_app_follow_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_GRAPH_DONE:
+            indigo_app_graph_done(app, ev.graph, ev.record_uri);
+            break;
+        case INDIGO_SESSION_EVENT_GRAPH_FAILED:
+            indigo_app_graph_failed(app, ev.graph, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_NONE:
             break;

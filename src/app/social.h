@@ -59,14 +59,37 @@ typedef struct {
      * by record URI with no handle to resolve it from. */
     char did[INDIGO_PROFILE_DID_MAX];
     char follow_uri[INDIGO_POST_URI_MAX];
+    /* Mute is an account-level flag with no record URI; block is a repo record
+     * deleted by URI, like follow. Both come from the same getProfile
+     * response, so keeping them costs nothing once did and follow_uri are
+     * here. */
+    bool muted;
+    bool blocked;
+    char block_uri[INDIGO_POST_URI_MAX];
     /* Set while a follow/unfollow is in flight. The `following` flag flips
      * immediately as an optimistic update and is put back if the job fails. */
     bool follow_busy;
+    /* The same for mute and block. */
+    bool mute_busy;
+    bool block_busy;
     bool loaded;
     bool loading;
     char status[INDIGO_POST_NOTE_MAX];
     bool status_is_error;
 } indigo_profile;
+
+/* Mute and block are split from follow because their record shapes differ:
+ * mute is an account-level flag with no URI at all, block is a repo record
+ * deleted by URI, and follow is a third shape again. The enum lives here, not
+ * in the session layer, because it names what the person asked for rather
+ * than which Wolfram call runs; session.h includes this header. */
+typedef enum {
+    INDIGO_GRAPH_NONE = 0,
+    INDIGO_GRAPH_MUTE,
+    INDIGO_GRAPH_UNMUTE,
+    INDIGO_GRAPH_BLOCK,
+    INDIGO_GRAPH_UNBLOCK,
+} indigo_graph_action;
 
 typedef enum {
     INDIGO_COMPOSE_POST = 0,

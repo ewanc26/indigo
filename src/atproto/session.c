@@ -2,11 +2,13 @@
 
 #include "store/session_store.h"
 #include "util/log.h"
+#include "util/timefmt.h"
 
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
@@ -33,6 +35,7 @@ typedef enum {
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
+    JOB_GRAPH,
 } job_kind;
 
 typedef struct {
@@ -51,6 +54,7 @@ typedef struct {
     char root_cid[INDIGO_POST_CID_MAX];
     char query[INDIGO_SEARCH_QUERY_MAX];
     indigo_follow_action follow;
+    indigo_graph_action graph;
     char actor[INDIGO_PROFILE_DID_MAX];
 } job;
 
@@ -645,6 +649,9 @@ do_profile(const job *j)
     indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
     indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
     indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
+    indigo_copy_utf8(s_profile.block_uri, sizeof s_profile.block_uri, p.blocking);
+    s_profile.muted = p.muted;
+    s_profile.blocked = p.blocking != NULL;
     s_profile.followers = count_of(p.followers_count);
     s_profile.follows = count_of(p.follows_count);
     s_profile.posts = count_of(p.posts_count);
@@ -787,6 +794,55 @@ do_follow(const job *j)
 }
 
 static void
+do_graph(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_GRAPH_FAILED, .graph = j->graph};
+    wf_agent_post_result res = {0};
+    wf_status st = WF_ERR_INVALID_ARG;
+
+    snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    switch (j->graph) {
+    case INDIGO_GRAPH_MUTE:
+        st = wf_agent_mute_actor(s_agent, j->actor);
+        break;
+    case INDIGO_GRAPH_UNMUTE:
+        st = wf_agent_unmute_actor(s_agent, j->actor);
+        break;
+    case INDIGO_GRAPH_BLOCK:
+        st = wf_agent_block(s_agent, j->actor, &res);
+        break;
+    case INDIGO_GRAPH_UNBLOCK:
+        /* Block is a repo record, so unblocking deletes by URI and there is
+         * no handle to resolve one from. */
+        if (!j->undo_uri[0]) {
+            ev.failure = INDIGO_FAIL_OTHER;
+            break;
+        }
+        st = wf_agent_unblock(s_agent, j->undo_uri);
+        break;
+    case INDIGO_GRAPH_NONE:
+        break;
+    }
+    if (st == WF_OK) {
+        ev.kind = INDIGO_SESSION_EVENT_GRAPH_DONE;
+        if (res.uri && strlen(res.uri) < sizeof ev.record_uri) {
+            snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
+        }
+    } else {
+        ev.failure = classify(st);
+        indigo_log_warn("graph action %d failed: wolfram status %d (%s)", (int) j->graph,
+                        (int) st, indigo_failure_tag(ev.failure));
+    }
+    wf_agent_post_result_free(&res);
+    publish_event(&ev);
+}
+
+static void
 do_notifications(void)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
@@ -845,6 +901,24 @@ do_notifications(void)
         s_note_count++;
     }
     wf_agent_notification_list_free(&list);
+    /* Mark everything up to now seen. This is always a top-of-list fetch --
+     * notifications are never paged -- so unlike Cobalt there is no paging
+     * case to exclude. A failure is logged, not surfaced: the notifications
+     * arrived, and an error about a badge on another client is noise. */
+    if (s_note_count > 0) {
+        char seen_at[32];
+        /* Nothing initialises a clock on the 3DS, so time() can return a
+         * negative value. Sending "1970-01-01T00:00:00Z" as seenAt would be
+         * worse than not marking anything, so the clock decides. */
+        long now = (long) time(NULL);
+
+        if (now > 0 && indigo_time_format_rfc3339(now, seen_at, sizeof seen_at)) {
+            if (wf_agent_update_seen_notifications(s_agent, seen_at) != WF_OK) {
+                indigo_log_warn("updateSeen failed: the unread badge may linger on other "
+                                "clients");
+            }
+        }
+    }
     ev.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE;
     ev.page_count = s_note_count;
     indigo_log_info("notifications: %u", s_note_count);
@@ -938,6 +1012,9 @@ worker(void *arg)
             break;
         case JOB_FOLLOW:
             do_follow(&j);
+            break;
+        case JOB_GRAPH:
+            do_graph(&j);
             break;
         case JOB_PUBLISH:
             do_publish(&j);
@@ -1146,6 +1223,23 @@ indigo_session_submit_follow(indigo_follow_action action, const char *did,
     return submit(&j);
 }
 
+bool
+indigo_session_submit_graph(indigo_graph_action action, const char *did,
+                            const char *block_uri)
+{
+    job j = {.kind = JOB_GRAPH, .graph = action};
+
+    if (action == INDIGO_GRAPH_NONE || !did || !did[0]) {
+        return false;
+    }
+    if (action == INDIGO_GRAPH_UNBLOCK && (!block_uri || !block_uri[0])) {
+        return false;
+    }
+    indigo_copy_utf8(j.actor, sizeof j.actor, did);
+    indigo_copy_utf8(j.undo_uri, sizeof j.undo_uri, block_uri ? block_uri : "");
+    return submit(&j);
+}
+
 const indigo_actor *
 indigo_session_search_results(unsigned *count)
 {
@@ -1350,6 +1444,16 @@ indigo_session_submit_follow(indigo_follow_action action, const char *did,
     (void) action;
     (void) did;
     (void) follow_uri;
+    return false;
+}
+
+bool
+indigo_session_submit_graph(indigo_graph_action action, const char *did,
+                            const char *block_uri)
+{
+    (void) action;
+    (void) did;
+    (void) block_uri;
     return false;
 }
 
