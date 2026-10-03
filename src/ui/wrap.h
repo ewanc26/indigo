@@ -10,7 +10,7 @@ typedef struct {
 
 /* Average advance of one character at scale 1.0, in pixels. Layout has to wrap
  * before it can ask a font, so this is a deliberately cautious estimate. */
-#define INDIGO_CHAR_WIDTH 12.5f
+#define INDIGO_CHAR_WIDTH 13.5f
 
 /*
  * Break `text` into at most `max_lines` lines of at most `max_units` width

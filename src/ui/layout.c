@@ -22,9 +22,9 @@ static const indigo_rect s_sign_out_button = {20, 184, 280, 40};
 #define ROW_H 46
 #define ROW_STEP 50
 #define ROW_Y0 48
-static const indigo_rect s_like_button = {14, 202, 92, 34};
-static const indigo_rect s_repost_button = {118, 202, 92, 34};
-static const indigo_rect s_refresh_button = {222, 202, 92, 34};
+static const indigo_rect s_like_button = {4, 202, 96, 34};
+static const indigo_rect s_repost_button = {112, 202, 96, 34};
+static const indigo_rect s_refresh_button = {220, 202, 96, 34};
 
 /* Sign-in form: 8px between rows so a thumb never lands on two. */
 static const indigo_rect s_field_service = {14, 52, 292, 38};
@@ -305,7 +305,7 @@ action_pill(indigo_canvas *c, indigo_action action, bool on, bool busy, uint32_t
     indigo_rect r = indigo_layout_button_rect(action);
 
     indigo_canvas_rect(c, r.x, r.y, r.w, r.h, on ? on_color : COL_PILL);
-    indigo_canvas_text(c, r.x + 10, r.y + 7, 0.65f, busy ? COL_TEXT_DIM : COL_TEXT, "%s",
+    indigo_canvas_text(c, r.x + 8, r.y + 9, 0.55f, busy ? COL_TEXT_DIM : COL_TEXT, "%s",
                        label);
 }
 
@@ -333,8 +333,9 @@ build_bottom_home(const indigo_app *app, indigo_canvas *c)
         }
         p = &t->posts[idx];
         indigo_canvas_rect(c, r.x, r.y, r.w, r.h, idx == t->selected ? COL_PILL_ACTIVE : COL_PILL);
-        indigo_canvas_text(c, r.x + 10, r.y + 3, 0.6f, COL_TEXT, "%s%.40s",
-                           p->reposted_by[0] ? "RT  " : "", author_name(p));
+        indigo_canvas_text(c, r.x + 10, r.y + 3, 0.6f, COL_TEXT, "%s%.*s",
+                           p->reposted_by[0] ? "RT  " : "", p->reposted_by[0] ? 28 : 32,
+                           author_name(p));
         if (indigo_wrap(p->text, units, &line, 1, &cut) == 0) {
             line = (indigo_line) {0, 0};
         }
@@ -346,7 +347,7 @@ build_bottom_home(const indigo_app *app, indigo_canvas *c)
                 COL_PILL_ACTIVE, sel && sel->like_uri[0] ? "Y  Liked" : "Y  Like");
     action_pill(c, INDIGO_ACTION_REPOST, sel && sel->repost_uri[0], sel && sel->repost_pending,
                 COL_PILL_ACTIVE, sel && sel->repost_uri[0] ? "X  Reposted" : "X  Repost");
-    action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "SEL  Refresh");
+    action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "SEL  Reload");
 }
 
 static void

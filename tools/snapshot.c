@@ -340,7 +340,7 @@ add_post(indigo_timeline *t, const char *name, const char *handle, const char *t
 
         if (at) {
             p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, (unsigned) (at - p.text),
-                                               (unsigned) (at - p.text) + 24};
+                                               (unsigned) (at - p.text) + 33};
             p.facet_count = 1;
         }
         indigo_copy_utf8(p.embed_note, sizeof p.embed_note, "Link card: Wolfram on GitHub");
