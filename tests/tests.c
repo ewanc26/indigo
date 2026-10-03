@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "app/signin.h"
+#include "app/timeline.h"
 #include "atproto/errors.h"
 #include "store/session_codec.h"
 #include "util/log.h"
@@ -510,6 +511,127 @@ test_autofill(void)
     CHECK(indigo_signin_apply_autofill(&s, "") == 0);
 }
 
+static void
+fake_post(indigo_post *p, unsigned i)
+{
+    memset(p, 0, sizeof *p);
+    snprintf(p->uri, sizeof p->uri, "at://did:plc:x/app.bsky.feed.post/%u", i);
+    snprintf(p->text, sizeof p->text, "post %u", i);
+}
+
+static void
+test_timeline_bounds(void)
+{
+    indigo_timeline *t = calloc(1, sizeof *t);
+    indigo_post p;
+
+    indigo_timeline_init(t);
+    for (unsigned i = 0; i < INDIGO_TIMELINE_MAX; i++) {
+        fake_post(&p, i);
+        CHECK(indigo_timeline_append(t, &p));
+    }
+    fake_post(&p, 999);
+    CHECK(!indigo_timeline_append(t, &p));
+    CHECK(t->count == INDIGO_TIMELINE_MAX);
+    free(t);
+}
+
+static void
+test_timeline_selection(void)
+{
+    indigo_timeline *t = calloc(1, sizeof *t);
+    indigo_post p;
+
+    indigo_timeline_init(t);
+    CHECK(indigo_timeline_selected(t) == NULL);
+    CHECK(!indigo_timeline_move(t, 1, 3));
+    for (unsigned i = 0; i < 10; i++) {
+        fake_post(&p, i);
+        indigo_timeline_append(t, &p);
+    }
+    CHECK(!indigo_timeline_move(t, -1, 3));
+    CHECK(indigo_timeline_move(t, 1, 3));
+    CHECK(indigo_timeline_move(t, 1, 3));
+    CHECK(t->scroll == 0);
+    CHECK(indigo_timeline_move(t, 1, 3));
+    CHECK(t->selected == 3 && t->scroll == 1);
+    CHECK(indigo_timeline_move(t, 100, 3));
+    CHECK(t->selected == 9 && t->scroll == 7);
+    CHECK(!indigo_timeline_move(t, 1, 3));
+    CHECK(indigo_timeline_move(t, -100, 3));
+    CHECK(t->selected == 0 && t->scroll == 0);
+    CHECK(strcmp(indigo_timeline_selected(t)->text, "post 0") == 0);
+    free(t);
+}
+
+static void
+test_timeline_paging(void)
+{
+    indigo_timeline *t = calloc(1, sizeof *t);
+    indigo_post p;
+
+    indigo_timeline_init(t);
+    indigo_timeline_begin_fetch(t, true);
+    CHECK(t->loading);
+    for (unsigned i = 0; i < 10; i++) {
+        fake_post(&p, i);
+        indigo_timeline_append(t, &p);
+    }
+    indigo_timeline_finish_fetch(t, "cursor-1");
+    CHECK(t->has_more && !t->loading);
+    CHECK(!indigo_timeline_wants_page(t));
+    indigo_timeline_select(t, 5, 3);
+    CHECK(indigo_timeline_wants_page(t));
+    indigo_timeline_begin_fetch(t, false);
+    CHECK(!indigo_timeline_wants_page(t));
+    CHECK(t->count == 10);
+    indigo_timeline_fail_fetch(t, "Network error.");
+    CHECK(t->status_is_error && !t->loading);
+    CHECK(indigo_timeline_wants_page(t));
+    indigo_timeline_begin_fetch(t, false);
+    indigo_timeline_finish_fetch(t, "");
+    CHECK(!t->has_more && !indigo_timeline_wants_page(t));
+    indigo_timeline_begin_fetch(t, true);
+    CHECK(t->count == 0 && t->cursor[0] == '\0');
+    free(t);
+}
+
+static void
+test_timeline_actions(void)
+{
+    indigo_timeline *t = calloc(1, sizeof *t);
+    indigo_post p;
+
+    indigo_timeline_init(t);
+    fake_post(&p, 1);
+    p.like_count = 4;
+    indigo_timeline_append(t, &p);
+    CHECK(indigo_timeline_set_like(t, p.uri, NULL, true));
+    CHECK(t->posts[0].like_pending && t->posts[0].like_count == 4);
+    CHECK(indigo_timeline_set_like(t, p.uri, "at://like/1", false));
+    CHECK(!t->posts[0].like_pending && t->posts[0].like_count == 5);
+    CHECK(indigo_timeline_set_like(t, p.uri, "", false));
+    CHECK(t->posts[0].like_count == 4 && t->posts[0].like_uri[0] == '\0');
+    CHECK(indigo_timeline_set_repost(t, p.uri, "at://rp/1", false));
+    CHECK(t->posts[0].repost_count == 1);
+    CHECK(!indigo_timeline_set_like(t, "at://gone", "x", false));
+    free(t);
+}
+
+static void
+test_copy_utf8(void)
+{
+    char b[5];
+
+    indigo_copy_utf8(b, sizeof b, "abcdefgh");
+    CHECK(strcmp(b, "abcd") == 0);
+    /* "é" is two bytes; a cut through the middle must drop it whole. */
+    indigo_copy_utf8(b, sizeof b, "abc\xC3\xA9");
+    CHECK(strcmp(b, "abc") == 0);
+    indigo_copy_utf8(b, sizeof b, NULL);
+    CHECK(b[0] == '\0');
+}
+
 int
 main(void)
 {
@@ -529,6 +651,11 @@ main(void)
     test_failures();
     test_log_file();
     test_autofill();
+    test_timeline_bounds();
+    test_timeline_selection();
+    test_timeline_paging();
+    test_timeline_actions();
+    test_copy_utf8();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;
