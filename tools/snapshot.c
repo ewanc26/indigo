@@ -94,13 +94,13 @@ sample(const snapshot_glyph *g, float sx, float sy)
     return (top * (1 - fy) + bot * fy) / 255.0f;
 }
 
-static void
-draw_text(image *img, const char *text, const indigo_cmd *cmd)
+static float
+draw_run(image *img, const char *text, unsigned from, unsigned to, float pen,
+         const indigo_cmd *cmd, uint32_t color)
 {
     float scale = cmd->scale * TEXT_SCALE_BASE;
-    float pen = cmd->x;
 
-    for (const char *s = text; *s; s++) {
+    for (const char *s = text + from; s < text + to; s++) {
         unsigned char ch = (unsigned char) *s;
 
         if (ch < 32 || ch > 126) {
@@ -121,13 +121,27 @@ draw_text(image *img, const char *text, const indigo_cmd *cmd)
                                        ((float) y + 0.5f) / scale - 0.5f);
 
                     if (cov > 0.0f) {
-                        blend(img, dx0 + x, dy0 + y, cmd->color, cov);
+                        blend(img, dx0 + x, dy0 + y, color, cov);
                     }
                 }
             }
         }
 
         pen += (float) g->advance * scale;
+    }
+    return pen;
+}
+
+static void
+draw_text(image *img, const indigo_canvas *canvas, const indigo_cmd *cmd)
+{
+    indigo_segment segs[2 * INDIGO_CANVAS_MAX_SPANS + 1];
+    unsigned n = indigo_canvas_segments(canvas, cmd, segs);
+    const char *text = indigo_canvas_cmd_text(canvas, cmd);
+    float pen = cmd->x;
+
+    for (unsigned i = 0; i < n; i++) {
+        pen = draw_run(img, text, segs[i].start, segs[i].end, pen, cmd, segs[i].color);
     }
 }
 
@@ -142,7 +156,7 @@ render(const indigo_canvas *canvas)
         if (cmd->kind == INDIGO_CMD_RECT) {
             draw_rect(&img, cmd);
         } else {
-            draw_text(&img, indigo_canvas_cmd_text(canvas, cmd), cmd);
+            draw_text(&img, canvas, cmd);
         }
     }
 
@@ -298,15 +312,81 @@ typedef struct {
     bool touching;
     int touch_x;
     int touch_y;
+    int timeline; /* 0 none, 1 populated, 2 loading, 3 error */
+    unsigned select;
 } scenario;
+
+static void
+add_post(indigo_timeline *t, const char *name, const char *handle, const char *text,
+         const char *reposter, unsigned likes, bool liked, bool link)
+{
+    indigo_post p;
+
+    memset(&p, 0, sizeof p);
+    snprintf(p.uri, sizeof p.uri, "at://did:plc:fake/app.bsky.feed.post/%u", t->count);
+    snprintf(p.cid, sizeof p.cid, "bafy%u", t->count);
+    indigo_copy_utf8(p.display_name, sizeof p.display_name, name);
+    indigo_copy_utf8(p.handle, sizeof p.handle, handle);
+    indigo_copy_utf8(p.text, sizeof p.text, text);
+    indigo_copy_utf8(p.reposted_by, sizeof p.reposted_by, reposter);
+    p.like_count = likes;
+    p.repost_count = likes / 3;
+    p.reply_count = likes / 5;
+    if (liked) {
+        indigo_copy_utf8(p.like_uri, sizeof p.like_uri, "at://did:plc:fake/app.bsky.feed.like/1");
+    }
+    if (link) {
+        const char *at = strstr(p.text, "https://");
+
+        if (at) {
+            p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, (unsigned) (at - p.text),
+                                               (unsigned) (at - p.text) + 24};
+            p.facet_count = 1;
+        }
+        indigo_copy_utf8(p.embed_note, sizeof p.embed_note, "Link card: Wolfram on GitHub");
+    }
+    indigo_timeline_append(t, &p);
+}
+
+static void
+fill_timeline(indigo_timeline *t, int kind, unsigned select)
+{
+    indigo_timeline_init(t);
+    if (kind == 2) {
+        indigo_timeline_begin_fetch(t, true);
+        return;
+    }
+    if (kind == 3) {
+        indigo_timeline_fail_fetch(t, "Could not reach the network.");
+        return;
+    }
+    add_post(t, "Ewan Croft", "ewancroft.uk",
+             "Shipped the timeline for Indigo today. Read more at https://github.com/ewanc26/indigo "
+             "and tell me what breaks on real hardware.\n\nThe 3DS is surprisingly pleasant to "
+             "write C for.",
+             "", 42, false, true);
+    add_post(t, "Rhiannon", "rhi.example.social", "Morning walk by the river, very cold and very clear.",
+             "Ewan Croft", 7, true, false);
+    add_post(t, "Cobalt", "cobalt.example", "Wii U client update: the feed now parses through Wolfram.",
+             "", 18, false, false);
+    add_post(t, "A very long display name that keeps going", "long.handle.example.com",
+             "Short one.", "", 3, false, false);
+    add_post(t, "Dev Log", "devlog.example", "Fifth post, to prove scrolling keeps the selection visible.",
+             "", 0, false, false);
+    indigo_timeline_finish_fetch(t, "cursor");
+    indigo_timeline_select(t, select, INDIGO_TIMELINE_ROWS);
+}
 
 int
 main(int argc, char **argv)
 {
     static const scenario scenarios[] = {
-        {"signin", INDIGO_SCREEN_SIGNIN, false, 0, 0},
-        {"home", INDIGO_SCREEN_HOME, false, 0, 0},
-        {"profile-touch", INDIGO_SCREEN_PROFILE, true, 235, 146},
+        {"signin", INDIGO_SCREEN_SIGNIN, false, 0, 0, 0, 0},
+        {"timeline", INDIGO_SCREEN_HOME, false, 0, 0, 1, 0},
+        {"timeline-scrolled", INDIGO_SCREEN_HOME, false, 0, 0, 1, 4},
+        {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0},
+        {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0},
+        {"profile-touch", INDIGO_SCREEN_PROFILE, true, 235, 146, 0, 0},
     };
 
     if (argc != 2) {
@@ -316,7 +396,7 @@ main(int argc, char **argv)
 
     for (size_t i = 0; i < sizeof(scenarios) / sizeof(scenarios[0]); i++) {
         const scenario *s = &scenarios[i];
-        indigo_app app;
+        static indigo_app app;
         indigo_input input = {0};
         static indigo_canvas top_canvas;
         static indigo_canvas bottom_canvas;
@@ -324,6 +404,10 @@ main(int argc, char **argv)
         indigo_app_init(&app);
         app.screen = s->screen;
         app.wolfram_linked = true;
+        fill_timeline(&app.timeline, s->timeline, s->select);
+        if (s->screen != INDIGO_SCREEN_SIGNIN) {
+            strcpy(app.signin.account, "ewancroft.uk");
+        }
         input.touch_down = s->touching;
         input.touch_x = s->touch_x;
         input.touch_y = s->touch_y;

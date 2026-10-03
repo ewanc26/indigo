@@ -20,6 +20,15 @@ typedef struct indigo_input {
     bool touch_pressed;
     bool touch_released;
 
+    /* Timeline controls, one abstraction over the physical buttons. */
+    bool up;
+    bool down;
+    bool page_up;
+    bool page_down;
+    bool like;
+    bool repost;
+    bool refresh;
+
     bool confirm;
     bool back;
     bool quit;

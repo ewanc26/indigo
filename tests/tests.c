@@ -8,6 +8,7 @@
 #include "gfx/canvas.h"
 #include "input/input.h"
 #include "ui/layout.h"
+#include "ui/wrap.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,45 +94,71 @@ test_touch_navigation(void)
 {
     indigo_app app;
     indigo_input in = {0};
-    indigo_rect profile = indigo_layout_button_rect(INDIGO_ACTION_PROFILE);
     indigo_rect home = indigo_layout_button_rect(INDIGO_ACTION_HOME);
 
     indigo_app_init(&app);
-    app.screen = INDIGO_SCREEN_HOME;
+    app.screen = INDIGO_SCREEN_PROFILE;
     in.touch_pressed = true;
-    in.touch_x = (int) (profile.x + profile.w / 2);
-    in.touch_y = (int) (profile.y + profile.h / 2);
-    indigo_app_update(&app, &in);
-    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
-
     in.touch_x = (int) (home.x + home.w / 2);
     in.touch_y = (int) (home.y + home.h / 2);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_HOME);
 
-    /* A touch that is held but not newly pressed must not re-trigger. */
-    in.touch_pressed = false;
-    in.touch_x = (int) (profile.x + 1);
-    in.touch_y = (int) (profile.y + 1);
+    /* The profile pill no longer exists on the timeline's bottom screen. */
+    in.touch_x = (int) (home.x + 1);
+    in.touch_y = (int) (home.y + 1);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_HOME);
+
+    /* A held touch must not re-trigger. */
+    app.screen = INDIGO_SCREEN_PROFILE;
+    in.touch_pressed = false;
+    in.touch_x = (int) (home.x + 1);
+    in.touch_y = (int) (home.y + 1);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+}
+
+static bool
+overlap(indigo_rect a, indigo_rect b)
+{
+    return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
 static void
 test_buttons_spaced_and_on_screen(void)
 {
-    indigo_rect a = indigo_layout_button_rect(INDIGO_ACTION_PROFILE);
-    indigo_rect b = indigo_layout_button_rect(INDIGO_ACTION_HOME);
+    static const indigo_action home_ui[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
+        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_REFRESH};
+    static const indigo_action pills[] = {
+        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_REFRESH};
+    enum { N = sizeof home_ui / sizeof home_ui[0], P = sizeof pills / sizeof pills[0] };
 
-    CHECK(a.x >= 0 && a.x + a.w <= INDIGO_BOTTOM_WIDTH);
-    CHECK(b.x >= 0 && b.x + b.w <= INDIGO_BOTTOM_WIDTH);
-    CHECK(a.y + a.h <= INDIGO_BOTTOM_HEIGHT);
-    CHECK(b.x - (a.x + a.w) >= 16.0f);
-    CHECK(a.h >= 40.0f && b.h >= 40.0f);
+    for (int i = 0; i < N; i++) {
+        indigo_rect r = indigo_layout_button_rect(home_ui[i]);
+
+        CHECK(r.x >= 0 && r.x + r.w <= INDIGO_BOTTOM_WIDTH);
+        CHECK(r.y >= 0 && r.y + r.h <= INDIGO_BOTTOM_HEIGHT);
+        CHECK(r.h >= 34.0f);
+        for (int j = i + 1; j < N; j++) {
+            CHECK(!overlap(r, indigo_layout_button_rect(home_ui[j])));
+        }
+        CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (r.x + r.w / 2),
+                                (int) (r.y + r.h / 2)) == home_ui[i]);
+    }
+
+    /* Pills are 12px apart; the gap between them is dead space. */
+    for (int i = 0; i + 1 < P; i++) {
+        indigo_rect a = indigo_layout_button_rect(pills[i]);
+        indigo_rect b = indigo_layout_button_rect(pills[i + 1]);
+
+        CHECK(b.x - (a.x + a.w) >= 12.0f);
+        CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (a.x + a.w + 5), (int) a.y + 5) ==
+              INDIGO_ACTION_NONE);
+    }
     CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, 0, 0) == INDIGO_ACTION_NONE);
-
-    /* The gap between pills is dead space, not a target. */
-    CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (a.x + a.w + 5), (int) a.y + 5) == INDIGO_ACTION_NONE);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 20) == INDIGO_ACTION_NONE);
 }
 
 static unsigned
@@ -186,10 +213,13 @@ test_layout_invariants(void)
 
         /* One hint per control: START appears once, and back is hinted once. */
         CHECK(count_text(&top, "START") + count_text(&bottom, "START") == 1);
-        if (screen != INDIGO_SCREEN_SIGNIN) {
+        if (screen == INDIGO_SCREEN_PROFILE) {
             CHECK(count_text(&top, "B  ") + count_text(&bottom, "B  ") == 1);
         }
-        CHECK(count_text(&top, "A  ") + count_text(&bottom, "A  ") == 1);
+        if (screen == INDIGO_SCREEN_HOME) {
+            CHECK(count_text(&top, "A  ") + count_text(&bottom, "A  ") == 1);
+            CHECK(count_text(&top, "B  ") + count_text(&bottom, "B  ") == 0);
+        }
     }
 }
 
@@ -321,6 +351,7 @@ test_signin_flow(void)
     CHECK(strcmp(app.signin.account, "ewancroft.uk") == 0);
 
     in = (indigo_input) {0};
+    app.screen = INDIGO_SCREEN_PROFILE;
     r = indigo_layout_button_rect(INDIGO_ACTION_SIGN_OUT);
     in.touch_pressed = true;
     in.touch_x = (int) (r.x + 4);
@@ -632,6 +663,136 @@ test_copy_utf8(void)
     CHECK(b[0] == '\0');
 }
 
+static void
+test_wrap(void)
+{
+    indigo_line l[6];
+    int cut;
+    unsigned n;
+
+    n = indigo_wrap("hello brave new world", 11, l, 6, &cut);
+    CHECK(n == 2 && !cut);
+    CHECK(l[0].start == 0 && l[0].len == 11);
+    CHECK(l[1].start == 12 && l[1].len == 9);
+
+    n = indigo_wrap("a\n\nb", 10, l, 6, &cut);
+    CHECK(n == 3 && l[1].len == 0 && l[2].start == 3);
+
+    n = indigo_wrap("abcdefghij", 4, l, 6, &cut);
+    CHECK(n == 3 && l[0].len == 4 && l[2].len == 2);
+
+    n = indigo_wrap("one two three four five six", 8, l, 2, &cut);
+    CHECK(n == 2 && cut);
+
+    /* Never split inside a multi-byte character. */
+    n = indigo_wrap("\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9", 3, l, 6, &cut);
+    CHECK(n == 2 && l[0].len == 6 && l[1].len == 2);
+
+    CHECK(indigo_wrap("", 10, l, 6, &cut) == 0);
+    CHECK(indigo_wrap("x", 0, l, 6, &cut) == 0);
+}
+
+static void
+test_canvas_spans(void)
+{
+    indigo_canvas c;
+    indigo_segment seg[2 * INDIGO_CANVAS_MAX_SPANS + 1];
+    unsigned n;
+
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(!indigo_canvas_span(&c, 0, 1, 7));
+    indigo_canvas_text(&c, 0, 0, 1.0f, 1, "see example.com now");
+    CHECK(indigo_canvas_span(&c, 4, 15, 2));
+    n = indigo_canvas_segments(&c, &c.cmds[0], seg);
+    CHECK(n == 3);
+    CHECK(seg[0].start == 0 && seg[0].end == 4 && seg[0].color == 1);
+    CHECK(seg[1].start == 4 && seg[1].end == 15 && seg[1].color == 2);
+    CHECK(seg[2].start == 15 && seg[2].end == 19 && seg[2].color == 1);
+
+    indigo_canvas_text(&c, 0, 0, 1.0f, 1, "plain");
+    n = indigo_canvas_segments(&c, &c.cmds[1], seg);
+    CHECK(n == 1 && seg[0].end == 5);
+
+    /* A span at the very start and a second one are both honoured. */
+    indigo_canvas_text(&c, 0, 0, 1.0f, 1, "@a and #b");
+    CHECK(indigo_canvas_span(&c, 0, 2, 5));
+    CHECK(indigo_canvas_span(&c, 7, 9, 6));
+    n = indigo_canvas_segments(&c, &c.cmds[2], seg);
+    CHECK(n == 3 && seg[2].color == 6 && seg[2].end == 9);
+}
+
+static void
+test_home_requests(void)
+{
+    indigo_app *app = calloc(1, sizeof *app);
+    indigo_input in = {0};
+    indigo_post p;
+    indigo_field f;
+
+    indigo_app_init(app);
+    indigo_app_sign_in_succeeded(app, "me.example");
+    CHECK(indigo_app_take_request(app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    CHECK(app->timeline.loading);
+
+    for (unsigned i = 0; i < 8; i++) {
+        fake_post(&p, i);
+        snprintf(p.cid, sizeof p.cid, "cid%u", i);
+        indigo_timeline_append(&app->timeline, &p);
+    }
+    indigo_timeline_finish_fetch(&app->timeline, "next");
+
+    /* Like, then a second press while pending does nothing. */
+    in.like = true;
+    indigo_app_update(app, &in);
+    CHECK(app->request == INDIGO_REQUEST_LIKE);
+    CHECK(strcmp(app->request_post_uri, app->timeline.posts[0].uri) == 0);
+    CHECK(strcmp(app->request_post_cid, "cid0") == 0);
+    CHECK(app->timeline.posts[0].like_pending);
+    CHECK(indigo_app_take_request(app, &f) == INDIGO_REQUEST_LIKE);
+    indigo_app_update(app, &in);
+    CHECK(app->request == INDIGO_REQUEST_NONE);
+
+    /* Once liked, the same button undoes it using the record URI. */
+    indigo_timeline_set_like(&app->timeline, app->timeline.posts[0].uri, "at://like/1", false);
+    indigo_app_update(app, &in);
+    CHECK(app->request == INDIGO_REQUEST_UNLIKE);
+    CHECK(strcmp(app->request_undo_uri, "at://like/1") == 0);
+    indigo_app_take_request(app, &f);
+    indigo_timeline_set_like(&app->timeline, app->timeline.posts[0].uri, "", false);
+
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(app, &in);
+    CHECK(app->request == INDIGO_REQUEST_REPOST);
+    indigo_app_take_request(app, &f);
+
+    /* Moving near the end asks for the next page exactly once. */
+    in = (indigo_input) {0};
+    in.page_down = true;
+    indigo_app_update(app, &in);
+    indigo_app_update(app, &in);
+    CHECK(app->timeline.selected == 6);
+    CHECK(app->request == INDIGO_REQUEST_TIMELINE_MORE);
+    CHECK(app->timeline.loading);
+    indigo_app_take_request(app, &f);
+    in = (indigo_input) {0};
+    indigo_app_update(app, &in);
+    CHECK(app->request == INDIGO_REQUEST_NONE);
+
+    /* Tapping a row selects it. */
+    indigo_timeline_finish_fetch(&app->timeline, "");
+    in.touch_pressed = true;
+    in.touch_x = 100;
+    in.touch_y = (int) (indigo_layout_button_rect(INDIGO_ACTION_ROW1).y + 5);
+    indigo_app_update(app, &in);
+    CHECK(app->timeline.selected == app->timeline.scroll + 1);
+
+    /* Signing out forgets the timeline. */
+    indigo_app_signed_out(app, "Signed out.");
+    CHECK(app->timeline.count == 0);
+    free(app);
+}
+
 int
 main(void)
 {
@@ -656,6 +817,9 @@ main(void)
     test_timeline_paging();
     test_timeline_actions();
     test_copy_utf8();
+    test_wrap();
+    test_canvas_spans();
+    test_home_requests();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

@@ -3,6 +3,7 @@
 #include "ui/layout.h"
 
 #include <citro2d.h>
+#include <string.h>
 
 static C3D_RenderTarget *s_top;
 static C3D_RenderTarget *s_bottom;
@@ -31,11 +32,30 @@ replay(const indigo_canvas *canvas)
             continue;
         }
 
-        C2D_Text text;
-        C2D_TextParse(&text, s_text_buf, indigo_canvas_cmd_text(canvas, cmd));
-        C2D_TextOptimize(&text);
-        C2D_DrawText(&text, C2D_WithColor, cmd->x, cmd->y, 0.0f, cmd->scale, cmd->scale,
-                     to_c2d(cmd->color));
+        indigo_segment segs[2 * INDIGO_CANVAS_MAX_SPANS + 1];
+        unsigned n = indigo_canvas_segments(canvas, cmd, segs);
+        const char *full = indigo_canvas_cmd_text(canvas, cmd);
+        float pen = cmd->x;
+
+        for (unsigned k = 0; k < n; k++) {
+            char piece[INDIGO_CANVAS_SEGMENT_MAX];
+            unsigned len = segs[k].end - segs[k].start;
+            C2D_Text text;
+            float w;
+
+            if (len >= sizeof piece) {
+                len = sizeof piece - 1;
+            }
+            memcpy(piece, full + segs[k].start, len);
+            piece[len] = '\0';
+
+            C2D_TextParse(&text, s_text_buf, piece);
+            C2D_TextOptimize(&text);
+            C2D_DrawText(&text, C2D_WithColor, pen, cmd->y, 0.0f, cmd->scale, cmd->scale,
+                         to_c2d(segs[k].color));
+            C2D_TextGetDimensions(&text, cmd->scale, cmd->scale, &w, NULL);
+            pen += w;
+        }
     }
 }
 
@@ -55,7 +75,7 @@ indigo_ui_init(void)
 
     s_top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
     s_bottom = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
-    s_text_buf = C2D_TextBufNew(1024);
+    s_text_buf = C2D_TextBufNew(4096);
 
     if (!s_top || !s_bottom || !s_text_buf) {
         indigo_ui_shutdown();
