@@ -16,6 +16,7 @@
 #define LOG_PATH DATA_DIR "/indigo.log"
 #define SESSION_PATH DATA_DIR "/session.dat"
 #define AUTOFILL_PATH DATA_DIR "/autofill.txt"
+#define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
 
 static void
 handle_edit(indigo_app *app, indigo_field f)
@@ -41,16 +42,16 @@ action_undone(indigo_app *app, indigo_post_action action, const char *post_uri,
 {
     switch (action) {
     case INDIGO_POST_ACTION_LIKE:
-        indigo_timeline_set_like(&app->timeline, post_uri, "", false);
+        indigo_app_set_like(app, post_uri, "", false);
         break;
     case INDIGO_POST_ACTION_UNLIKE:
-        indigo_timeline_set_like(&app->timeline, post_uri, undo_uri, false);
+        indigo_app_set_like(app, post_uri, undo_uri, false);
         break;
     case INDIGO_POST_ACTION_REPOST:
-        indigo_timeline_set_repost(&app->timeline, post_uri, "", false);
+        indigo_app_set_repost(app, post_uri, "", false);
         break;
     case INDIGO_POST_ACTION_UNREPOST:
-        indigo_timeline_set_repost(&app->timeline, post_uri, undo_uri, false);
+        indigo_app_set_repost(app, post_uri, undo_uri, false);
         break;
     case INDIGO_POST_ACTION_NONE:
         break;
@@ -63,6 +64,48 @@ post_action(indigo_app *app, indigo_post_action action)
     if (!indigo_session_submit_post_action(action, app->request_post_uri,
                                            app->request_post_cid, app->request_undo_uri)) {
         action_undone(app, action, app->request_post_uri, app->request_undo_uri);
+    }
+}
+
+static void
+handle_edit_draft(indigo_app *app)
+{
+    char text[INDIGO_DRAFT_MAX];
+    indigo_text_result r;
+
+#ifdef INDIGO_DEV_AUTOFILL
+    /* Emulator aid only: the software keyboard cannot be driven there. */
+    FILE *af = fopen(COMPOSE_AUTOFILL_PATH, "rb");
+
+    if (af) {
+        size_t n = fread(text, 1, sizeof text - 1, af);
+
+        fclose(af);
+        text[n] = '\0';
+        while (n && (text[n - 1] == '\n' || text[n - 1] == '\r')) {
+            text[--n] = '\0';
+        }
+        remove(COMPOSE_AUTOFILL_PATH);
+        indigo_app_set_draft(app, text);
+        return;
+    }
+#endif
+
+    r = indigo_text_edit("What's on your mind?", app->compose.text, false, text, sizeof text);
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_draft(app, text);
+    }
+}
+
+static void
+start_publish(indigo_app *app)
+{
+    const indigo_compose *c = &app->compose;
+
+    if (!indigo_session_submit_publish(c->mode, c->text, c->has_target ? c->target.uri : "",
+                                       c->has_target ? c->target.cid : "", c->root_uri,
+                                       c->root_cid)) {
+        indigo_app_publish_failed(app, "Could not start posting.");
     }
 }
 
@@ -113,6 +156,27 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_UNREPOST:
         post_action(app, INDIGO_POST_ACTION_UNREPOST);
         break;
+    case INDIGO_REQUEST_THREAD:
+        if (!indigo_session_submit_thread(app->request_post_uri)) {
+            indigo_app_thread_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_PROFILE:
+        if (!indigo_session_submit_profile(app->request_post_uri)) {
+            indigo_app_profile_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_NOTIFICATIONS:
+        if (!indigo_session_submit_notifications()) {
+            indigo_app_notifications_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_DRAFT:
+        handle_edit_draft(app);
+        break;
+    case INDIGO_REQUEST_PUBLISH:
+        start_publish(app);
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -152,9 +216,9 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_POST_ACTION_DONE:
             if (ev.action == INDIGO_POST_ACTION_LIKE || ev.action == INDIGO_POST_ACTION_UNLIKE) {
-                indigo_timeline_set_like(&app->timeline, ev.post_uri, ev.record_uri, false);
+                indigo_app_set_like(app, ev.post_uri, ev.record_uri, false);
             } else {
-                indigo_timeline_set_repost(&app->timeline, ev.post_uri, ev.record_uri, false);
+                indigo_app_set_repost(app, ev.post_uri, ev.record_uri, false);
             }
             break;
         case INDIGO_SESSION_EVENT_POST_ACTION_FAILED: {
@@ -173,6 +237,38 @@ handle_events(indigo_app *app)
             action_undone(app, ev.action, ev.post_uri, prev);
             break;
         }
+        case INDIGO_SESSION_EVENT_THREAD_PAGE: {
+            unsigned n;
+            const indigo_post *page = indigo_session_page(&n);
+
+            indigo_app_thread_loaded(app, page, n, ev.focus);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_THREAD_FAILED:
+            indigo_app_thread_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_PROFILE_LOADED:
+            indigo_app_profile_loaded(app, indigo_session_profile());
+            break;
+        case INDIGO_SESSION_EVENT_PROFILE_FAILED:
+            indigo_app_profile_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE: {
+            unsigned n;
+            const indigo_notification *items = indigo_session_notifications(&n);
+
+            indigo_app_notifications_loaded(app, items, n);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED:
+            indigo_app_notifications_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_PUBLISHED:
+            indigo_app_publish_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
+            indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
+            break;
         case INDIGO_SESSION_EVENT_NONE:
             break;
         }

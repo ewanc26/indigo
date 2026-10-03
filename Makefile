@@ -59,7 +59,7 @@ endif
 ASFLAGS := -g $(ARCH)
 LDFLAGS = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS := $(WOLFRAM_LIBS)         -lcitro2d -lcitro3d         -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz         -lctru -lm
+LIBS := $(WOLFRAM_LIBS)         -lcitro2d -lcitro3d         -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz         -lctru -lm -lstdc++
 
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
 
@@ -118,15 +118,16 @@ else
 export LD := $(CC)
 endif
 
-.PHONY: all clean run run-emu wolfram-3ds
+.PHONY: all clean run run-emu wolfram-3ds build-3ds
 
 # Emulator used by run-emu. Override with EMU=/path/to/emulator.
 EMU ?= $(HOME)/Applications/Azahar.app/Contents/MacOS/azahar
 
-all: $(BUILD) $(TARGET).3dsx
-
-$(BUILD):
-	@mkdir -p $@
+# The recursive make owns dependency tracking (objects, ELF, 3DSX), so it runs
+# on every build. Depending on $(TARGET).3dsx here instead would let a stale
+# executable survive a source change: the outer make has no rule for it.
+all:
+	@mkdir -p $(BUILD)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 clean:
@@ -138,9 +139,21 @@ run: all
 # Build, then launch the .3dsx in an emulator (Azahar by default; Citra or
 # Lime3DS also work: make run-emu EMU=/path/to/citra). Emulator-only: this
 # says nothing about real hardware.
-run-emu: all
+#
+# Launching is not uniform. Azahar ignores a .3dsx passed on its own command
+# line and just sits on its HOME menu, so when the emulator is a macOS app
+# bundle the file is opened through LaunchServices instead. EMU_APP overrides
+# the guess if the bundle does not follow the Contents/MacOS layout.
+EMU_APP ?= $(shell _e=$(EMU); _d=$$(dirname $$_e); _d=$$(dirname $$_d); _d=$$(dirname $$_d); \
+	   [ -f "$$_d/Contents/Info.plist" ] && echo "$$_d")
+
+run-emu: build-3ds
 	@test -x "$(EMU)" || { echo "emulator not found at $(EMU); set EMU=/path/to/azahar"; exit 1; }
-	"$(EMU)" "$(CURDIR)/$(TARGET).3dsx"
+	@if [ -n "$(EMU_APP)" ] && [ -d "$(EMU_APP)" ]; then \
+		open -a "$(EMU_APP)" "$(CURDIR)/$(TARGET).3dsx"; \
+	else \
+		"$(EMU)" "$(CURDIR)/$(TARGET).3dsx"; \
+	fi
 
 # Build Wolfram (the sibling checkout) for 3DS using its own toolchain file.
 wolfram-3ds:
@@ -148,6 +161,23 @@ wolfram-3ds:
 	  -DCMAKE_TOOLCHAIN_FILE="$(WOLFRAM_ROOT)/.devdeps/3ds.cmake" \
 	  -DWOLFRAM_BUILD_3DS=ON -DWOLFRAM_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug
 	cmake --build "$(WOLFRAM_BUILD)"
+
+# Linking the 3DSX needs the devkitPro 3DS portlibs (curl, mbedtls, zlib). They
+# ship in the devkitPro image that CI builds in, not in a plain host devkitPro,
+# so local 3DS builds go through the same image. The parent directory is
+# mounted because Wolfram is a sibling checkout.
+#
+#   make            host build: correct in CI, and on a host with the portlibs
+#   make build-3ds  container build: the local default
+#
+# Always starting from a clean build keeps the generated .d files pointing at
+# one tree; they record absolute paths and are meaningless in the other.
+EMU_CONTAINER ?= docker run --rm --user $$(id -u):$$(id -g) \
+	  -e DEVKITPRO=/opt/devkitpro -e DEVKITARM=/opt/devkitpro/devkitARM \
+	  -v $(CURDIR)/..:/work -w /work/$(notdir $(CURDIR)) devkitpro/devkitarm:latest
+
+build-3ds:
+	$(EMU_CONTAINER) sh -c 'make clean && make'
 
 else
 
