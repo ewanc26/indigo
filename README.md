@@ -19,7 +19,7 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**Milestone 2 (sign-in) is ready for review; it is stacked on Milestone 1.**
+**Milestone 3 (timeline) is ready for review; it is stacked on Milestone 2, which is stacked on Milestone 1.**
 
 | Check | State |
 |---|---|
@@ -27,11 +27,15 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 | TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
 | Successful login, session save, resume on restart, sign-out | **not verified**: no app password was available. Covered by host tests only |
 | On-screen keyboard (swkbd) entry | **not verified** in the emulator |
+| Timeline model, wrapping, link spans, selection, paging triggers, like/repost state | verified on the host (684 checks); both screens rendered by the host snapshot renderer ([top and bottom](docs/screenshots/m3-snapshot-timeline.png), [scrolled](docs/screenshots/m3-snapshot-timeline-scrolled.png)), which are **not emulator output** |
+| M3 build boots in Azahar | emulator-verified: the sign-in screen still renders ([screenshot](docs/screenshots/m3-azahar-boot.png)) |
+| Live timeline fetch, paging, like and repost against the real service | **not verified**: no app password was available, so the worker jobs have only been cross-built, never run |
+| Avatars | **not implemented** (deferred: no image decoder yet) |
 | Real hardware | never run |
 
 Sign-in takes a service URL (default `https://bsky.social`), a handle and an app password, and follows the account's PDS. The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
-Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. The timeline, posting and the rest of the Bluesky app are not implemented yet.
+Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. Posting, threads, profiles and notifications are not implemented yet.
 
 ### Emulator sign-in autofill
 
