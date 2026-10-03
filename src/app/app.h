@@ -65,6 +65,8 @@ typedef enum {
     INDIGO_REQUEST_AUTHOR_FEED,
     INDIGO_REQUEST_LISTS,
     INDIGO_REQUEST_LIST_MEMBERS,
+    INDIGO_REQUEST_FEEDS,
+    INDIGO_REQUEST_FEED,
 } indigo_request_kind;
 
 typedef struct {
@@ -104,6 +106,14 @@ typedef struct {
     char request_actor[INDIGO_POST_NAME_MAX];
     /* Which list INDIGO_REQUEST_LIST_MEMBERS is asking for. */
     char request_list_uri[INDIGO_POST_URI_MAX];
+    /* Which feed INDIGO_REQUEST_FEED is asking for, and its name for the
+     * timeline title. */
+    char request_feed_uri[INDIGO_POST_URI_MAX];
+    char request_feed_name[INDIGO_POST_NAME_MAX];
+    /* The feed the home screen is showing, empty for the plain Following
+     * timeline. Outlives the request, so the title and Back survive paging. */
+    char feed_uri[INDIGO_POST_URI_MAX];
+    char feed_name[INDIGO_POST_NAME_MAX];
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -170,6 +180,12 @@ void indigo_app_open_author_posts(indigo_app *app, const char *actor);
 void indigo_app_open_lists(indigo_app *app);
 void indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name);
 void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count);
+/* The account's saved feeds, then one feed's posts on the home screen. The
+ * picker reuses the search screen with the list rows; the feed itself reuses
+ * the timeline, so Back lands on the picker again. */
+void indigo_app_open_feeds(indigo_app *app);
+void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *name);
+void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */
 void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count);

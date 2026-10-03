@@ -29,6 +29,7 @@ typedef enum {
     INDIGO_SESSION_EVENT_SEARCH_FAILED,
     INDIGO_SESSION_EVENT_POST_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_LISTS_PAGE,
+    INDIGO_SESSION_EVENT_FEEDS_PAGE,
     INDIGO_SESSION_EVENT_FOLLOW_DONE,
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
     INDIGO_SESSION_EVENT_GRAPH_DONE,
@@ -134,6 +135,13 @@ void indigo_session_post_search_results(const indigo_post **posts, unsigned *cou
 /* The account's curated lists. A list is a third result type, so it has its
  * own array and its own event rather than sharing the actor search's. */
 void indigo_session_lists_results(const indigo_list **lists, unsigned *count);
+/* The account's saved feeds, and one feed's posts. The feeds are list-shaped
+ * (a name with a URI to open), so they share the lists' result type but have
+ * their own array and event; the feed posts reuse the timeline's, because
+ * getFeed returns the same shape getTimeline does. */
+bool indigo_session_submit_feeds(void);
+bool indigo_session_submit_feed(const char *feed_uri, const char *cursor);
+void indigo_session_feeds_results(const indigo_list **feeds, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
  * array and its events, because the result type is the same. */
 bool indigo_session_submit_people(indigo_search_kind kind, const char *subject);

@@ -4,6 +4,7 @@
 #include "ui/wrap.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #define COL_BG_TOP INDIGO_RGBA(18, 20, 26, 255)
 #define COL_BG_BOTTOM INDIGO_RGBA(12, 14, 18, 255)
@@ -295,12 +296,34 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
     const indigo_timeline *t = thread ? &app->thread : &app->timeline;
     const indigo_post *p = indigo_timeline_selected(t);
 
-    indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, thread ? "Thread" : "Home");
+    const char *title = thread ? "Thread" : app->feed_uri[0] ? app->feed_name : "Home";
+    /* A feed name is longer than "Home", and the counter above the rows wants
+     * the right of the bar, so the feed hint drops the START reminder to keep
+     * room for the name: START still exits, as it does on every list screen. */
+    const char *hint = thread             ? "B  Back   SEL  Profile"
+                        : app->feed_uri[0] ? "B  Feeds   SEL  Reload"
+                        : "B  Menu   SEL  Reload   START  Exit";
+    float hint_x = 18.0f + (float) strlen(title) * INDIGO_CHAR_WIDTH * 0.8f + 12.0f;
+    float hint_end = 326.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.5f;
+    unsigned units;
+
+    if (hint_x < 116.0f) {
+        hint_x = 116.0f;
+    }
+    if (hint_x > hint_end && hint_end > 116.0f) {
+        hint_x = hint_end;
+    }
+    /* A name that would still reach the hint is cut, and marked as cut, rather
+     * than drawn over it. */
+    units = (unsigned) ((hint_x - 26.0f) / (INDIGO_CHAR_WIDTH * 0.8f));
+    if (strlen(title) > units) {
+        indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%.*s...", (int) units - 3, title);
+    } else {
+        indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", title);
+    }
     /* The bottom pills carry the hints for the list actions (Y, X, A, SEL), so
      * the title bar only states what they cannot: leaving the screen. */
-    indigo_canvas_text(c, 116, 12, 0.5f, COL_TEXT_DIM, "%s",
-                       thread            ? "B  Back   SEL  Profile"
-                       : "B  Menu   SEL  Reload   START  Exit");
+    indigo_canvas_text(c, hint_x, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
     if (p) {
         indigo_canvas_text(c, 330, 12, 0.6f, COL_TEXT_DIM, "%u / %u%s", t->selected + 1,
                            t->count, t->has_more ? "+" : "");
@@ -500,6 +523,13 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         }
         indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
         indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open members");
+        return;
+    }
+    if (lists && s->kind == INDIGO_SEARCH_FEEDS) {
+        indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s", lsel->name);
+        indigo_canvas_text(c, 18, 82, 0.6f, COL_TEXT_SOFT, "Custom feed");
+        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
+        indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open feed");
         return;
     }
     if (posts) {
@@ -708,8 +738,10 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM, "%.22s",
                        t->loading ? "Loading..." : t->status);
     /* The button hints live in the top screen's title bar; a bottom pill is
-     * labelled with its action so no back hint appears twice. */
-    back_button(c, thread ? INDIGO_ACTION_BACK : INDIGO_ACTION_MENU, thread ? "Back" : "Menu");
+     * labelled with its action so no back hint appears twice. A feed view's B
+     * goes back to the picker, so its button is named for the picker. */
+    back_button(c, thread ? INDIGO_ACTION_BACK : INDIGO_ACTION_MENU,
+                thread ? "Back" : app->feed_uri[0] ? "Feeds" : "Menu");
 
     for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
         unsigned idx = t->scroll + row;
@@ -901,6 +933,7 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
     bool posts = indigo_search_is_posts(s);
+    bool opens;
     indigo_rect q = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
 
     indigo_canvas_rect(c, q.x, q.y, q.w, q.h, s->query[0] ? COL_PILL_ACTIVE : COL_PILL);
@@ -922,7 +955,7 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         unsigned idx = s->scroll + row;
         char title[96];
 
-        if (indigo_search_is_lists(s) && s->kind == INDIGO_SEARCH_LISTS) {
+        if (s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_FEEDS) {
             const indigo_list *l = indigo_search_row_list(s, row, INDIGO_SEARCH_ROWS);
 
             if (!l) {
@@ -965,14 +998,15 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
      * the bottom would either overlap that box or need an action that means
      * something else to the touch handler. Same label as the thread screen's
      * author pill: SEL opens a profile there too, and "SEL Open" does not fit
-     * a 74px pill in the baked font. */
+     * a 74px pill in the baked font. Every row kind but the people ones opens
+     * its row rather than a profile: a thread, a curated list, a saved feed. */
+    opens = posts || indigo_search_is_lists(s);
     action_pill(c, INDIGO_ACTION_AUTHOR,
-                posts ? indigo_search_selected_post(s) != NULL
-                      : indigo_search_is_lists(s) ? indigo_search_selected_list(s) != NULL
-                                                  : indigo_search_selected(s) != NULL,
+                opens ? (posts ? indigo_search_selected_post(s) != NULL
+                               : indigo_search_selected_list(s) != NULL)
+                      : indigo_search_selected(s) != NULL,
                 s->loading, COL_PILL_ACTIVE,
-                posts ? "Thread"
-                      : s->kind == INDIGO_SEARCH_LISTS ? "Open" : "Profile");
+                posts ? "Thread" : opens ? "Open" : "Profile");
 }
 
 static void

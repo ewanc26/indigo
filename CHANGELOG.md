@@ -6,7 +6,25 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
 ### Added
+- The account's saved custom feeds, as "Feeds" in the More menu, and one
+  feed's posts on the home screen from SEL on a feed row. The picker reuses the
+  search screen and the list rows -- a feed is a name with a URI to open, which
+  is what a curated list is -- and the feed itself reuses the timeline, since
+  getFeed returns the same feedViewPost items getTimeline does. Only the
+  requests are new: getPreferences for the saved URIs (V2 first, the V1 list as
+  the older fallback) and getFeedGenerators to name them. The preferences JSON
+  is read rather than the typed parse, because one preference type the parser
+  rejects must not take the whole picker down with it -- Cobalt hit exactly
+  that on a real account. A feed view's B returns to the picker and puts the
+  Following timeline back, matching Cobalt's timeline BACK; the More menu is
+  then two presses away rather than one, and the bottom-right button says
+  "Feeds" and does the same thing B does. The title bar carries the feed's
+  name, so a name longer than the bar is cut with an ellipsis instead of
+  running into the hint; the bounds test now measures four name lengths. Bounded
+  to 20; the saved-feeds list is not paged, matching actor and post search.
 - Curated lists, as "Lists" in the More menu, and one list's members from SEL
   on a list row. They reuse the search screen rather than adding two more:
   the lists are a third row type with their own array, and the members are
@@ -17,15 +35,6 @@ publishes the section matching the version you pass it.
   the lists live in, so without the restore Back would return to a corrupted
   screen. Bounded to 20; the getLists and getList cursors are dropped, the
   same reasoning as actor and post search.
-
-### Fixed
-- The profile screen's status line was drawn at y=244 on a 240-tall bottom
-  screen, so every follow, mute and block error message was invisible. The
-  button rows are now spaced so the status line has room, and the layout
-  spacing test asserts that room exists rather than only that each button is
-  on screen — which is what let this through.
-
-### Added
 - A pinned post, from a Pinned button on the profile. It costs no request:
   getProfile already returned pinnedPost.uri and Indigo was discarding it, and
   opening a thread needs nothing more than the URI. The button is drawn
@@ -84,6 +93,11 @@ publishes the section matching the version you pass it.
   match and failure.
 
 ### Fixed
+- The profile screen's status line was drawn at y=244 on a 240-tall bottom
+  screen, so every follow, mute and block error message was invisible. The
+  button rows are now spaced so the status line has room, and the layout
+  spacing test asserts that room exists rather than only that each button is
+  on screen — which is what let this through.
 - A source file edited in the same second as the object it should replace was
   never recompiled, because `make` compares modification times at one-second
   granularity (the filesystem keeps nanoseconds; the comparison discards

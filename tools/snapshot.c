@@ -407,6 +407,14 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
 static void
 fill_social(indigo_app *app, const scenario *s)
 {
+    if (s->timeline == 12) {
+        /* A saved feed open on the home screen: the title is the feed's name
+         * and B returns to the picker. The posts are the standard fill -- a
+         * feed view is the timeline screen, only headed differently. */
+        indigo_copy_utf8(app->feed_uri, sizeof app->feed_uri,
+                         "at://did:plc:me/app.bsky.feed.generator/quiet");
+        indigo_copy_utf8(app->feed_name, sizeof app->feed_name, "Quiet posters");
+    }
     if (s->screen == INDIGO_SCREEN_THREAD) {
         fill_timeline(&app->thread, 1, s->select);
         app->thread_focus = 1;
@@ -468,6 +476,27 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_actor a[3];
 
         memset(a, 0, sizeof a);
+        if (s->timeline == 11) {
+            /* The saved-feeds picker. */
+            {
+                indigo_list fs[2];
+
+                q->kind = INDIGO_SEARCH_FEEDS;
+                memset(fs, 0, sizeof fs);
+                snprintf(fs[0].name, sizeof fs[0].name, "Quiet posters");
+                /* What the picker actually holds for a feed: the name and the
+                 * URI, with a fixed description standing in for the generator's. */
+                snprintf(fs[0].description, sizeof fs[0].description, "Custom feed");
+                snprintf(fs[0].uri, sizeof fs[0].uri,
+                         "at://did:plc:me/app.bsky.feed.generator/quiet");
+                snprintf(fs[1].name, sizeof fs[1].name, "Moon photos");
+                snprintf(fs[1].description, sizeof fs[1].description, "Custom feed");
+                snprintf(fs[1].uri, sizeof fs[1].uri,
+                         "at://did:plc:me/app.bsky.feed.generator/moon");
+                indigo_app_feeds_loaded(app, fs, 2);
+            }
+            return;
+        }
         if (s->timeline == 9 || s->timeline == 10) {
             /* Curated lists, then one list's members. The members reuse the
              * actor rows; the lists have their own. */
@@ -652,6 +681,8 @@ main(int argc, char **argv)
         {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0},
         {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0},
         {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0},
+        {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0},
+        {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0},
     };
 
     if (argc != 2) {
