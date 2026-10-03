@@ -15,7 +15,7 @@ The goal is the same kind of hardware-first absurdity, but the implementation
 is deliberately different. Indigo is **not a port** of Cobalt. I am designing
 it around the 3DS's own hardware, input model and two-screen layout.
 
-The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality. Indigo is a Bluesky client only: it talks to Bluesky and does not aim to be a general AT Protocol client.
+The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality. Indigo is scoped to the Bluesky app, not general AT Protocol use; accounts on custom PDSes are supported.
 
 ## Status
 
