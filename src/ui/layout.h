@@ -19,7 +19,16 @@ typedef enum {
     INDIGO_ACTION_FIELD_PASSWORD,
     INDIGO_ACTION_SIGN_IN,
     INDIGO_ACTION_SIGN_OUT,
+    INDIGO_ACTION_ROW0,
+    INDIGO_ACTION_ROW1,
+    INDIGO_ACTION_ROW2,
+    INDIGO_ACTION_LIKE,
+    INDIGO_ACTION_REPOST,
+    INDIGO_ACTION_REFRESH,
 } indigo_action;
+
+/* Posts visible at once in the bottom list. */
+#define INDIGO_TIMELINE_ROWS 3
 
 typedef struct {
     float x;

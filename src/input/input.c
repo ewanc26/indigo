@@ -17,6 +17,13 @@ indigo_input_begin_frame(indigo_input *input)
     input->confirm = (input->pressed & KEY_A) != 0;
     input->back = (input->pressed & KEY_B) != 0;
     input->quit = (input->pressed & KEY_START) != 0;
+    input->up = (input->pressed & KEY_DUP) != 0;
+    input->down = (input->pressed & KEY_DDOWN) != 0;
+    input->page_up = (input->pressed & KEY_L) != 0;
+    input->page_down = (input->pressed & KEY_R) != 0;
+    input->like = (input->pressed & KEY_Y) != 0;
+    input->repost = (input->pressed & KEY_X) != 0;
+    input->refresh = (input->pressed & KEY_SELECT) != 0;
 }
 
 void

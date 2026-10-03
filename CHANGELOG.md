@@ -7,6 +7,12 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Timeline (M3): top screen shows the selected post (name, handle, wrapped
+  text with link/mention/tag colouring, embed note, counts); bottom screen
+  is a touch list with Like, Repost and Reload. D-pad/L/R move, Y likes,
+  X reposts, SELECT reloads. Posts are fetched in pages of 15 on the worker
+  thread, prefetched near the end, and capped at 60 in memory. Post text,
+  facets, embeds and "reposted by" come from Wolfram's `post_display` API.
 - Sign-in (M2): service/handle/app-password form on the touch screen, a
   worker thread for login so the UI never blocks, a curated CA bundle in
   romfs (`tools/make_cabundle.py`), a versioned session file with atomic

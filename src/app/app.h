@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "app/timeline.h"
+
 typedef struct indigo_input indigo_input;
 
 #define INDIGO_SERVICE_MAX 256
@@ -37,6 +39,12 @@ typedef enum {
     INDIGO_REQUEST_EDIT_FIELD,
     INDIGO_REQUEST_SIGN_IN,
     INDIGO_REQUEST_SIGN_OUT,
+    INDIGO_REQUEST_TIMELINE_REFRESH,
+    INDIGO_REQUEST_TIMELINE_MORE,
+    INDIGO_REQUEST_LIKE,
+    INDIGO_REQUEST_UNLIKE,
+    INDIGO_REQUEST_REPOST,
+    INDIGO_REQUEST_UNREPOST,
 } indigo_request_kind;
 
 typedef struct {
@@ -59,6 +67,12 @@ typedef struct {
     indigo_signin signin;
     indigo_request_kind request;
     indigo_field request_field;
+    /* Post the pending like/repost request is about; undo_uri is the record
+     * to delete for UNLIKE/UNREPOST. Valid until the next request. */
+    char request_post_uri[INDIGO_POST_URI_MAX];
+    char request_post_cid[INDIGO_POST_CID_MAX];
+    char request_undo_uri[INDIGO_POST_URI_MAX];
+    indigo_timeline timeline;
 } indigo_app;
 
 void indigo_app_init(indigo_app *app);
@@ -69,6 +83,9 @@ bool indigo_app_should_quit(const indigo_app *app);
 /* Returns the pending request once, then clears it. */
 indigo_request_kind indigo_app_take_request(indigo_app *app,
                                             indigo_field *field);
+
+/* The pending request without consuming it. */
+indigo_request_kind indigo_app_peek_request(const indigo_app *app);
 
 /* Store text the person entered; a rejected entry becomes a status message. */
 bool indigo_app_set_field(indigo_app *app, indigo_field f, const char *text);
