@@ -84,6 +84,9 @@ bool indigo_app_should_quit(const indigo_app *app);
 indigo_request_kind indigo_app_take_request(indigo_app *app,
                                             indigo_field *field);
 
+/* The pending request without consuming it. */
+indigo_request_kind indigo_app_peek_request(const indigo_app *app);
+
 /* Store text the person entered; a rejected entry becomes a status message. */
 bool indigo_app_set_field(indigo_app *app, indigo_field f, const char *text);
 

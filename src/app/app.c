@@ -253,6 +253,12 @@ indigo_app_should_quit(const indigo_app *app)
 }
 
 indigo_request_kind
+indigo_app_peek_request(const indigo_app *app)
+{
+    return app->request;
+}
+
+indigo_request_kind
 indigo_app_take_request(indigo_app *app, indigo_field *field)
 {
     indigo_request_kind k = app->request;
