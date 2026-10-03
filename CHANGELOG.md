@@ -6,6 +6,18 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Added
+- Curated lists, as "Lists" in the More menu, and one list's members from SEL
+  on a list row. They reuse the search screen rather than adding two more:
+  the lists are a third row type with their own array, and the members are
+  people, so they reuse the actor rows the followers and following lists use.
+  Back from members restores the lists by hand, because history holds screens
+  rather than search kinds and this is the one place the search screen stacks
+  on itself with a different kind -- the members are actors in the same union
+  the lists live in, so without the restore Back would return to a corrupted
+  screen. Bounded to 20; the getLists and getList cursors are dropped, the
+  same reasoning as actor and post search.
+
 ### Fixed
 - The profile screen's status line was drawn at y=244 on a 240-tall bottom
   screen, so every follow, mute and block error message was invisible. The

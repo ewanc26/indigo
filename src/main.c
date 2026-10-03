@@ -226,6 +226,16 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_LISTS:
+        if (!indigo_session_submit_lists()) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_LIST_MEMBERS:
+        if (!indigo_session_submit_list_members(app->request_list_uri)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -334,6 +344,14 @@ handle_events(indigo_app *app)
 
             indigo_session_post_search_results(&posts, &pn);
             indigo_app_post_search_loaded(app, posts, pn);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_LISTS_PAGE: {
+            const indigo_list *lists;
+            unsigned ln;
+
+            indigo_session_lists_results(&lists, &ln);
+            indigo_app_lists_loaded(app, lists, ln);
             break;
         }
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:

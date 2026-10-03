@@ -106,6 +106,10 @@ indigo_search_title(const indigo_search *s)
         return "Post search";
     case INDIGO_SEARCH_AUTHOR:
         return "Posts";
+    case INDIGO_SEARCH_LISTS:
+        return "Lists";
+    case INDIGO_SEARCH_LIST_MEMBERS:
+        return "Members";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
@@ -125,4 +129,30 @@ bool
 indigo_search_is_posts(const indigo_search *s)
 {
     return s->kind == INDIGO_SEARCH_POSTS || s->kind == INDIGO_SEARCH_AUTHOR;
+}
+
+bool
+indigo_search_is_lists(const indigo_search *s)
+{
+    return s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_LIST_MEMBERS;
+}
+
+const indigo_list *
+indigo_search_selected_list(const indigo_search *s)
+{
+    if (!indigo_search_is_lists(s) || s->selected >= s->count) {
+        return NULL;
+    }
+    return &s->results.lists[s->selected];
+}
+
+const indigo_list *
+indigo_search_row_list(const indigo_search *s, unsigned row, unsigned rows)
+{
+    unsigned index = s->scroll + row;
+
+    if (!indigo_search_is_lists(s) || row >= rows || index >= s->count) {
+        return NULL;
+    }
+    return &s->results.lists[index];
 }

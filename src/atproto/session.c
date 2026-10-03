@@ -16,6 +16,7 @@
 #include <wolfram/3ds.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
+#include <wolfram/list_typed.h>
 #include <wolfram/post_display.h>
 #include <wolfram/thread_typed.h>
 
@@ -39,6 +40,8 @@ typedef enum {
     JOB_PEOPLE,
     JOB_POST_SEARCH,
     JOB_AUTHOR_FEED,
+    JOB_LISTS,
+    JOB_LIST_MEMBERS,
 } job_kind;
 
 typedef struct {
@@ -60,6 +63,7 @@ typedef struct {
     indigo_graph_action graph;
     indigo_search_kind people_kind;
     char actor[INDIGO_PROFILE_DID_MAX];
+    char list_uri[INDIGO_POST_URI_MAX];
 } job;
 
 static char s_path[256];
@@ -93,6 +97,11 @@ static unsigned s_actor_count;
  * to be valid until the next result arrives. */
 static indigo_post s_posts[INDIGO_SEARCH_MAX];
 static unsigned s_post_count;
+/* Curated lists keep their own array for the same reason the posts do: a
+ * list is a third type, and the screen needs the previous list to stay valid
+ * until the next result arrives. */
+static indigo_list s_lists[INDIGO_SEARCH_MAX];
+static unsigned s_list_count;
 
 static indigo_failure
 classify(wf_status st)
@@ -886,6 +895,112 @@ do_author_feed(const job *j)
     publish_event(&ev);
 }
 
+/* The account's curated lists. getLists is paged; the cursor is dropped like
+ * actor and post search, because a 3DS list that cannot show page two is not
+ * worth paging. */
+static void
+do_lists(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_list_view_list list;
+    wf_status st;
+
+    (void) j;
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    /* The signed-in account's own lists: getLists needs an actor, and the
+     * agent knows its own handle. */
+    {
+        const char *who = wf_agent_get_handle(s_agent);
+
+        if (!who || !who[0]) {
+            ev.failure = INDIGO_FAIL_NOT_READY;
+            publish_event(&ev);
+            return;
+        }
+        memset(&list, 0, sizeof list);
+        st = wf_agent_get_lists_typed(s_agent, who, INDIGO_SEARCH_MAX, NULL, &list);
+    }
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("lists failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_list_count = 0;
+    for (size_t i = 0; i < list.list_count && s_list_count < INDIGO_SEARCH_MAX; i++) {
+        const wf_agent_list_view *l = &list.lists[i];
+        indigo_list *o = &s_lists[s_list_count];
+
+        if (!l->uri || !l->uri[0] || !l->name || !l->name[0]) {
+            continue;
+        }
+        memset(o, 0, sizeof *o);
+        indigo_copy_utf8(o->uri, sizeof o->uri, l->uri);
+        indigo_copy_utf8(o->name, sizeof o->name, l->name);
+        indigo_copy_utf8(o->description, sizeof o->description,
+                         l->description ? l->description : "");
+        s_list_count++;
+    }
+    wf_agent_list_view_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_LISTS_PAGE;
+    ev.page_count = s_list_count;
+    indigo_log_info("lists: %u", s_list_count);
+    publish_event(&ev);
+}
+
+/* One list's members. getList's items are listItemViews whose subjects are
+ * profile views, so they land in the actor array through the same conversion
+ * the followers list uses. */
+static void
+do_list_members(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_list_item_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_get_list_typed(s_agent, j->list_uri, INDIGO_SEARCH_MAX, NULL, &list);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("list members failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_actor_count = 0;
+    for (size_t i = 0; i < list.item_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+        const wf_agent_profile_view *a = &list.items[i].subject;
+        indigo_actor *o = &s_actors[s_actor_count];
+
+        if (!a->handle || !a->handle[0]) {
+            continue;
+        }
+        memset(o, 0, sizeof *o);
+        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
+        indigo_copy_utf8(o->display_name, sizeof o->display_name,
+                         a->display_name ? a->display_name : "");
+        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
+        s_actor_count++;
+    }
+    wf_agent_list_item_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+    ev.page_count = s_actor_count;
+    indigo_log_info("list members '%s': %u", j->list_uri, s_actor_count);
+    publish_event(&ev);
+}
+
 static void
 do_follow(const job *j)
 {
@@ -1169,6 +1284,12 @@ worker(void *arg)
         case JOB_AUTHOR_FEED:
             do_author_feed(&j);
             break;
+        case JOB_LISTS:
+            do_lists(&j);
+            break;
+        case JOB_LIST_MEMBERS:
+            do_list_members(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1384,6 +1505,26 @@ indigo_session_submit_author_feed(const char *actor)
 }
 
 bool
+indigo_session_submit_lists(void)
+{
+    job j = {.kind = JOB_LISTS};
+
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_list_members(const char *list_uri)
+{
+    job j = {.kind = JOB_LIST_MEMBERS};
+
+    if (!list_uri || !list_uri[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
+    return submit(&j);
+}
+
+bool
 indigo_session_submit_follow(indigo_follow_action action, const char *did,
                              const char *follow_uri)
 {
@@ -1437,6 +1578,17 @@ indigo_session_post_search_results(const indigo_post **posts, unsigned *count)
     }
     if (count) {
         *count = s_post_count;
+    }
+}
+
+void
+indigo_session_lists_results(const indigo_list **lists, unsigned *count)
+{
+    if (lists) {
+        *lists = s_lists;
+    }
+    if (count) {
+        *count = s_list_count;
     }
 }
 
@@ -1676,6 +1828,19 @@ bool
 indigo_session_submit_author_feed(const char *actor)
 {
     (void) actor;
+    return false;
+}
+
+bool
+indigo_session_submit_lists(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_list_members(const char *list_uri)
+{
+    (void) list_uri;
     return false;
 }
 
