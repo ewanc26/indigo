@@ -74,9 +74,15 @@ test_app_navigation(void)
     CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
     app.screen = INDIGO_SCREEN_HOME;
 
+    /* Nothing is selected on an empty timeline, so A does nothing. */
     in.confirm = true;
     indigo_app_update(&app, &in);
-    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
 
     in = (indigo_input) {0};
     in.back = true;
@@ -95,27 +101,27 @@ test_touch_navigation(void)
 {
     indigo_app app;
     indigo_input in = {0};
-    indigo_rect home = indigo_layout_button_rect(INDIGO_ACTION_HOME);
+    indigo_rect menu = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+    indigo_rect back = indigo_layout_button_rect(INDIGO_ACTION_BACK);
 
     indigo_app_init(&app);
-    app.screen = INDIGO_SCREEN_PROFILE;
+    app.screen = INDIGO_SCREEN_HOME;
     in.touch_pressed = true;
-    in.touch_x = (int) (home.x + home.w / 2);
-    in.touch_y = (int) (home.y + home.h / 2);
+    in.touch_x = (int) (menu.x + menu.w / 2);
+    in.touch_y = (int) (menu.y + menu.h / 2);
     indigo_app_update(&app, &in);
-    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
 
-    /* The profile pill no longer exists on the timeline's bottom screen. */
-    in.touch_x = (int) (home.x + 1);
-    in.touch_y = (int) (home.y + 1);
+    in.touch_x = (int) (back.x + back.w / 2);
+    in.touch_y = (int) (back.y + back.h / 2);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_HOME);
 
     /* A held touch must not re-trigger. */
     app.screen = INDIGO_SCREEN_PROFILE;
+    app.history[0] = INDIGO_SCREEN_HOME;
+    app.history_count = 1;
     in.touch_pressed = false;
-    in.touch_x = (int) (home.x + 1);
-    in.touch_y = (int) (home.y + 1);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_PROFILE);
 }
@@ -131,9 +137,10 @@ test_buttons_spaced_and_on_screen(void)
 {
     static const indigo_action home_ui[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_REFRESH};
+        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH,
+        INDIGO_ACTION_MENU};
     static const indigo_action pills[] = {
-        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_REFRESH};
+        INDIGO_ACTION_LIKE, INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH};
     enum { N = sizeof home_ui / sizeof home_ui[0], P = sizeof pills / sizeof pills[0] };
 
     for (int i = 0; i < N; i++) {
@@ -149,17 +156,18 @@ test_buttons_spaced_and_on_screen(void)
                                 (int) (r.y + r.h / 2)) == home_ui[i]);
     }
 
-    /* Pills are 12px apart; the gap between them is dead space. */
+    /* Pills are 6px apart; the gap between them is dead space. */
     for (int i = 0; i + 1 < P; i++) {
         indigo_rect a = indigo_layout_button_rect(pills[i]);
         indigo_rect b = indigo_layout_button_rect(pills[i + 1]);
 
-        CHECK(b.x - (a.x + a.w) >= 12.0f);
-        CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (a.x + a.w + 5), (int) a.y + 5) ==
+        CHECK(b.x - (a.x + a.w) >= 6.0f);
+        CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (a.x + a.w + 3), (int) a.y + 5) ==
               INDIGO_ACTION_NONE);
     }
     CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, 0, 0) == INDIGO_ACTION_NONE);
     CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 20) == INDIGO_ACTION_NONE);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_MENU, 160, 20) == INDIGO_ACTION_NONE);
 }
 
 static unsigned
@@ -183,7 +191,7 @@ test_layout_invariants(void)
     static indigo_canvas top;
     static indigo_canvas bottom;
 
-    for (int screen = 0; screen <= INDIGO_SCREEN_PROFILE; screen++) {
+    for (int screen = 0; screen <= INDIGO_SCREEN_COMPOSE; screen++) {
         indigo_app app;
         indigo_input in = {0};
 
@@ -212,16 +220,176 @@ test_layout_invariants(void)
             }
         }
 
-        /* One hint per control: START appears once, and back is hinted once. */
-        CHECK(count_text(&top, "START") + count_text(&bottom, "START") == 1);
-        if (screen == INDIGO_SCREEN_PROFILE) {
-            CHECK(count_text(&top, "B  ") + count_text(&bottom, "B  ") == 1);
-        }
-        if (screen == INDIGO_SCREEN_HOME) {
-            CHECK(count_text(&top, "A  ") + count_text(&bottom, "A  ") == 1);
-            CHECK(count_text(&top, "B  ") + count_text(&bottom, "B  ") == 0);
-        }
+        /* START is hinted exactly where it exits: sign-in, Home and the menu. */
+        CHECK(count_text(&top, "START") + count_text(&bottom, "START") ==
+              (screen == INDIGO_SCREEN_SIGNIN || screen == INDIGO_SCREEN_HOME ||
+               screen == INDIGO_SCREEN_MENU ? 1u : 0u));
     }
+}
+
+static indigo_post
+make_post(const char *uri, const char *text)
+{
+    indigo_post p = {0};
+
+    indigo_copy_utf8(p.uri, sizeof p.uri, uri);
+    indigo_copy_utf8(p.cid, sizeof p.cid, "bafycid");
+    indigo_copy_utf8(p.handle, sizeof p.handle, "rhi.example.social");
+    indigo_copy_utf8(p.text, sizeof p.text, text);
+    return p;
+}
+
+static void
+test_thread_navigation(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_post posts[3];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    posts[0] = make_post("at://a/app.bsky.feed.post/1", "one");
+    indigo_timeline_append(&app.timeline, &posts[0]);
+
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
+    CHECK(strcmp(app.request_post_uri, "at://a/app.bsky.feed.post/1") == 0);
+
+    posts[1] = make_post("at://a/app.bsky.feed.post/0", "parent");
+    posts[2] = make_post("at://a/app.bsky.feed.post/2", "reply");
+    {
+        indigo_post list[3] = {posts[1], posts[0], posts[2]};
+
+        indigo_app_thread_loaded(&app, list, 3, 1);
+    }
+    CHECK(app.thread.count == 3);
+    CHECK(app.thread.selected == 1);
+
+    /* Like on the thread updates the timeline copy too. */
+    in = (indigo_input) {0};
+    in.like = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_LIKE);
+    CHECK(app.thread.posts[1].like_pending);
+    CHECK(app.timeline.posts[0].like_pending);
+
+    /* B returns to where the thread was opened from. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+}
+
+static void
+test_compose_flow(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_post target = make_post("at://a/app.bsky.feed.post/1", "hello");
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    indigo_timeline_append(&app.thread, &target);
+    indigo_copy_utf8(app.thread_uri, sizeof app.thread_uri, target.uri);
+
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(app.compose.mode == INDIGO_COMPOSE_REPLY);
+    CHECK(app.compose.has_target);
+
+    /* Nothing to send until there is text. */
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+
+    indigo_app_set_draft(&app, "my reply");
+    in.like = true;
+    in.repost = false;
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.mode == INDIGO_COMPOSE_QUOTE);
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.mode == INDIGO_COMPOSE_REPLY);
+
+    /* Cancelling keeps the draft. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(strcmp(app.compose.text, "my reply") == 0);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PUBLISH);
+    CHECK(app.compose.sending);
+
+    /* A failure keeps the draft and the screen. */
+    indigo_app_publish_failed(&app, "Could not reach the network.");
+    CHECK(!app.compose.sending);
+    CHECK(app.compose.status_is_error);
+    CHECK(strcmp(app.compose.text, "my reply") == 0);
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+
+    /* Success clears the draft and leaves compose. */
+    app.compose.sending = true;
+    indigo_app_publish_done(&app);
+    CHECK(app.compose.text[0] == '\0');
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
+}
+
+static void
+test_notifications(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_notification items[2] = {0};
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_NOTIFICATIONS);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NOTIFICATIONS);
+
+    items[0].kind = INDIGO_NOTE_FOLLOW;
+    indigo_copy_utf8(items[0].handle, sizeof items[0].handle, "rhi.example.social");
+    items[1].kind = INDIGO_NOTE_REPLY;
+    indigo_copy_utf8(items[1].target_uri, sizeof items[1].target_uri, "at://a/app.bsky.feed.post/9");
+    indigo_app_notifications_loaded(&app, items, 2);
+    CHECK(app.notifications.count == 2);
+
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
+
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_NOTIFICATIONS);
 }
 
 static void
@@ -351,9 +519,21 @@ test_signin_flow(void)
     CHECK(app.signin.password[0] == '\0');
     CHECK(strcmp(app.signin.account, "ewancroft.uk") == 0);
 
+    /* Open the More menu the way the person does: with nothing selected it
+     * holds only the app actions, and Sign out is the fourth. */
     in = (indigo_input) {0};
-    app.screen = INDIGO_SCREEN_PROFILE;
-    r = indigo_layout_button_rect(INDIGO_ACTION_SIGN_OUT);
+    r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.count == 5);
+    CHECK(app.menu.items[3].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[2].label, "My profile") == 0);
+
+    in = (indigo_input) {0};
+    r = indigo_layout_button_rect(INDIGO_ACTION_MENU3);
     in.touch_pressed = true;
     in.touch_x = (int) (r.x + 4);
     in.touch_y = (int) (r.y + 4);
@@ -794,6 +974,287 @@ test_home_requests(void)
     free(app);
 }
 
+static void
+test_facet_menu(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_menu menu;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "hi");
+    const char *text = "hi @alice.example.com and #cats see https://example.com/x";
+
+    /* Facets come from the post with their targets; the labels are the text
+     * the person can actually see in the post. */
+    snprintf(p.text, sizeof p.text, "%s", text);
+    p.facet_count = 3;
+    p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 3, 21,
+                                        "did:plc:alice0000000000000000000000"};
+    p.facets[1] = (indigo_post_facet) {INDIGO_FACET_TAG, 26, 31, "cats"};
+    p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
+
+    indigo_menu_build(&menu, &p, "me.example.com");
+    /* Three facet targets first, then the five app actions. */
+    CHECK(menu.count == 8);
+    CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
+    CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
+    CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
+    CHECK(menu.items[1].kind == INDIGO_MENU_SHOW_TAG);
+    CHECK(strcmp(menu.items[1].label, "Tag: #cats") == 0);
+    CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
+    CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
+    CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[7].kind == INDIGO_MENU_CLOSE);
+
+    /* Choosing a mention opens that person's profile by did. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_app_sign_in_succeeded(&app, "me.example.com");
+    indigo_timeline_append(&app.timeline, &p);
+    /* Signing in asks for the first page; take it so the menu is free. */
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+
+        in.touch_pressed = true;
+        in.touch_x = (int) (r.x + 4);
+        in.touch_y = (int) (r.y + 4);
+    }
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.count == 8);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE);
+    CHECK(strcmp(app.request_post_uri, "did:plc:alice0000000000000000000000") == 0);
+}
+
+static void
+test_facet_menu_edges(void)
+{
+    indigo_menu menu;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "hi");
+
+    /* A facet with no target is not offered: nothing could be opened. */
+    snprintf(p.text, sizeof p.text, "%s", "hello @nobody.example.com");
+    p.facet_count = 1;
+    p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
+    indigo_menu_build(&menu, &p, "me.example.com");
+    CHECK(menu.count == 5);
+    CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
+
+    /* Byte ranges past the end of the text are ignored, not read out of
+     * bounds. */
+    p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
+    p.text[sizeof p.text - 1] = '\0';
+    indigo_menu_build(&menu, &p, "me.example.com");
+    CHECK(menu.count == 5);
+
+    /* An empty account does not claim to know whose profile it is. */
+    indigo_menu_build(&menu, NULL, "");
+    CHECK(menu.count == 5);
+    CHECK(strcmp(menu.items[2].label, "Your profile") == 0);
+    CHECK(strcmp(menu.items[2].payload, "") == 0);
+
+    /* More items than rows: the selection scrolls and stays in the window. */
+    {
+        indigo_post big = make_post("at://a/app.bsky.feed.post/2", "x");
+        char text[INDIGO_POST_TEXT_MAX];
+        size_t n = 0;
+
+        big.text[0] = '\0';
+        big.facet_count = 0;
+        for (unsigned i = 0; i < INDIGO_POST_FACETS_MAX; i++) {
+            int w = snprintf(text + n, sizeof text - n, "#tag%d ", i);
+
+            if (w < 0 || (size_t) w >= sizeof text - n) {
+                break;
+            }
+            n += (size_t) w;
+            big.facets[big.facet_count] = (indigo_post_facet) {
+                INDIGO_FACET_TAG, (unsigned) n - 5, (unsigned) n - 1, "tag"};
+            big.facet_count++;
+        }
+        indigo_copy_utf8(big.text, sizeof big.text, text);
+
+        indigo_menu_build(&menu, &big, "me.example.com");
+        /* Eight facets plus the five app actions, and no more than the cap. */
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 5);
+        CHECK(menu.count <= INDIGO_MENU_MAX);
+        CHECK(menu.scroll == 0);
+
+        /* Rows outside the count are empty rather than stale. */
+        CHECK(indigo_menu_row(&menu, INDIGO_MENU_ROWS - 1, INDIGO_MENU_ROWS) != NULL);
+
+        for (unsigned i = 0; i < INDIGO_MENU_ROWS; i++) {
+            CHECK(indigo_menu_move(&menu, 1, INDIGO_MENU_ROWS));
+        }
+        CHECK(menu.selected == INDIGO_MENU_ROWS);
+        CHECK(menu.scroll == 1);
+        CHECK(indigo_menu_row(&menu, 0, INDIGO_MENU_ROWS) == &menu.items[1]);
+
+        /* The selection stops at the last item instead of running off. */
+        for (unsigned i = 0; i < INDIGO_MENU_MAX; i++) {
+            indigo_menu_move(&menu, 1, INDIGO_MENU_ROWS);
+        }
+        CHECK(menu.selected == menu.count - 1);
+        CHECK(menu.scroll + INDIGO_MENU_ROWS <= menu.count);
+        CHECK(!indigo_menu_move(&menu, 1, INDIGO_MENU_ROWS));
+    }
+}
+
+static void
+test_menu_rows_on_screen(void)
+{
+    indigo_menu menu;
+
+    indigo_menu_build(&menu, NULL, "me.example.com");
+
+    /* Visible rows stay on the bottom screen, spaced apart, and the whole
+     * menu fits under its header. */
+    for (unsigned i = 0; i < INDIGO_MENU_ROWS; i++) {
+        indigo_rect r = indigo_layout_button_rect((indigo_action) (INDIGO_ACTION_MENU0 + i));
+
+        CHECK(r.x >= 0 && r.x + r.w <= INDIGO_BOTTOM_WIDTH);
+        CHECK(r.y + r.h <= INDIGO_BOTTOM_HEIGHT);
+        CHECK(r.h >= 34.0f);
+        if (i > 0) {
+            indigo_rect p = indigo_layout_button_rect((indigo_action) (INDIGO_ACTION_MENU0 + i - 1));
+
+            CHECK(r.y - (p.y + p.h) >= 4.0f);
+        }
+    }
+    /* INDIGO_ACTION_MENU4 is the last row the layout knows about. */
+    CHECK(INDIGO_ACTION_MENU0 + INDIGO_MENU_ROWS - 1 == INDIGO_ACTION_MENU4);
+}
+
+/* Which button glyphs a text command mentions. Hints are written either as
+ * "B  Back" in a title bar or "B Back" on a pill, so split on spaces. */
+static void
+collect_glyphs(const indigo_canvas *c, bool *seen)
+{
+    static const char *const glyphs[] = {"A", "B", "X", "Y", "R", "SEL", "START"};
+
+    for (unsigned i = 0; i < c->count; i++) {
+        const indigo_cmd *cmd = &c->cmds[i];
+        const char *p;
+        char word[16];
+
+        if (cmd->kind != INDIGO_CMD_TEXT) {
+            continue;
+        }
+        p = indigo_canvas_cmd_text(c, cmd);
+        for (const char *at = p;; at++) {
+            unsigned n = 0;
+
+            while (*at && *at != ' ' && n + 1 < sizeof word) {
+                word[n++] = *at++;
+            }
+            word[n] = '\0';
+            if (*at && *at == ' ') {
+                at++;
+            }
+            for (unsigned g = 0; g < sizeof glyphs / sizeof glyphs[0]; g++) {
+                if (n && strcmp(word, glyphs[g]) == 0) {
+                    seen[g] = true;
+                }
+            }
+            if (!*at) {
+                break;
+            }
+        }
+    }
+}
+
+/* A control is hinted once: the bottom pills name the list actions, and the
+ * title bar only what they cannot. Repeating a glyph would be a second hint
+ * for the same control. */
+static void
+test_no_duplicate_back_hints(void)
+{
+    static const indigo_screen screens[] = {
+        INDIGO_SCREEN_SIGNIN,  INDIGO_SCREEN_HOME,       INDIGO_SCREEN_THREAD,
+        INDIGO_SCREEN_PROFILE, INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
+        INDIGO_SCREEN_COMPOSE};
+    indigo_app app;
+    indigo_input in = {0};
+
+    indigo_app_init(&app);
+    for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
+        indigo_canvas top;
+        indigo_canvas bottom;
+        bool on_top[7] = {false};
+        bool on_bottom[7] = {false};
+
+        app.screen = screens[s];
+        indigo_layout_build(&app, &in, &top, &bottom);
+        CHECK(!top.overflow && !bottom.overflow);
+        collect_glyphs(&top, on_top);
+        collect_glyphs(&bottom, on_bottom);
+        for (unsigned g = 0; g < sizeof on_top / sizeof on_top[0]; g++) {
+            if (on_top[g] && on_bottom[g]) {
+                s_checks++;
+                s_failures++;
+                fprintf(stderr, "%s:%d: screen %u hints one control twice\n", __FILE__,
+                        __LINE__, s);
+            }
+        }
+    }
+}
+
+/* Nothing drawn may run off the edge of its screen: the 3DS cannot scroll a
+ * status line back into view. Uses the same nominal character width the
+ * layout wraps with, so it is a close bound rather than pixel truth. */
+static void
+test_text_stays_on_screen(void)
+{
+    static const indigo_screen screens[] = {
+        INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
+        INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
+        INDIGO_SCREEN_COMPOSE};
+    indigo_app app;
+    indigo_input in = {0};
+
+    indigo_app_init(&app);
+    for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
+        indigo_canvas top;
+        indigo_canvas bottom;
+        const indigo_canvas *both[2];
+
+        app.screen = screens[s];
+        indigo_layout_build(&app, &in, &top, &bottom);
+        both[0] = &top;
+        both[1] = &bottom;
+        for (int k = 0; k < 2; k++) {
+            for (unsigned i = 0; i < both[k]->count; i++) {
+                const indigo_cmd *cmd = &both[k]->cmds[i];
+                float width;
+
+                if (cmd->kind != INDIGO_CMD_TEXT) {
+                    continue;
+                }
+                width = (float) strlen(indigo_canvas_cmd_text(both[k], cmd)) *
+                        INDIGO_CHAR_WIDTH * cmd->scale;
+                s_checks++;
+                if (cmd->x < 0.0f || cmd->y < 0.0f ||
+                    cmd->x + width > (float) both[k]->width ||
+                    cmd->y + INDIGO_CHAR_WIDTH * cmd->scale > (float) both[k]->height) {
+                    s_failures++;
+                    fprintf(stderr,
+                            "%s:%d: text off screen on screen %u: x=%.1f y=%.1f w=%.1f "
+                            "canvas=%dx%d |%s|\n",
+                            __FILE__, __LINE__, s, cmd->x, cmd->y, width,
+                            both[k]->width, both[k]->height,
+                            indigo_canvas_cmd_text(both[k], cmd));
+                }
+            }
+        }
+    }
+}
+
 int
 main(void)
 {
@@ -803,6 +1264,9 @@ main(void)
     test_touch_navigation();
     test_buttons_spaced_and_on_screen();
     test_layout_invariants();
+    test_thread_navigation();
+    test_compose_flow();
+    test_notifications();
     test_normalise_service();
     test_normalise_handle();
     test_signin_fields();
@@ -821,6 +1285,11 @@ main(void)
     test_wrap();
     test_canvas_spans();
     test_home_requests();
+    test_facet_menu();
+    test_facet_menu_edges();
+    test_menu_rows_on_screen();
+    test_no_duplicate_back_hints();
+    test_text_stays_on_screen();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

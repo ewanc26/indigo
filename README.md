@@ -19,7 +19,7 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**Milestone 3 (timeline) is ready for review; it is stacked on Milestone 2, which is stacked on Milestone 1.**
+**Milestone 4 (threads, profiles, notifications, More menu, compose) is ready for review. It is stacked on Milestone 3, which is stacked on Milestone 2, which is stacked on Milestone 1.** Milestones 1 to 3 are open as pull requests #1, #2 and #3 and are not merged yet.
 
 | Check | State |
 |---|---|
@@ -30,12 +30,16 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 | Timeline model, wrapping, link spans, selection, paging triggers, like/repost state | verified on the host (684 checks); both screens rendered by the host snapshot renderer ([top and bottom](docs/screenshots/m3-snapshot-timeline.png), [scrolled](docs/screenshots/m3-snapshot-timeline-scrolled.png)), which are **not emulator output** |
 | M3 build boots in Azahar | emulator-verified: the sign-in screen still renders ([screenshot](docs/screenshots/m3-azahar-boot.png)) |
 | Timeline fetch, paging, reload, like, unlike, repost, unrepost against the real service | emulator-verified in Azahar on the live account: first page, a second page (26 posts, [screenshot](docs/screenshots/m3-emulator-paging.png)), reload, and like/unlike and repost/unrepost with the counts moving by one each way ([liked](docs/screenshots/m3-emulator-liked.png)); every like and repost was undone afterwards |
+| Thread fetch, profile fetch, notifications fetch, compose of a post, a reply and a quote | emulator-verified in Azahar against the live account: `indigo.log` on the virtual SD records `thread: 2 posts`, `notifications: 30` and `published (mode 0)`, `(mode 1)` and `(mode 2)` |
+| More menu built from the post being read, with its facet targets, scrolling, and choosing a mention to open that profile | verified on the host (1045 checks, including label text, payload, scrolling bounds, out-of-range facet ranges and the touch/action mapping); both screens rendered by the host snapshot renderer ([facet targets](docs/screenshots/m4-snapshot-menu-facets.png), [scrolled](docs/screenshots/m4-snapshot-menu-facets-scrolled.png)), which are **not emulator output**. The menu itself was opened in the emulator and both screens rendered ([more menu](docs/screenshots/m4-azahar-more-menu.png)), though the capture cannot be read back here to confirm which post's targets it listed |
+| M4 build boots in Azahar and renders both screens | emulator-verified: `make run-emu` builds, launches, resumes the saved session and fetches a page; the top screen shows the selected post and the bottom screen the touch list ([both screens](docs/screenshots/m4-azahar-home.png)) |
+| Every control is hinted exactly once and no text runs off a screen | verified on the host: a test walks both display lists for every screen and fails if a button glyph is hinted on both displays or if any text exceeds its canvas |
 | Avatars | **not implemented** (deferred: no image decoder yet) |
 | Real hardware | never run |
 
 Sign-in takes a service URL (default `https://bsky.social`), a handle and an app password, and follows the account's PDS. The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
-Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. Posting, threads, profiles and notifications are not implemented yet.
+Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. Sound, sleep, the HOME menu and the icon and banner are the hardware pass (Milestone 5) and are untouched.
 
 ### Emulator sign-in autofill
 
@@ -88,13 +92,21 @@ make run-emu                                  # Azahar at ~/Applications/Azahar.
 make run-emu EMU=/path/to/citra               # Citra or Lime3DS as fallbacks
 ```
 
-Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` on macOS (the `sdmc:` root; Indigo writes `3ds/indigo/indigo.log` and `session.dat` there).
+Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` on macOS (the `sdmc:` root; Indigo writes `3ds/indigo/indigo.log` and `session.dat` there). Its own log, including the font warning below, is at `~/Library/Application Support/Azahar/log/azahar_log.txt`.
 
 Emulator results are emulator-verified only. TLS, certificates and DNS can behave differently from hardware, and emulator performance must never drive tuning. The 3D slider, sleep and the Home menu are left to the hardware pass.
+
+One font caveat is worth knowing before trusting any screenshot: Azahar has no 3DS system shared font and logs `Shared Font file missing. Loading open source replacement from memory` on every launch. Indigo draws with the 3DS system font, so glyph coverage and advance widths in an emulator capture are Azahar's substitute, not the console's. Layout and behaviour can be checked in the emulator; text metrics cannot.
 
 ### Host snapshots
 
 `make snapshots` replays the same display lists the 3DS draws into PNGs without a GPU. Glyphs come from a stand-in font, so text widths are approximate; the emulator is the pixel reference.
+
+### Fonts
+
+There is no bundled font. Indigo draws text with citro2d's default, the 3DS system font (`src/ui/ui.c` creates the text buffer with `C2D_TextBufNew`). citro2d rasterises glyphs into VRAM on demand as text is parsed, so nothing needs preloading, and the buffer holds 4096 glyphs against a worst case of about 500 for the fullest screen.
+
+This is a deliberate choice rather than an omission: post text, display names and biographies are arbitrary Unicode, and the system font is what covers it. A bundled font would trade that coverage for byte-identical text between emulator and hardware, and would carry a licence obligation. If fixed UI labels are ever worth that trade, the font can be loaded from ROMFS at startup with `C2D_FontLoad` and selected per text buffer.
 
 ### Releases
 

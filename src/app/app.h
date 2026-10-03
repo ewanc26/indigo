@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "app/social.h"
 #include "app/timeline.h"
 
 typedef struct indigo_input indigo_input;
@@ -17,8 +18,11 @@ typedef struct indigo_input indigo_input;
 typedef enum {
     INDIGO_SCREEN_SIGNIN = 0,
     INDIGO_SCREEN_HOME,
+    INDIGO_SCREEN_THREAD,
     INDIGO_SCREEN_PROFILE,
-    INDIGO_SCREEN_SEARCH,
+    INDIGO_SCREEN_NOTIFICATIONS,
+    INDIGO_SCREEN_MENU,
+    INDIGO_SCREEN_COMPOSE,
 } indigo_screen;
 
 typedef enum {
@@ -45,6 +49,11 @@ typedef enum {
     INDIGO_REQUEST_UNLIKE,
     INDIGO_REQUEST_REPOST,
     INDIGO_REQUEST_UNREPOST,
+    INDIGO_REQUEST_THREAD,
+    INDIGO_REQUEST_PROFILE,
+    INDIGO_REQUEST_NOTIFICATIONS,
+    INDIGO_REQUEST_EDIT_DRAFT,
+    INDIGO_REQUEST_PUBLISH,
 } indigo_request_kind;
 
 typedef struct {
@@ -73,6 +82,17 @@ typedef struct {
     char request_post_cid[INDIGO_POST_CID_MAX];
     char request_undo_uri[INDIGO_POST_URI_MAX];
     indigo_timeline timeline;
+    /* The post being read in the thread view and the list around it. */
+    indigo_timeline thread;
+    unsigned thread_focus;
+    char thread_uri[INDIGO_POST_URI_MAX];
+    indigo_menu menu;
+    indigo_profile profile;
+    indigo_notifications notifications;
+    indigo_compose compose;
+    /* Where B goes back to; a short stack so thread -> profile -> back works. */
+    indigo_screen history[6];
+    unsigned history_count;
 } indigo_app;
 
 void indigo_app_init(indigo_app *app);
@@ -92,6 +112,29 @@ bool indigo_app_set_field(indigo_app *app, indigo_field f, const char *text);
 
 /* Start sign-in as if the button were pressed (no-op if incomplete or busy). */
 void indigo_app_submit(indigo_app *app);
+
+/* The list the current screen shows posts from (timeline or thread). */
+indigo_timeline *indigo_app_active_list(indigo_app *app);
+
+/* Like/repost state follows a post into every list that holds it. */
+void indigo_app_set_like(indigo_app *app, const char *post_uri, const char *like_uri,
+                         bool pending);
+void indigo_app_set_repost(indigo_app *app, const char *post_uri, const char *repost_uri,
+                           bool pending);
+
+/* Results fed back by the platform glue. */
+void indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
+                              unsigned focus);
+void indigo_app_thread_failed(indigo_app *app, const char *message);
+void indigo_app_profile_loaded(indigo_app *app, const indigo_profile *p);
+void indigo_app_profile_failed(indigo_app *app, const char *message);
+void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
+                                     unsigned count);
+void indigo_app_notifications_failed(indigo_app *app, const char *message);
+/* The draft text came back from the keyboard. */
+void indigo_app_set_draft(indigo_app *app, const char *text);
+void indigo_app_publish_done(indigo_app *app);
+void indigo_app_publish_failed(indigo_app *app, const char *message);
 
 /* Results fed back by the platform glue. */
 void indigo_app_begin_sign_in(indigo_app *app, const char *status);

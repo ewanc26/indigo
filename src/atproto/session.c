@@ -13,6 +13,7 @@
 #include <wolfram/3ds.h>
 #include <wolfram/agent.h>
 #include <wolfram/post_display.h>
+#include <wolfram/thread_typed.h>
 
 #define CA_BUNDLE_PATH "romfs:/cacert.pem"
 #define WORKER_STACK 0x20000
@@ -24,6 +25,10 @@ typedef enum {
     JOB_LOGOUT,
     JOB_TIMELINE,
     JOB_POST_ACTION,
+    JOB_THREAD,
+    JOB_PROFILE,
+    JOB_NOTIFICATIONS,
+    JOB_PUBLISH,
 } job_kind;
 
 typedef struct {
@@ -36,6 +41,10 @@ typedef struct {
     char post_uri[INDIGO_POST_URI_MAX];
     char post_cid[INDIGO_POST_CID_MAX];
     char undo_uri[INDIGO_POST_URI_MAX];
+    indigo_compose_mode mode;
+    char text[INDIGO_DRAFT_MAX];
+    char root_uri[INDIGO_POST_URI_MAX];
+    char root_cid[INDIGO_POST_CID_MAX];
 } job;
 
 static char s_path[256];
@@ -57,8 +66,11 @@ static indigo_saved_session s_saved;
 
 /* Written by the worker before it publishes TIMELINE_PAGE; the main thread
  * reads it after polling that event and before the next submit. */
-static indigo_post s_page[INDIGO_PAGE_SIZE];
+static indigo_post s_page[INDIGO_THREAD_MAX];
 static unsigned s_page_count;
+static indigo_profile s_profile;
+static indigo_notification s_notes[INDIGO_NOTIFICATION_MAX];
+static unsigned s_note_count;
 
 static indigo_failure
 classify(wf_status st)
@@ -344,13 +356,11 @@ count_of(int v)
     return v > 0 ? (unsigned) v : 0;
 }
 
-/* False when the item cannot be shown at all (no URI). */
+/* False when the post cannot be shown at all (no URI). */
 static bool
-to_post(const wf_agent_feed_item *item, indigo_post *out)
+fill_post(const wf_agent_post_view *pv, indigo_post *out)
 {
-    const wf_agent_post_view *pv = &item->post;
     wf_post_display d;
-    char *by = NULL;
 
     memset(out, 0, sizeof *out);
     if (!pv->uri || !pv->cid || strlen(pv->uri) >= sizeof out->uri ||
@@ -392,9 +402,23 @@ to_post(const wf_agent_feed_item *item, indigo_post *out)
                                             : INDIGO_FACET_LINK;
             out->facets[out->facet_count].start = (unsigned) f->byte_start;
             out->facets[out->facet_count].end = (unsigned) f->byte_end;
+            indigo_copy_utf8(out->facets[out->facet_count].target,
+                             sizeof out->facets[out->facet_count].target,
+                             f->target ? f->target : "");
             out->facet_count++;
         }
         wf_post_display_free(&d);
+    }
+    return true;
+}
+
+static bool
+to_post(const wf_agent_feed_item *item, indigo_post *out)
+{
+    char *by = NULL;
+
+    if (!fill_post(&item->post, out)) {
+        return false;
     }
     if (wf_agent_feed_item_reposted_by(item, &by) == WF_OK && by) {
         indigo_copy_utf8(out->reposted_by, sizeof out->reposted_by, by);
@@ -488,6 +512,270 @@ do_post_action(const job *j)
     publish_event(&ev);
 }
 
+/* A thread post is a postView without the bookmark fields: borrow its
+ * pointers (nothing here is freed) and reuse the one display path. */
+static bool
+thread_post_to_post(const wf_agent_thread_post *tp, unsigned depth, indigo_post *out)
+{
+    wf_agent_post_view pv;
+
+    memset(&pv, 0, sizeof pv);
+    pv.uri = tp->uri;
+    pv.cid = tp->cid;
+    pv.author = tp->author;
+    pv.record = tp->record;
+    pv.embed = tp->embed;
+    pv.reply_count = tp->reply_count;
+    pv.repost_count = tp->repost_count;
+    pv.like_count = tp->like_count;
+    pv.quote_count = tp->quote_count;
+    pv.indexed_at = tp->indexed_at;
+    pv.viewer.like = tp->viewer_like;
+    pv.viewer.repost = tp->viewer_repost;
+    if (!fill_post(&pv, out)) {
+        return false;
+    }
+    out->depth = (unsigned char) (depth > 6 ? 6 : depth);
+    return true;
+}
+
+static void
+add_replies(const wf_agent_thread_node *n, unsigned depth)
+{
+    for (size_t i = 0; i < n->replies_count && s_page_count < INDIGO_THREAD_MAX; i++) {
+        const wf_agent_thread_node *r = &n->replies[i];
+
+        if (r->kind != WF_AGENT_THREAD_KIND_POST) {
+            continue;
+        }
+        if (thread_post_to_post(&r->post, depth, &s_page[s_page_count])) {
+            s_page_count++;
+            add_replies(r, depth + 1);
+        }
+    }
+}
+
+static void
+do_thread(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_THREAD_FAILED};
+    wf_agent_thread thread;
+    const wf_agent_thread_node *chain[INDIGO_THREAD_MAX];
+    unsigned parents = 0;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&thread, 0, sizeof thread);
+    st = wf_agent_get_post_thread_typed(s_agent, j->post_uri, 6, &thread);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("thread failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+    if (thread.root.kind != WF_AGENT_THREAD_KIND_POST) {
+        wf_agent_thread_free(&thread);
+        ev.failure = INDIGO_FAIL_BAD_RESPONSE;
+        publish_event(&ev);
+        return;
+    }
+
+    /* Oldest ancestor first. Ancestors that are blocked or gone end the chain. */
+    for (const wf_agent_thread_node *p = thread.root.parent;
+         p && p->kind == WF_AGENT_THREAD_KIND_POST && parents < 8; p = p->parent) {
+        chain[parents++] = p;
+    }
+    s_page_count = 0;
+    for (unsigned i = parents; i > 0; i--) {
+        if (thread_post_to_post(&chain[i - 1]->post, parents - i, &s_page[s_page_count])) {
+            s_page_count++;
+        }
+    }
+    ev.focus = s_page_count;
+    if (thread_post_to_post(&thread.root.post, parents, &s_page[s_page_count])) {
+        s_page_count++;
+    }
+    add_replies(&thread.root, parents + 1);
+    wf_agent_thread_free(&thread);
+
+    ev.kind = INDIGO_SESSION_EVENT_THREAD_PAGE;
+    ev.page_count = s_page_count;
+    indigo_log_info("thread: %u posts", s_page_count);
+    publish_event(&ev);
+}
+
+static void
+do_profile(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_PROFILE_FAILED};
+    wf_agent_profile p;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&p, 0, sizeof p);
+    st = wf_agent_get_profile(s_agent, j->post_uri, &p);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("profile failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+    memset(&s_profile, 0, sizeof s_profile);
+    indigo_copy_utf8(s_profile.handle, sizeof s_profile.handle, p.handle);
+    indigo_copy_utf8(s_profile.display_name, sizeof s_profile.display_name, p.display_name);
+    indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
+    s_profile.followers = count_of(p.followers_count);
+    s_profile.follows = count_of(p.follows_count);
+    s_profile.posts = count_of(p.posts_count);
+    s_profile.following = p.following != NULL;
+    s_profile.loaded = true;
+    wf_agent_profile_free(&p);
+    ev.kind = INDIGO_SESSION_EVENT_PROFILE_LOADED;
+    publish_event(&ev);
+}
+
+static indigo_note_kind
+note_kind(const char *reason)
+{
+    if (!reason) {
+        return INDIGO_NOTE_OTHER;
+    }
+    if (strcmp(reason, "like") == 0) {
+        return INDIGO_NOTE_LIKE;
+    }
+    if (strcmp(reason, "repost") == 0) {
+        return INDIGO_NOTE_REPOST;
+    }
+    if (strcmp(reason, "follow") == 0) {
+        return INDIGO_NOTE_FOLLOW;
+    }
+    if (strcmp(reason, "reply") == 0) {
+        return INDIGO_NOTE_REPLY;
+    }
+    if (strcmp(reason, "mention") == 0) {
+        return INDIGO_NOTE_MENTION;
+    }
+    if (strcmp(reason, "quote") == 0) {
+        return INDIGO_NOTE_QUOTE;
+    }
+    return INDIGO_NOTE_OTHER;
+}
+
+static void
+do_notifications(void)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
+    wf_agent_notification_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_list_notifications_typed(s_agent, INDIGO_NOTIFICATION_MAX, NULL, &list);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("notifications failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_note_count = 0;
+    for (size_t i = 0; i < list.notification_count && s_note_count < INDIGO_NOTIFICATION_MAX;
+         i++) {
+        const wf_agent_notification *n = &list.notifications[i];
+        indigo_notification *o = &s_notes[s_note_count];
+
+        memset(o, 0, sizeof *o);
+        o->kind = note_kind(n->reason);
+        indigo_copy_utf8(o->handle, sizeof o->handle, n->author.handle);
+        indigo_copy_utf8(o->name, sizeof o->name,
+                         n->author.display_name && n->author.display_name[0]
+                             ? n->author.display_name
+                             : n->author.handle);
+        o->unread = !n->is_read;
+        if (o->kind == INDIGO_NOTE_LIKE || o->kind == INDIGO_NOTE_REPOST) {
+            if (n->reason_subject && strlen(n->reason_subject) < sizeof o->target_uri) {
+                snprintf(o->target_uri, sizeof o->target_uri, "%s", n->reason_subject);
+            }
+        } else if (o->kind != INDIGO_NOTE_FOLLOW && o->kind != INDIGO_NOTE_OTHER) {
+            wf_agent_post_view pv;
+            wf_post_display d;
+
+            if (n->uri && strlen(n->uri) < sizeof o->target_uri) {
+                snprintf(o->target_uri, sizeof o->target_uri, "%s", n->uri);
+            }
+            memset(&pv, 0, sizeof pv);
+            pv.uri = n->uri;
+            pv.cid = n->cid;
+            pv.record = n->record;
+            if (wf_agent_post_view_display(&pv, &d) == WF_OK) {
+                indigo_copy_utf8(o->text, sizeof o->text, d.text);
+                wf_post_display_free(&d);
+            }
+        }
+        s_note_count++;
+    }
+    wf_agent_notification_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE;
+    ev.page_count = s_note_count;
+    indigo_log_info("notifications: %u", s_note_count);
+    publish_event(&ev);
+}
+
+static void
+do_publish(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_PUBLISH_FAILED,
+                               .compose_mode = j->mode};
+    wf_agent_post_result res = {0};
+    wf_status st = WF_ERR_INVALID_ARG;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    switch (j->mode) {
+    case INDIGO_COMPOSE_POST:
+        st = wf_agent_post(s_agent, j->text, &res);
+        break;
+    case INDIGO_COMPOSE_REPLY:
+        st = wf_agent_reply_refs(s_agent, j->text, j->root_uri, j->root_cid, j->post_uri,
+                                 j->post_cid, &res);
+        break;
+    case INDIGO_COMPOSE_QUOTE:
+        st = wf_agent_quote(s_agent, j->text, j->post_uri, j->post_cid, &res);
+        break;
+    }
+    if (st == WF_OK) {
+        ev.kind = INDIGO_SESSION_EVENT_PUBLISHED;
+        if (res.uri && strlen(res.uri) < sizeof ev.record_uri) {
+            snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
+        }
+        indigo_log_info("published (mode %d)", (int) j->mode);
+    } else {
+        ev.failure = classify(st);
+        indigo_log_warn("publish failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+    }
+    wf_agent_post_result_free(&res);
+    publish_event(&ev);
+}
+
 static void
 worker(void *arg)
 {
@@ -520,6 +808,18 @@ worker(void *arg)
             break;
         case JOB_POST_ACTION:
             do_post_action(&j);
+            break;
+        case JOB_THREAD:
+            do_thread(&j);
+            break;
+        case JOB_PROFILE:
+            do_profile(&j);
+            break;
+        case JOB_NOTIFICATIONS:
+            do_notifications();
+            break;
+        case JOB_PUBLISH:
+            do_publish(&j);
             break;
         case JOB_NONE:
             break;
@@ -650,6 +950,60 @@ indigo_session_submit_post_action(indigo_post_action action, const char *post_ur
 }
 
 bool
+indigo_session_submit_thread(const char *uri)
+{
+    job j = {.kind = JOB_THREAD};
+
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", uri);
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_profile(const char *actor)
+{
+    job j = {.kind = JOB_PROFILE};
+
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", actor);
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_notifications(void)
+{
+    job j = {.kind = JOB_NOTIFICATIONS};
+
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
+                              const char *target_uri, const char *target_cid,
+                              const char *root_uri, const char *root_cid)
+{
+    job j = {.kind = JOB_PUBLISH, .mode = mode};
+
+    snprintf(j.text, sizeof j.text, "%s", text);
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", target_uri ? target_uri : "");
+    snprintf(j.post_cid, sizeof j.post_cid, "%s", target_cid ? target_cid : "");
+    snprintf(j.root_uri, sizeof j.root_uri, "%s", root_uri ? root_uri : "");
+    snprintf(j.root_cid, sizeof j.root_cid, "%s", root_cid ? root_cid : "");
+    return submit(&j);
+}
+
+const indigo_profile *
+indigo_session_profile(void)
+{
+    return &s_profile;
+}
+
+const indigo_notification *
+indigo_session_notifications(unsigned *count)
+{
+    *count = s_note_count;
+    return s_notes;
+}
+
+bool
 indigo_session_busy(void)
 {
     bool busy;
@@ -776,6 +1130,53 @@ indigo_session_submit_post_action(indigo_post_action action, const char *post_ur
     (void) post_cid;
     (void) undo_uri;
     return false;
+}
+
+bool
+indigo_session_submit_thread(const char *uri)
+{
+    (void) uri;
+    return false;
+}
+
+bool
+indigo_session_submit_profile(const char *actor)
+{
+    (void) actor;
+    return false;
+}
+
+bool
+indigo_session_submit_notifications(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
+                              const char *target_uri, const char *target_cid,
+                              const char *root_uri, const char *root_cid)
+{
+    (void) mode;
+    (void) text;
+    (void) target_uri;
+    (void) target_cid;
+    (void) root_uri;
+    (void) root_cid;
+    return false;
+}
+
+const indigo_profile *
+indigo_session_profile(void)
+{
+    return NULL;
+}
+
+const indigo_notification *
+indigo_session_notifications(unsigned *count)
+{
+    *count = 0;
+    return NULL;
 }
 
 bool

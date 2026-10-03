@@ -12,6 +12,9 @@
 #define INDIGO_POST_CID_MAX 72
 #define INDIGO_POST_NAME_MAX 64
 #define INDIGO_POST_NOTE_MAX 96
+/* Facet target: a did for a mention, a URI for a link, a bare tag. Long
+ * targets are truncated; they are only ever shown, never fetched. */
+#define INDIGO_FACET_TARGET_MAX 96
 #define INDIGO_CURSOR_MAX 128
 /* Ask for the next page when this few posts remain below the selection. */
 #define INDIGO_TIMELINE_PREFETCH 5
@@ -27,6 +30,8 @@ typedef struct {
     /* Byte range within text. */
     unsigned start;
     unsigned end;
+    /* What the facet points at, from Wolfram: a did, a link URI or a tag. */
+    char target[INDIGO_FACET_TARGET_MAX];
 } indigo_post_facet;
 
 typedef struct {
@@ -42,6 +47,9 @@ typedef struct {
     /* A one-line summary of an image, link or quote embed, or empty. */
     char embed_note[INDIGO_POST_NOTE_MAX];
     bool is_reply;
+    /* Nesting in a thread view: 0 for ancestors, the post itself and the
+     * timeline; replies are deeper. */
+    unsigned char depth;
     unsigned like_count;
     unsigned repost_count;
     unsigned reply_count;

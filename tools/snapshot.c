@@ -316,6 +316,26 @@ typedef struct {
     unsigned select;
 } scenario;
 
+/* Facet byte ranges follow the text, the way Wolfram reports them. */
+static void
+add_facet(indigo_post *p, indigo_facet_kind kind, const char *needle, const char *target)
+{
+    const char *at = strstr(p->text, needle);
+
+    if (!at || p->facet_count >= INDIGO_POST_FACETS_MAX) {
+        return;
+    }
+    {
+        indigo_post_facet *f = &p->facets[p->facet_count];
+
+        f->kind = kind;
+        f->start = (unsigned) (at - p->text);
+        f->end = f->start + (unsigned) strlen(needle);
+        indigo_copy_utf8(f->target, sizeof f->target, target);
+        p->facet_count++;
+    }
+}
+
 static void
 add_post(indigo_timeline *t, const char *name, const char *handle, const char *text,
          const char *reposter, unsigned likes, bool liked, bool link)
@@ -336,13 +356,8 @@ add_post(indigo_timeline *t, const char *name, const char *handle, const char *t
         indigo_copy_utf8(p.like_uri, sizeof p.like_uri, "at://did:plc:fake/app.bsky.feed.like/1");
     }
     if (link) {
-        const char *at = strstr(p.text, "https://");
-
-        if (at) {
-            p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, (unsigned) (at - p.text),
-                                               (unsigned) (at - p.text) + 33};
-            p.facet_count = 1;
-        }
+        add_facet(&p, INDIGO_FACET_LINK, "https://github.com/ewanc26/indigo",
+                  "https://github.com/ewanc26/indigo");
         indigo_copy_utf8(p.embed_note, sizeof p.embed_note, "Link card: Wolfram on GitHub");
     }
     indigo_timeline_append(t, &p);
@@ -352,6 +367,9 @@ static void
 fill_timeline(indigo_timeline *t, int kind, unsigned select)
 {
     indigo_timeline_init(t);
+    if (kind == 0) {
+        return; /* no posts: the menu then offers only its app actions */
+    }
     if (kind == 2) {
         indigo_timeline_begin_fetch(t, true);
         return;
@@ -361,10 +379,19 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
         return;
     }
     add_post(t, "Ewan Croft", "ewancroft.uk",
-             "Shipped the timeline for Indigo today. Read more at https://github.com/ewanc26/indigo "
-             "and tell me what breaks on real hardware.\n\nThe 3DS is surprisingly pleasant to "
-             "write C for.",
+             "@rhi.example.social thanks for the bug reports. Read more at "
+             "https://github.com/ewanc26/indigo and tag it #indigo3ds. The 3DS is "
+             "surprisingly pleasant to write C for.",
              "", 42, false, true);
+    {
+        /* Mentions and tags only exist in the sample post, to exercise the
+         * More menu's facet targets. */
+        indigo_post *p = &t->posts[0];
+
+        add_facet(p, INDIGO_FACET_MENTION, "@rhi.example.social",
+                  "did:plc:rhi0000000000000000000000000");
+        add_facet(p, INDIGO_FACET_TAG, "#indigo3ds", "indigo3ds");
+    }
     add_post(t, "Rhiannon", "rhi.example.social", "Morning walk by the river, very cold and very clear.",
              "Ewan Croft", 7, true, false);
     add_post(t, "Cobalt", "cobalt.example", "Wii U client update: the feed now parses through Wolfram.",
@@ -377,6 +404,60 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
     indigo_timeline_select(t, select, INDIGO_TIMELINE_ROWS);
 }
 
+static void
+fill_social(indigo_app *app, const scenario *s)
+{
+    if (s->screen == INDIGO_SCREEN_THREAD) {
+        fill_timeline(&app->thread, 1, s->select);
+        app->thread_focus = 1;
+    } else if (s->screen == INDIGO_SCREEN_PROFILE) {
+        indigo_profile *p = &app->profile;
+
+        indigo_copy_utf8(p->handle, sizeof p->handle, "rhi.example.social");
+        indigo_copy_utf8(p->display_name, sizeof p->display_name, "Rhiannon");
+        indigo_copy_utf8(p->bio, sizeof p->bio,
+                         "Walker, reader, occasional poet. Rivers before roads, always. "
+                         "Writing about the Welsh borders and old stones.");
+        p->followers = 1204;
+        p->follows = 310;
+        p->posts = 5821;
+        p->following = true;
+        p->loaded = true;
+    } else if (s->screen == INDIGO_SCREEN_NOTIFICATIONS) {
+        indigo_notification n[3];
+
+        memset(n, 0, sizeof n);
+        n[0].kind = INDIGO_NOTE_REPLY;
+        n[0].unread = true;
+        indigo_copy_utf8(n[0].name, sizeof n[0].name, "Rhiannon");
+        indigo_copy_utf8(n[0].handle, sizeof n[0].handle, "rhi.example.social");
+        indigo_copy_utf8(n[0].text, sizeof n[0].text, "Congratulations, this looks great on the 3DS!");
+        n[1].kind = INDIGO_NOTE_LIKE;
+        indigo_copy_utf8(n[1].name, sizeof n[1].name, "Cobalt");
+        indigo_copy_utf8(n[1].handle, sizeof n[1].handle, "cobalt.example");
+        n[2].kind = INDIGO_NOTE_FOLLOW;
+        indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
+        indigo_app_notifications_loaded(app, n, 3);
+    } else if (s->screen == INDIGO_SCREEN_COMPOSE) {
+        indigo_compose *c = &app->compose;
+
+        if (s->timeline == 1) {
+            c->mode = INDIGO_COMPOSE_REPLY;
+            c->has_target = true;
+            c->target = app->timeline.posts[0];
+            indigo_copy_utf8(c->text, sizeof c->text,
+                             "Thanks! More screens are coming: threads, profiles and notifications.");
+        }
+    } else if (s->screen == INDIGO_SCREEN_MENU) {
+        /* The menu is built from the post being read; `select` walks down it. */
+        indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
+                          app->signin.account);
+        for (unsigned i = 0; i < s->select; i++) {
+            indigo_menu_move(&app->menu, 1, INDIGO_MENU_ROWS);
+        }
+    }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -386,7 +467,14 @@ main(int argc, char **argv)
         {"timeline-scrolled", INDIGO_SCREEN_HOME, false, 0, 0, 1, 4},
         {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0},
         {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0},
-        {"profile-touch", INDIGO_SCREEN_PROFILE, true, 235, 146, 0, 0},
+        {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1},
+        {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0},
+        {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0},
+        {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0},
+        {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0},
+        {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5},
+        {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0},
+        {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0},
     };
 
     if (argc != 2) {
@@ -404,10 +492,11 @@ main(int argc, char **argv)
         indigo_app_init(&app);
         app.screen = s->screen;
         app.wolfram_linked = true;
-        fill_timeline(&app.timeline, s->timeline, s->select);
         if (s->screen != INDIGO_SCREEN_SIGNIN) {
             strcpy(app.signin.account, "ewancroft.uk");
         }
+        fill_timeline(&app.timeline, s->timeline, s->select);
+        fill_social(&app, s);
         input.touch_down = s->touching;
         input.touch_x = s->touch_x;
         input.touch_y = s->touch_y;
