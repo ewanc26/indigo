@@ -142,6 +142,16 @@ EMU ?= $(HOME)/Applications/Azahar.app/Contents/MacOS/azahar
 # The recursive make owns dependency tracking (objects, ELF, 3DSX), so it runs
 # on every build. Depending on $(TARGET).3dsx here instead would let a stale
 # executable survive a source change: the outer make has no rule for it.
+#
+# Bare `make` has to build the 3DSX. `buildinfo` is the first real rule in this
+# file, so without an explicit .DEFAULT_GOAL the default goal is `buildinfo`,
+# `make` stamps the header, and nothing is compiled.
+#
+# devkitPro's 3ds_rules/base_rules define no `all` of their own, so each half of
+# the recursion has to supply one. This wrapper is the outer half; the inner
+# half is in the else branch at the end of this file.
+.DEFAULT_GOAL := all
+
 all: buildinfo
 	@if [ -z "$(WOLFRAM_LIBS)" ]; then \
 		echo "all ... REFUSED: Wolfram is not linked — every ATProto/Bluesky call in this build would fail." >&2; \
@@ -149,7 +159,7 @@ all: buildinfo
 		exit 1; \
 	fi
 	@mkdir -p $(BUILD)
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile all
 
 clean:
 	@rm -rf $(BUILD) $(TARGET).elf $(TARGET).3dsx $(TARGET).smdh $(TARGET).lst
@@ -201,6 +211,10 @@ build-3ds:
 	$(EMU_CONTAINER) sh -c 'make clean && make'
 
 else
+
+# The recursive make in build/. devkitPro supplies no `all`, so it is defined
+# here: the goal the outer wrapper passes down.
+all: $(OUTPUT).3dsx
 
 # 3ds_rules supplies the compiler, linker and 3DSX/SMDH packaging rules. The
 # two prerequisites below are what connect the object files to the final
