@@ -16,6 +16,7 @@
 #include <wolfram/3ds.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
+#include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/post_display.h>
 #include <wolfram/thread_typed.h>
@@ -42,6 +43,8 @@ typedef enum {
     JOB_AUTHOR_FEED,
     JOB_LISTS,
     JOB_LIST_MEMBERS,
+    JOB_FEEDS,
+    JOB_FEED,
 } job_kind;
 
 typedef struct {
@@ -64,6 +67,9 @@ typedef struct {
     indigo_search_kind people_kind;
     char actor[INDIGO_PROFILE_DID_MAX];
     char list_uri[INDIGO_POST_URI_MAX];
+    /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
+     * jobs stay readable. */
+    char feed_uri[INDIGO_POST_URI_MAX];
 } job;
 
 static char s_path[256];
@@ -101,7 +107,11 @@ static unsigned s_post_count;
  * list is a third type, and the screen needs the previous list to stay valid
  * until the next result arrives. */
 static indigo_list s_lists[INDIGO_SEARCH_MAX];
+/* The account's saved feeds: list-shaped rows, so the same type, but their
+ * own array so browsing feeds never disturbs a curated-lists view. */
+static indigo_list s_feeds[INDIGO_SEARCH_MAX];
 static unsigned s_list_count;
+static unsigned s_feed_count;
 
 static indigo_failure
 classify(wf_status st)
@@ -1001,6 +1011,178 @@ do_list_members(const job *j)
     publish_event(&ev);
 }
 
+/* The account's saved feeds. getPreferences carries the saved feed URIs (V2
+ * first, the V1 list as the older fallback); getFeedGenerators turns them
+ * into names. The raw preferences JSON is read rather than the typed parse
+ * because one preference type the parser rejects must not take the whole
+ * picker down with it -- Cobalt hit exactly that on a real account. */
+static void
+do_feeds(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    char *prefs_json = NULL;
+    const char *uris[INDIGO_SEARCH_MAX];
+    unsigned n = 0;
+    wf_status st;
+
+    (void) j;
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    st = wf_agent_get_preferences(s_agent, &prefs_json);
+    if (st != WF_OK || !prefs_json) {
+        ev.failure = classify(st);
+        indigo_log_warn("preferences failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+    {
+        cJSON *prefs = cJSON_Parse(prefs_json);
+        const cJSON *pref = NULL;
+
+        free(prefs_json);
+        if (!cJSON_IsArray(prefs)) {
+            cJSON_Delete(prefs);
+            ev.failure = INDIGO_FAIL_OTHER;
+            indigo_log_warn("preferences: not an array");
+            publish_event(&ev);
+            return;
+        }
+        cJSON_ArrayForEach(pref, prefs) {
+            const cJSON *type = cJSON_GetObjectItemCaseSensitive(pref, "$type");
+
+            if (!cJSON_IsString(type)
+                || !strstr(type->valuestring, "savedFeedsPrefV2")) {
+                continue;
+            }
+            {
+                const cJSON *items = cJSON_GetObjectItemCaseSensitive(pref, "items");
+                const cJSON *it = NULL;
+
+                cJSON_ArrayForEach(it, items) {
+                    const cJSON *kind = cJSON_GetObjectItemCaseSensitive(it, "type");
+                    const cJSON *value = cJSON_GetObjectItemCaseSensitive(it, "value");
+
+                    if (n < INDIGO_SEARCH_MAX && cJSON_IsString(kind)
+                        && cJSON_IsString(value) && !strcmp(kind->valuestring, "feed")
+                        && value->valuestring[0]) {
+                        uris[n++] = value->valuestring;
+                    }
+                }
+            }
+        }
+        if (n == 0) {
+            /* Older accounts only have the V1 list. */
+            cJSON_ArrayForEach(pref, prefs) {
+                const cJSON *type = cJSON_GetObjectItemCaseSensitive(pref, "$type");
+
+                if (!cJSON_IsString(type)
+                    || !strstr(type->valuestring, "savedFeedsPref")) {
+                    continue;
+                }
+                {
+                    const cJSON *saved = cJSON_GetObjectItemCaseSensitive(pref, "saved");
+                    const cJSON *it = NULL;
+
+                    cJSON_ArrayForEach(it, saved) {
+                        if (n < INDIGO_SEARCH_MAX && cJSON_IsString(it)
+                            && it->valuestring[0]) {
+                            uris[n++] = it->valuestring;
+                        }
+                    }
+                }
+            }
+        }
+        cJSON_Delete(prefs);
+    }
+
+    s_feed_count = 0;
+    if (n > 0) {
+        wf_feedgen_generator_list gens;
+
+        memset(&gens, 0, sizeof gens);
+        st = wf_feedgen_get_feed_generators_typed(s_agent, uris, n, &gens);
+        if (st != WF_OK) {
+            /* The URIs alone still make a picker; the record key stands in
+             * for the name, the same fallback Cobalt uses. */
+            indigo_log_warn("feed generators failed: wolfram status %d", (int) st);
+            memset(&gens, 0, sizeof gens);
+        }
+        for (unsigned i = 0; i < n; i++) {
+            const char *name = NULL;
+            indigo_list *o = &s_feeds[s_feed_count];
+
+            for (size_t g = 0; g < gens.generator_count; g++) {
+                if (gens.generators[g].uri && !strcmp(gens.generators[g].uri, uris[i])) {
+                    name = gens.generators[g].display_name;
+                    break;
+                }
+            }
+            if (!name || !name[0]) {
+                const char *slash = strrchr(uris[i], '/');
+
+                name = slash ? slash + 1 : uris[i];
+            }
+            memset(o, 0, sizeof *o);
+            indigo_copy_utf8(o->uri, sizeof o->uri, uris[i]);
+            indigo_copy_utf8(o->name, sizeof o->name, name);
+            indigo_copy_utf8(o->description, sizeof o->description, "Custom feed");
+            s_feed_count++;
+        }
+        wf_feedgen_generator_list_free(&gens);
+    }
+    ev.kind = INDIGO_SESSION_EVENT_FEEDS_PAGE;
+    ev.page_count = s_feed_count;
+    indigo_log_info("feeds: %u", s_feed_count);
+    publish_event(&ev);
+}
+
+/* One feed's posts. getFeed returns the same feedViewPost items the timeline
+ * does, so the conversion is shared with do_timeline. */
+static void
+do_feed(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_TIMELINE_FAILED};
+    wf_agent_feed_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_get_feed_typed(s_agent, j->feed_uri, INDIGO_PAGE_SIZE,
+                                 j->cursor[0] ? j->cursor : NULL, &list);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("feed failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_page_count = 0;
+    for (size_t i = 0; i < list.item_count && s_page_count < INDIGO_PAGE_SIZE; i++) {
+        if (to_post(&list.items[i], &s_page[s_page_count])) {
+            s_page_count++;
+        }
+    }
+    ev.kind = INDIGO_SESSION_EVENT_TIMELINE_PAGE;
+    ev.page_count = s_page_count;
+    if (list.cursor && strlen(list.cursor) < sizeof ev.cursor) {
+        snprintf(ev.cursor, sizeof ev.cursor, "%s", list.cursor);
+    } else if (list.cursor) {
+        indigo_log_warn("feed cursor too long; paging stops here");
+    }
+    wf_agent_feed_list_free(&list);
+    indigo_log_info("feed '%s': %u posts", j->feed_uri, s_page_count);
+    publish_event(&ev);
+}
+
 static void
 do_follow(const job *j)
 {
@@ -1290,6 +1472,12 @@ worker(void *arg)
         case JOB_LIST_MEMBERS:
             do_list_members(&j);
             break;
+        case JOB_FEEDS:
+            do_feeds(&j);
+            break;
+        case JOB_FEED:
+            do_feed(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1525,6 +1713,29 @@ indigo_session_submit_list_members(const char *list_uri)
 }
 
 bool
+indigo_session_submit_feeds(void)
+{
+    job j = {.kind = JOB_FEEDS};
+
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_feed(const char *feed_uri, const char *cursor)
+{
+    job j = {.kind = JOB_FEED};
+
+    if (!feed_uri || !feed_uri[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.feed_uri, sizeof j.feed_uri, feed_uri);
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    return submit(&j);
+}
+
+bool
 indigo_session_submit_follow(indigo_follow_action action, const char *did,
                              const char *follow_uri)
 {
@@ -1589,6 +1800,17 @@ indigo_session_lists_results(const indigo_list **lists, unsigned *count)
     }
     if (count) {
         *count = s_list_count;
+    }
+}
+
+void
+indigo_session_feeds_results(const indigo_list **feeds, unsigned *count)
+{
+    if (feeds) {
+        *feeds = s_feeds;
+    }
+    if (count) {
+        *count = s_feed_count;
     }
 }
 
@@ -1844,10 +2066,31 @@ indigo_session_submit_list_members(const char *list_uri)
     return false;
 }
 
+bool
+indigo_session_submit_feeds(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_feed(const char *feed_uri, const char *cursor)
+{
+    (void) feed_uri;
+    (void) cursor;
+    return false;
+}
+
 void
 indigo_session_post_search_results(const indigo_post **posts, unsigned *count)
 {
     (void) posts;
+    (void) count;
+}
+
+void
+indigo_session_feeds_results(const indigo_list **feeds, unsigned *count)
+{
+    (void) feeds;
     (void) count;
 }
 
@@ -1856,6 +2099,13 @@ indigo_session_search_results(unsigned *count)
 {
     *count = 0;
     return NULL;
+}
+
+void
+indigo_session_lists_results(const indigo_list **lists, unsigned *count)
+{
+    (void) lists;
+    (void) count;
 }
 
 bool

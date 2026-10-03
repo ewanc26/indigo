@@ -569,15 +569,16 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 8);
+    CHECK(app.menu.count == 9);
     CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
-    CHECK(app.menu.items[6].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[5].label, "My profile") == 0);
+    CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
+    CHECK(app.menu.items[7].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[6].label, "My profile") == 0);
 
-    /* Sign out is the seventh item, so it sits below the window until the
+    /* Sign out is the eighth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 6; i++) {
+    for (unsigned i = 0; i < 7; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1044,8 +1045,8 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the seven app actions. */
-    CHECK(menu.count == 11);
+    /* Three facet targets first, then the eight app actions. */
+    CHECK(menu.count == 12);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1054,7 +1055,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[10].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[11].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1072,7 +1073,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 11);
+    CHECK(app.menu.count == 12);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1093,7 +1094,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 8);
+    CHECK(menu.count == 9);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1101,12 +1102,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 8);
+    CHECK(menu.count == 9);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 8);
-    CHECK(strcmp(menu.items[5].label, "Your profile") == 0);
+    CHECK(menu.count == 9);
+    CHECK(strcmp(menu.items[6].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -1223,6 +1224,34 @@ collect_glyphs(const indigo_canvas *c, bool *seen)
  * title bar only what they cannot. Repeating a glyph would be a second hint
  * for the same control. */
 static void
+check_hints_once(const indigo_app *app, const indigo_input *in, unsigned screen)
+{
+    indigo_canvas top;
+    indigo_canvas bottom;
+    bool on_top[7] = {false};
+    bool on_bottom[7] = {false};
+
+    indigo_layout_build(app, in, &top, &bottom);
+    if (top.overflow || bottom.overflow) {
+        s_checks++;
+        s_failures++;
+        fprintf(stderr, "%s:%d: display list full on screen %u\n", __FILE__, __LINE__,
+                screen);
+        return;
+    }
+    collect_glyphs(&top, on_top);
+    collect_glyphs(&bottom, on_bottom);
+    for (unsigned g = 0; g < sizeof on_top / sizeof on_top[0]; g++) {
+        if (on_top[g] && on_bottom[g]) {
+            s_checks++;
+            s_failures++;
+            fprintf(stderr, "%s:%d: screen %u hints one control twice\n", __FILE__,
+                    __LINE__, screen);
+        }
+    }
+}
+
+static void
 test_no_duplicate_back_hints(void)
 {
     static const indigo_screen screens[] = {
@@ -1234,30 +1263,56 @@ test_no_duplicate_back_hints(void)
 
     indigo_app_init(&app);
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
-        indigo_canvas top;
-        indigo_canvas bottom;
-        bool on_top[7] = {false};
-        bool on_bottom[7] = {false};
-
         app.screen = screens[s];
-        indigo_layout_build(&app, &in, &top, &bottom);
-        CHECK(!top.overflow && !bottom.overflow);
-        collect_glyphs(&top, on_top);
-        collect_glyphs(&bottom, on_bottom);
-        for (unsigned g = 0; g < sizeof on_top / sizeof on_top[0]; g++) {
-            if (on_top[g] && on_bottom[g]) {
-                s_checks++;
-                s_failures++;
-                fprintf(stderr, "%s:%d: screen %u hints one control twice\n", __FILE__,
-                        __LINE__, s);
-            }
-        }
+        check_hints_once(&app, &in, s);
     }
+    /* A feed view is the one screen whose title is a name a person chose, and
+     * its B leaves for the picker rather than the menu. */
+    indigo_copy_utf8(app.feed_uri, sizeof app.feed_uri,
+                     "at://did:plc:example/app.bsky.feed.xyz");
+    indigo_copy_utf8(app.feed_name, sizeof app.feed_name, "Quiet posters");
+    check_hints_once(&app, &in, INDIGO_SCREEN_HOME);
 }
 
 /* Nothing drawn may run off the edge of its screen: the 3DS cannot scroll a
  * status line back into view. Uses the same nominal character width the
  * layout wraps with, so it is a close bound rather than pixel truth. */
+static void
+check_text_on_screen(const indigo_app *app, const indigo_input *in, unsigned screen)
+{
+    indigo_canvas top;
+    indigo_canvas bottom;
+    const indigo_canvas *both[2];
+
+    indigo_layout_build(app, in, &top, &bottom);
+    both[0] = &top;
+    both[1] = &bottom;
+    for (int k = 0; k < 2; k++) {
+        for (unsigned i = 0; i < both[k]->count; i++) {
+            const indigo_cmd *cmd = &both[k]->cmds[i];
+            float width;
+
+            if (cmd->kind != INDIGO_CMD_TEXT) {
+                continue;
+            }
+            width = (float) strlen(indigo_canvas_cmd_text(both[k], cmd)) *
+                    INDIGO_CHAR_WIDTH * cmd->scale;
+            s_checks++;
+            if (cmd->x < 0.0f || cmd->y < 0.0f ||
+                cmd->x + width > (float) both[k]->width ||
+                cmd->y + INDIGO_CHAR_WIDTH * cmd->scale > (float) both[k]->height) {
+                s_failures++;
+                fprintf(stderr,
+                        "%s:%d: text off screen on screen %u: x=%.1f y=%.1f w=%.1f "
+                        "canvas=%dx%d |%s|\n",
+                        __FILE__, __LINE__, screen, cmd->x, cmd->y, width,
+                        both[k]->width, both[k]->height,
+                        indigo_canvas_cmd_text(both[k], cmd));
+            }
+        }
+    }
+}
+
 static void
 test_text_stays_on_screen(void)
 {
@@ -1265,43 +1320,29 @@ test_text_stays_on_screen(void)
         INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
         INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH};
+    /* A feed name is the only title a person writes, and the bar beside it
+     * holds a hint and the post counter, so its lengths are measured too: a
+     * short one leaves the hint where every other screen keeps it, a long one
+     * has to be cut rather than run over them. */
+    static const char *const feed_names[] = {
+        "Tech",
+        "Quiet posters",
+        "Quiet posters and writers",
+        "A feed name long enough to need cutting somewhere in the middle of it",
+    };
     indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
-        indigo_canvas top;
-        indigo_canvas bottom;
-        const indigo_canvas *both[2];
-
         app.screen = screens[s];
-        indigo_layout_build(&app, &in, &top, &bottom);
-        both[0] = &top;
-        both[1] = &bottom;
-        for (int k = 0; k < 2; k++) {
-            for (unsigned i = 0; i < both[k]->count; i++) {
-                const indigo_cmd *cmd = &both[k]->cmds[i];
-                float width;
-
-                if (cmd->kind != INDIGO_CMD_TEXT) {
-                    continue;
-                }
-                width = (float) strlen(indigo_canvas_cmd_text(both[k], cmd)) *
-                        INDIGO_CHAR_WIDTH * cmd->scale;
-                s_checks++;
-                if (cmd->x < 0.0f || cmd->y < 0.0f ||
-                    cmd->x + width > (float) both[k]->width ||
-                    cmd->y + INDIGO_CHAR_WIDTH * cmd->scale > (float) both[k]->height) {
-                    s_failures++;
-                    fprintf(stderr,
-                            "%s:%d: text off screen on screen %u: x=%.1f y=%.1f w=%.1f "
-                            "canvas=%dx%d |%s|\n",
-                            __FILE__, __LINE__, s, cmd->x, cmd->y, width,
-                            both[k]->width, both[k]->height,
-                            indigo_canvas_cmd_text(both[k], cmd));
-                }
-            }
-        }
+        check_text_on_screen(&app, &in, s);
+    }
+    indigo_copy_utf8(app.feed_uri, sizeof app.feed_uri,
+                     "at://did:plc:example/app.bsky.feed.xyz");
+    for (unsigned n = 0; n < sizeof feed_names / sizeof feed_names[0]; n++) {
+        indigo_copy_utf8(app.feed_name, sizeof app.feed_name, feed_names[n]);
+        check_text_on_screen(&app, &in, INDIGO_SCREEN_HOME);
     }
 }
 
@@ -2083,6 +2124,103 @@ test_lists(void)
     CHECK(strcmp(app.search.subject, "Stones") == 0);
 }
 
+static void
+test_feeds(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_list feeds[2];
+    indigo_input in;
+
+    indigo_app_init(&app);
+    indigo_app_sign_in_succeeded(&app, "ewancroft.uk");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+
+    /* "Feeds" sits between "Lists" and "My profile". */
+    in = (indigo_input) {.touch_pressed = true};
+    in.touch_x = 4;
+    in.touch_y = 4;
+    app.screen = INDIGO_SCREEN_HOME;
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+
+        in.touch_x = (int) (r.x + 4);
+        in.touch_y = (int) (r.y + 4);
+    }
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
+    /* Move to Feeds (index 5) and confirm. */
+    for (unsigned i = 0; i < 5; i++) {
+        indigo_app_update(&app, &(indigo_input) {.down = true});
+    }
+    indigo_app_update(&app, &(indigo_input) {.confirm = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_FEEDS);
+    CHECK(indigo_search_is_lists(&app.search));
+    CHECK(strcmp(indigo_search_title(&app.search), "Feeds") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FEEDS);
+
+    memset(feeds, 0, sizeof feeds);
+    snprintf(feeds[0].name, sizeof feeds[0].name, "Quiet posters");
+    snprintf(feeds[0].uri, sizeof feeds[0].uri,
+             "at://did:plc:me/app.bsky.feed.generator/quiet");
+    snprintf(feeds[1].name, sizeof feeds[1].name, "Moon photos");
+    snprintf(feeds[1].uri, sizeof feeds[1].uri,
+             "at://did:plc:me/app.bsky.feed.generator/moon");
+    indigo_app_feeds_loaded(&app, feeds, 2);
+    CHECK(app.search.count == 2);
+    CHECK(!app.search.loading);
+    CHECK(strcmp(indigo_search_selected_list(&app.search)->name, "Quiet posters") == 0);
+
+    /* SEL opens the feed on the home screen, and the request is the feed. */
+    indigo_app_update(&app, &(indigo_input) {.refresh = true});
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(strcmp(app.feed_name, "Quiet posters") == 0);
+    CHECK(app.timeline.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FEED);
+    CHECK(strcmp(app.request_feed_uri, feeds[0].uri) == 0);
+
+    /* Refresh on a feed view refreshes the feed, not the timeline. */
+    indigo_timeline_finish_fetch(&app.timeline, "");
+    indigo_app_update(&app, &(indigo_input) {.refresh = true});
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FEED);
+
+    /* B returns to the picker, and the home screen goes back to the
+     * Following timeline. */
+    indigo_timeline_finish_fetch(&app.timeline, "");
+    indigo_app_update(&app, &(indigo_input) {.back = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_FEEDS);
+    CHECK(app.feed_uri[0] == '\0');
+    CHECK(app.timeline.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+
+    /* Opening a different feed drops the first's posts. */
+    indigo_timeline_finish_fetch(&app.timeline, "");
+    app.search.selected = 1;
+    indigo_app_update(&app, &(indigo_input) {.refresh = true});
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(strcmp(app.feed_name, "Moon photos") == 0);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FEED);
+
+    /* The bottom-right button does what B does: from a feed view it is the
+     * picker, not the menu. */
+    indigo_timeline_finish_fetch(&app.timeline, "");
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+
+        indigo_app_update(&app,
+                          &(indigo_input) {.touch_pressed = true,
+                                           .touch_x = (int) (r.x + 4),
+                                           .touch_y = (int) (r.y + 4)});
+    }
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_FEEDS);
+    CHECK(app.feed_uri[0] == '\0');
+}
+
 int
 main(void)
 {
@@ -2135,6 +2273,7 @@ main(void)
     test_author_posts();
     test_pinned_post();
     test_lists();
+    test_feeds();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

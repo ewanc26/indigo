@@ -110,6 +110,8 @@ indigo_search_title(const indigo_search *s)
         return "Lists";
     case INDIGO_SEARCH_LIST_MEMBERS:
         return "Members";
+    case INDIGO_SEARCH_FEEDS:
+        return "Feeds";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
@@ -131,10 +133,17 @@ indigo_search_is_posts(const indigo_search *s)
     return s->kind == INDIGO_SEARCH_POSTS || s->kind == INDIGO_SEARCH_AUTHOR;
 }
 
+static bool
+is_list_rows(const indigo_search *s)
+{
+    return s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_LIST_MEMBERS
+        || s->kind == INDIGO_SEARCH_FEEDS;
+}
+
 bool
 indigo_search_is_lists(const indigo_search *s)
 {
-    return s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_LIST_MEMBERS;
+    return is_list_rows(s);
 }
 
 const indigo_list *

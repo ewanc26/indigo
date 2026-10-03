@@ -236,6 +236,18 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_FEEDS:
+        if (!indigo_session_submit_feeds()) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_FEED:
+        if (!indigo_session_submit_feed(app->request_feed_uri,
+                                         app->timeline.cursor[0]
+                                             ? app->timeline.cursor : NULL)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -352,6 +364,14 @@ handle_events(indigo_app *app)
 
             indigo_session_lists_results(&lists, &ln);
             indigo_app_lists_loaded(app, lists, ln);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_FEEDS_PAGE: {
+            const indigo_list *feeds;
+            unsigned fn;
+
+            indigo_session_feeds_results(&feeds, &fn);
+            indigo_app_feeds_loaded(app, feeds, fn);
             break;
         }
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:
