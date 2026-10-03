@@ -648,11 +648,12 @@ The current repository has:
 - native buttons, Circle Pad, C-Stick and touchscreen polling;
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
-- sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost jobs on the session worker;
-- no avatars, threads, profiles, notifications or compose yet.
+- sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
+- threads, profiles, notifications, compose, the More menu, and actor search (`app/search`);
+- no avatars or media yet, and no paging on the search results.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-The next major architectural step is wiring the adapter to Wolfram's real 3DS session/transport API without reintroducing duplicate socket ownership.
+Phase 5 is nearly complete: actor search is the last of its items. What remains is Phase 6 — persistence and polish (settings, session persistence, cache, drafts, media, accessibility, distribution metadata).
 
 Keep this document current whenever those boundaries change.
