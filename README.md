@@ -15,7 +15,7 @@ The goal is the same kind of hardware-first absurdity, but the implementation
 is deliberately different. Indigo is **not a port** of Cobalt. I am designing
 it around the 3DS's own hardware, input model and two-screen layout.
 
-The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality.
+The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality. Indigo is a Bluesky client only: it talks to Bluesky and does not aim to be a general AT Protocol client.
 
 ## Status
 
@@ -134,19 +134,19 @@ Platform code should use libctru for:
 - SDMC storage;
 - 3DS-specific facilities.
 
-citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the AT Protocol implementation and, once integrated, the transport stack.
+citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the protocol implementation and, once integrated, the transport stack.
 
 Do not introduce SDL merely to make Indigo resemble Cobalt. A 3DS-specific application is the point.
 
 ## Cobalt relationship
 
-Cobalt and Indigo share the same broad goal: putting native AT Protocol clients on hardware that was never designed for Bluesky.
+Cobalt and Indigo share the same broad goal: putting native Bluesky clients on hardware that was never designed for Bluesky.
 
 They do not share an application implementation.
 
 Cobalt is built around Wii U-specific facilities such as WUT, SDL2, the GamePad and Aroma. Indigo instead uses libctru, citro2d/citro3d, the 3DS's two physical screens, buttons, Circle Pad and touchscreen.
 
-Wolfram is the shared protocol layer between them because AT Protocol should not need to know which Nintendo console is running the client.
+Wolfram is the shared protocol layer between them because the protocol layer should not need to know which Nintendo console is running the client.
 
 ## Licence
 

@@ -24,7 +24,7 @@ GRAPHICS :=
 GFXBUILD := $(BUILD)
 
 APP_TITLE := Indigo
-APP_DESCRIPTION := Native AT Protocol / Bluesky client for Nintendo 3DS
+APP_DESCRIPTION := Native Bluesky client for Nintendo 3DS
 APP_AUTHOR := Ewan C
 
 # devkitPro's 3DS portlibs provide citro2d/citro3d, curl, mbedTLS and zlib.

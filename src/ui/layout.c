@@ -58,7 +58,7 @@ build_top(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 18, 10, 1.0f, COL_TEXT, "Indigo");
 
     indigo_canvas_text(c, 18, 62, 0.7f, COL_TEXT_SOFT,
-                       "Native AT Protocol / Bluesky client");
+                       "Native Bluesky client");
 
     if (app->screen == INDIGO_SCREEN_HOME) {
         indigo_canvas_text(c, 18, 104, 0.8f, COL_TEXT, "Home");

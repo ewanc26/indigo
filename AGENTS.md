@@ -1,6 +1,6 @@
 # AGENTS.md — Indigo
 
-Indigo is a native Nintendo 3DS homebrew client for the AT Protocol / Bluesky.
+Indigo is a native Nintendo 3DS homebrew client for Bluesky. It is Bluesky-only: it is not a general AT Protocol client, so it targets bsky.social and Bluesky's own lexicons (`app.bsky.*`) and has no custom-PDS or non-Bluesky features.
 
 It is the 3DS counterpart to Cobalt, but it is **not a port of Cobalt**. The application, rendering, interaction model and platform integration must be designed for the 3DS.
 
@@ -267,7 +267,7 @@ The initial useful client surface should be built incrementally:
 9. actor search;
 10. account/session management.
 
-Do not attempt to implement the entire AT Protocol ecosystem before the basic client is stable.
+Do not implement anything beyond Bluesky (other AT Protocol apps, custom lexicons, PDS administration).
 
 UI modules must not manually construct XRPC requests.
 
