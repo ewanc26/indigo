@@ -27,7 +27,18 @@ typedef enum {
     INDIGO_SESSION_EVENT_PUBLISH_FAILED,
     INDIGO_SESSION_EVENT_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_SEARCH_FAILED,
+    INDIGO_SESSION_EVENT_FOLLOW_DONE,
+    INDIGO_SESSION_EVENT_FOLLOW_FAILED,
 } indigo_session_event_kind;
+
+/* Follow and unfollow are separate actions rather than a toggle with one
+ * entry point: unfollow deletes a record by URI, and there is no URI to
+ * derive from a handle. */
+typedef enum {
+    INDIGO_FOLLOW_NONE = 0,
+    INDIGO_FOLLOW,
+    INDIGO_UNFOLLOW,
+} indigo_follow_action;
 
 typedef enum {
     INDIGO_POST_ACTION_NONE = 0,
@@ -60,6 +71,11 @@ typedef struct {
     unsigned focus;
     /* PUBLISHED: what was published (the app refreshes the right view). */
     indigo_compose_mode compose_mode;
+    /* FOLLOW_*: what was attempted. `actor` is the subject did; a follow puts
+     * its new record URI in `record_uri`, while an unfollow deletes the URI
+     * the app already had and so reports none. */
+    indigo_follow_action follow;
+    char actor[INDIGO_PROFILE_DID_MAX];
 } indigo_session_event;
 
 /*
@@ -96,6 +112,10 @@ bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
  * there is no paging, because a 3DS list that cannot show page two is not a
  * list worth paging. */
 bool indigo_session_submit_search(const char *query);
+/* Follow or unfollow `did`. `follow_uri` is required for an unfollow and
+ * ignored for a follow, which creates the record and reports its URI back. */
+bool indigo_session_submit_follow(indigo_follow_action action, const char *did,
+                                  const char *follow_uri);
 
 /* True while a job is running or its event has not been polled. */
 bool indigo_session_busy(void);

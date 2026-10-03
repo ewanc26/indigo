@@ -56,6 +56,11 @@ static const indigo_rect s_sign_in_button = {14, 192, 292, 36};
  * rows keep the standard list geometry below it. */
 static const indigo_rect s_query_button = {14, 6, 210, 30};
 
+/* Profile: the follow button is the screen's one action, so it gets the full
+ * width a compose box uses rather than one of the four post-screen pills,
+ * which the profile does not otherwise need. */
+static const indigo_rect s_follow_button = {14, 52, 292, 40};
+
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
 {
@@ -89,6 +94,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_edit_button;
     case INDIGO_ACTION_FIELD_QUERY:
         return s_query_button;
+    case INDIGO_ACTION_FOLLOW:
+        return s_follow_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -128,7 +135,7 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
         INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
-    static const indigo_action profile_actions[] = {INDIGO_ACTION_BACK};
+    static const indigo_action profile_actions[] = {INDIGO_ACTION_FOLLOW, INDIGO_ACTION_BACK};
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
@@ -344,7 +351,7 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_profile *p = &app->profile;
 
-    top_title(c, "Profile", "B  Back");
+    top_title(c, "Profile", "Y  Follow");
     if (!p->loaded) {
         indigo_canvas_text(c, 18, 60, 0.75f, COL_TEXT_SOFT, "%s",
                            p->loading ? "Loading profile..." : "Profile not loaded.");
@@ -669,10 +676,27 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
 static void
 build_bottom_profile(const indigo_app *app, indigo_canvas *c)
 {
+    const indigo_profile *p = &app->profile;
+    indigo_rect f = indigo_layout_button_rect(INDIGO_ACTION_FOLLOW);
+
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Profile");
     back_button(c, INDIGO_ACTION_BACK, "Back");
-    indigo_canvas_text(c, 14, 64, 0.65f, COL_TEXT_SOFT, "%s",
-                       app->profile.loading ? "Loading..." : "Press B to go back.");
+
+    /* Greyed until the profile has loaded: following needs the did, which only
+     * the profile response carries. */
+    indigo_canvas_rect(c, f.x, f.y, f.w, f.h,
+                       p->loaded && !p->loading && !p->follow_busy ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, f.x + 100, f.y + 12, 0.7f,
+                       p->loaded && !p->follow_busy ? COL_TEXT : COL_TEXT_DIM, "%s",
+                       !p->loaded              ? "Loading..."
+                       : p->follow_busy        ? (p->following ? "Following..." : "Unfollowing...")
+                       : p->following          ? "Following"
+                                               : "Follow");
+
+    if (p->status[0] && p->loaded) {
+        indigo_canvas_text(c, 14, 110, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+                           "%.44s", p->status);
+    }
 }
 
 static void

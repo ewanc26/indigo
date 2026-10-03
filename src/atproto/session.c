@@ -3,6 +3,7 @@
 #include "store/session_store.h"
 #include "util/log.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@ typedef enum {
     JOB_NOTIFICATIONS,
     JOB_PUBLISH,
     JOB_SEARCH,
+    JOB_FOLLOW,
 } job_kind;
 
 typedef struct {
@@ -48,6 +50,8 @@ typedef struct {
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
     char query[INDIGO_SEARCH_QUERY_MAX];
+    indigo_follow_action follow;
+    char actor[INDIGO_PROFILE_DID_MAX];
 } job;
 
 static char s_path[256];
@@ -639,6 +643,8 @@ do_profile(const job *j)
     indigo_copy_utf8(s_profile.handle, sizeof s_profile.handle, p.handle);
     indigo_copy_utf8(s_profile.display_name, sizeof s_profile.display_name, p.display_name);
     indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
+    indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
+    indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
     s_profile.followers = count_of(p.followers_count);
     s_profile.follows = count_of(p.follows_count);
     s_profile.posts = count_of(p.posts_count);
@@ -726,6 +732,57 @@ do_search(const job *j)
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
     ev.page_count = s_actor_count;
     indigo_log_info("search '%s': %u", j->query, s_actor_count);
+    publish_event(&ev);
+}
+
+static void
+do_follow(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_FOLLOW_FAILED,
+                               .follow = j->follow};
+    wf_agent_post_result res = {0};
+    wf_status st = WF_ERR_INVALID_ARG;
+
+    snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    switch (j->follow) {
+    case INDIGO_FOLLOW:
+        st = wf_agent_follow(s_agent, j->actor, &res);
+        break;
+    case INDIGO_UNFOLLOW:
+        if (!j->undo_uri[0]) {
+            /* The app only offers unfollow while it holds the record URI, so
+             * an empty one here is a bug rather than a person tapping it. */
+            ev.failure = INDIGO_FAIL_OTHER;
+            break;
+        }
+        st = wf_agent_unfollow(s_agent, j->undo_uri);
+        break;
+    case INDIGO_FOLLOW_NONE:
+        break;
+    }
+    if (st == WF_OK) {
+        ev.kind = INDIGO_SESSION_EVENT_FOLLOW_DONE;
+        if (res.uri && strlen(res.uri) < sizeof ev.record_uri) {
+            snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
+        }
+        /* The server owns the follower count; the app adjusts its copy from
+         * here rather than assuming the write already landed. */
+        if (j->follow == INDIGO_FOLLOW && s_profile.followers < UINT_MAX) {
+            s_profile.followers++;
+        } else if (j->follow == INDIGO_UNFOLLOW && s_profile.followers > 0) {
+            s_profile.followers--;
+        }
+    } else {
+        ev.failure = classify(st);
+        indigo_log_warn("follow %d failed: wolfram status %d (%s)", (int) j->follow, (int) st,
+                        indigo_failure_tag(ev.failure));
+    }
+    wf_agent_post_result_free(&res);
     publish_event(&ev);
 }
 
@@ -878,6 +935,9 @@ worker(void *arg)
             break;
         case JOB_SEARCH:
             do_search(&j);
+            break;
+        case JOB_FOLLOW:
+            do_follow(&j);
             break;
         case JOB_PUBLISH:
             do_publish(&j);
@@ -1066,6 +1126,23 @@ indigo_session_submit_search(const char *query)
         return false;
     }
     indigo_copy_utf8(j.query, sizeof j.query, query);
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_follow(indigo_follow_action action, const char *did,
+                             const char *follow_uri)
+{
+    job j = {.kind = JOB_FOLLOW, .follow = action};
+
+    if (action == INDIGO_FOLLOW_NONE || !did || !did[0]) {
+        return false;
+    }
+    if (action == INDIGO_UNFOLLOW && (!follow_uri || !follow_uri[0])) {
+        return false;
+    }
+    indigo_copy_utf8(j.actor, sizeof j.actor, did);
+    indigo_copy_utf8(j.undo_uri, sizeof j.undo_uri, follow_uri ? follow_uri : "");
     return submit(&j);
 }
 
@@ -1263,6 +1340,16 @@ bool
 indigo_session_submit_search(const char *query)
 {
     (void) query;
+    return false;
+}
+
+bool
+indigo_session_submit_follow(indigo_follow_action action, const char *did,
+                             const char *follow_uri)
+{
+    (void) action;
+    (void) did;
+    (void) follow_uri;
     return false;
 }
 

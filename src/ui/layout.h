@@ -37,6 +37,7 @@ typedef enum {
     INDIGO_ACTION_FIELD_QUERY,
     INDIGO_ACTION_TOGGLE,
     INDIGO_ACTION_SEND,
+    INDIGO_ACTION_FOLLOW,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

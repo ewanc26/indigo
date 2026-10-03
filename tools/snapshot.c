@@ -418,11 +418,27 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(p->bio, sizeof p->bio,
                          "Walker, reader, occasional poet. Rivers before roads, always. "
                          "Writing about the Welsh borders and old stones.");
+        indigo_copy_utf8(p->did, sizeof p->did, "did:plc:rhiannon7wvx2m4qz6kbyt");
+        if (s->timeline == 1) {
+            /* Not following: the button offers the action. */
+            p->following = false;
+            p->follow_uri[0] = '\0';
+        } else if (s->timeline == 2) {
+            /* Mid-flight after pressing Follow: the label shows progress so
+             * a second press is visibly ignored rather than looking dead. */
+            p->following = false;
+            p->follow_busy = true;
+        }
         p->followers = 1204;
         p->follows = 310;
         p->posts = 5821;
-        p->following = true;
         p->loaded = true;
+        if (s->timeline != 1 && s->timeline != 2) {
+            p->following = true;
+            indigo_copy_utf8(p->follow_uri, sizeof p->follow_uri,
+                             "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.graph.follow/"
+                             "self/3kqz9d2f7xw4");
+        }
     } else if (s->screen == INDIGO_SCREEN_NOTIFICATIONS) {
         indigo_notification n[3];
 
@@ -496,6 +512,8 @@ main(int argc, char **argv)
         {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0},
         {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1},
         {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0},
+        {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0},
+        {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0},

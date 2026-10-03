@@ -1480,6 +1480,114 @@ test_search_results_bounded(void)
     CHECK(app.search.count == INDIGO_SEARCH_MAX);
 }
 
+/* Following is a toggle the server can disagree with, so it is tested in both
+ * directions plus the failure that has to put the state back. */
+static void
+test_follow_toggle(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+
+    /* Nothing loaded means nothing to follow: the did is not known yet. */
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 70) == INDIGO_ACTION_FOLLOW);
+    indigo_app_toggle_follow(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+
+    app.profile.loaded = true;
+    snprintf(app.profile.did, sizeof app.profile.did, "did:plc:abc123");
+    app.profile.followers = 12;
+
+    /* Follow: flips at once rather than waiting for the network. */
+    indigo_app_toggle_follow(&app);
+    CHECK(app.profile.following);
+    CHECK(app.profile.follow_busy);
+    CHECK(app.request_follow);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FOLLOW);
+
+    /* The record URI is what makes a later unfollow possible at all. */
+    indigo_app_follow_done(&app, true, "at://did:plc:abc/app.bsky.graph.follow/self/1");
+    CHECK(!app.profile.follow_busy);
+    CHECK(app.profile.following);
+    CHECK(strcmp(app.profile.follow_uri,
+                 "at://did:plc:abc/app.bsky.graph.follow/self/1") == 0);
+
+    /* Unfollow: needs that URI, and clears it once the record is gone. */
+    indigo_app_toggle_follow(&app);
+    CHECK(!app.profile.following);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FOLLOW);
+    indigo_app_follow_done(&app, false, NULL);
+    CHECK(!app.profile.following);
+    CHECK(app.profile.follow_uri[0] == '\0');
+}
+
+static void
+test_follow_failure_reverts(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+    app.profile.followers = 3;
+
+    indigo_app_toggle_follow(&app);
+    CHECK(app.profile.following);
+    indigo_app_take_request(&app, &f);
+
+    /* A failed follow must not leave the UI claiming it happened. */
+    indigo_app_follow_failed(&app, "No connection.");
+    CHECK(!app.profile.following);
+    CHECK(!app.profile.follow_busy);
+    CHECK(app.profile.status_is_error);
+    CHECK(strcmp(app.profile.status, "No connection.") == 0);
+
+    /* And a failed unfollow has to put the following state back. */
+    snprintf(app.profile.did, sizeof app.profile.did, "did:plc:abc123");
+    snprintf(app.profile.follow_uri, sizeof app.profile.follow_uri,
+             "at://did:plc:abc/app.bsky.graph.follow/self/1");
+    app.profile.following = true;
+    indigo_app_toggle_follow(&app);
+    CHECK(!app.profile.following);
+    indigo_app_take_request(&app, &f);
+    indigo_app_follow_failed(&app, "Rate limited.");
+    CHECK(app.profile.following);
+    CHECK(strcmp(app.profile.follow_uri,
+                 "at://did:plc:abc/app.bsky.graph.follow/self/1") == 0);
+}
+
+/* Following is one job at a time, and cannot start without a did. */
+static void
+test_follow_guards(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+
+    /* Following with no did would reach the session and be refused there;
+     * the app does not know that, so this only checks the busy guard. */
+    app.profile.follow_busy = true;
+    indigo_app_toggle_follow(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    app.profile.follow_busy = false;
+
+    /* Following but holding no record URI means unfollow has nothing to
+     * delete, so the press is refused before any request is made. */
+    app.profile.following = true;
+    app.profile.follow_uri[0] = '\0';
+    indigo_app_toggle_follow(&app);
+    CHECK(app.profile.following);
+    CHECK(!app.profile.follow_busy);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    CHECK(app.profile.status_is_error);
+}
+
 int
 main(void)
 {
@@ -1520,6 +1628,9 @@ main(void)
     test_search_empty_and_failure();
     test_search_results_bounded();
     test_no_duplicate_back_hints();
+    test_follow_toggle();
+    test_follow_failure_reverts();
+    test_follow_guards();
     test_text_stays_on_screen();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
