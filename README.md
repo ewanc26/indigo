@@ -86,6 +86,33 @@ Indigo looks for Wolfram at `../wolfram/build-3ds` by default. Set `WOLFRAM_ROOT
 | `make snapshots` | Render PNGs of both screens to `build-host/snapshots/` |
 | `make clean` | Remove generated build output |
 
+### When `make` misses a change
+
+`make` compares modification times at one-second granularity. The filesystem
+stores nanoseconds, but the comparison does not use them: a source file 1ms
+newer than its object does not trigger a rebuild, while the same file 1.1s
+newer does. So a source saved in the same second as the object that should
+replace it is treated as up to date.
+
+The symptom is a link error naming functions that are plainly defined and
+compiled in the very file you just edited:
+
+```
+/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/../../../../arm-none-eabi/bin/ld: main.o: in function `handle_events':
+undefined reference to `indigo_app_set_query'
+```
+
+The object was never recompiled, so this is a stale object rather than a
+missing definition. Confirm it before changing any code:
+
+```sh
+ls -la build/app.o src/app/app.c      # equal or object-newer means stale
+make clean && make                    # or: touch the source, if the tree is otherwise clean
+```
+
+It is easy to hit after a build that failed partway through, or when a save
+and a build land in the same second.
+
 ### Emulator
 
 ```sh

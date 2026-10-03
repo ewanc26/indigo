@@ -524,6 +524,7 @@ Watch for:
 - duplicate socket initialisation;
 - desktop libraries accidentally entering the link;
 - flat-VPATH object collisions;
+- `make` skipping a source edited in the same second as its object, which surfaces as undefined references to functions that are defined and compiled in that same file (see README, "When make misses a change");
 - C/C++ linker selection errors;
 - New 3DS-only controls becoming mandatory;
 - unbounded feed/image allocations;
