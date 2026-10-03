@@ -7,6 +7,16 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Follow and unfollow from a person's profile: the bottom screen gets a
+  full-width button and Y does the same thing, since the profile had been
+  showing "Following" as read-only state with no way to change it. The state
+  flips on the press rather than waiting for the server, and is put back if
+  the write fails. Cobalt has had this since 0.x; this closes the gap.
+- Wolfram's `getProfile` `did` and viewer-follow record URI are now kept. The
+  did is what `follow` is addressed to, and unfollow deletes by URI with no
+  handle to resolve it from, so neither can be recovered from the fields the
+  profile already stored. The blocking URI and mute flag are in the same
+  response and are the next things this unlocks.
 - Find people (actor search, phase 5): a "Find people" entry in the More menu
   opens a search screen whose query box sits in the bottom-screen header, so
   the result rows keep the standard list geometry. Accepting the keyboard runs

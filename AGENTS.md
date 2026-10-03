@@ -650,11 +650,11 @@ The current repository has:
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
-- threads, profiles, notifications, compose, the More menu, and actor search (`app/search`);
+- threads, profiles, notifications, compose, the More menu, actor search (`app/search`), and follow/unfollow from a profile;
 - no avatars or media yet, and no paging on the search results.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is nearly complete: actor search is the last of its items. What remains is Phase 6 — persistence and polish (settings, session persistence, cache, drafts, media, accessibility, distribution metadata).
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. What remains is Phase 6 — persistence and polish (settings, session persistence, cache, drafts, media, accessibility, distribution metadata) — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.
