@@ -7,6 +7,16 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Mute, unmute, block and unblock from a person's profile. Mute is X and
+  block is R on the profile screen, with both also on the touch buttons as a
+  pair under Follow; the buttons name the action they perform rather than the
+  state they are in, so the label never changes under the reader. Cobalt has
+  had both, plus browsable mute and block lists, which this does not.
+- Notifications are marked as seen after a successful fetch, so the unread
+  badge does not linger on other clients. Indigo never pages notifications,
+  so there is no backward-paging case to exclude the way Cobalt has to.
+  `util/timefmt` formats the `seenAt` timestamp, and a clock that reports
+  non-positive time skips the call rather than sending a 1970 date.
 - Follow and unfollow from a person's profile: the bottom screen gets a
   full-width button and Y does the same thing, since the profile had been
   showing "Following" as read-only state with no way to change it. The state
@@ -15,8 +25,8 @@ publishes the section matching the version you pass it.
 - Wolfram's `getProfile` `did` and viewer-follow record URI are now kept. The
   did is what `follow` is addressed to, and unfollow deletes by URI with no
   handle to resolve it from, so neither can be recovered from the fields the
-  profile already stored. The blocking URI and mute flag are in the same
-  response and are the next things this unlocks.
+  profile already stored. The blocking URI and mute flag came in the same
+  response and are what the mute and block actions above use.
 - Find people (actor search, phase 5): a "Find people" entry in the More menu
   opens a search screen whose query box sits in the bottom-screen header, so
   the result rows keep the standard list geometry. Accepting the keyboard runs
