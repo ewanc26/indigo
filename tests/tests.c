@@ -530,10 +530,18 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 6);
-    CHECK(app.menu.items[4].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[3].label, "My profile") == 0);
+    CHECK(app.menu.count == 7);
+    CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
+    CHECK(app.menu.items[5].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[4].label, "My profile") == 0);
 
+    /* Sign out is the sixth item now that "Find posts" was added, so it sits
+     * one row below the window until the selection is moved onto it. */
+    for (unsigned i = 0; i < 5; i++) {
+        in = (indigo_input) {0};
+        in.down = true;
+        indigo_app_update(&app, &in);
+    }
     in = (indigo_input) {0};
     r = indigo_layout_button_rect(INDIGO_ACTION_MENU4);
     in.touch_pressed = true;
@@ -997,7 +1005,7 @@ test_facet_menu(void)
 
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets first, then the six app actions. */
-    CHECK(menu.count == 9);
+    CHECK(menu.count == 10);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1006,7 +1014,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[8].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[9].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1024,7 +1032,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 9);
+    CHECK(app.menu.count == 10);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1045,7 +1053,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 6);
+    CHECK(menu.count == 7);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1053,13 +1061,13 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 6);
+    CHECK(menu.count == 7);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 6);
-    CHECK(strcmp(menu.items[3].label, "Your profile") == 0);
-    CHECK(strcmp(menu.items[3].payload, "") == 0);
+    CHECK(menu.count == 7);
+    CHECK(strcmp(menu.items[4].label, "Your profile") == 0);
+    CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
     {
@@ -1279,9 +1287,9 @@ test_search_model(void)
 
     memset(&one, 0, sizeof one);
     indigo_copy_utf8(one.handle, sizeof one.handle, "alice.example.com");
-    s.items[0] = one;
+    s.results.actors[0] = one;
     s.count = 1;
-    CHECK(indigo_search_selected(&s) == &s.items[0]);
+    CHECK(indigo_search_selected(&s) == &s.results.actors[0]);
 
     /* The selection stops at both ends instead of running off the list. */
     CHECK(!indigo_search_move(&s, -1, INDIGO_TIMELINE_ROWS));
@@ -1310,7 +1318,7 @@ test_search_selection_scroll(void)
     memset(&s, 0, sizeof s);
     for (unsigned i = 0; i < INDIGO_SEARCH_MAX; i++) {
         snprintf(handle, sizeof handle, "person%02u.example.com", i);
-        indigo_copy_utf8(s.items[i].handle, sizeof s.items[i].handle, handle);
+        indigo_copy_utf8(s.results.actors[i].handle, sizeof s.results.actors[i].handle, handle);
         s.count++;
     }
 
@@ -1319,7 +1327,7 @@ test_search_selection_scroll(void)
     }
     CHECK(s.selected == INDIGO_SEARCH_ROWS);
     CHECK(s.scroll == 1);
-    CHECK(indigo_search_row(&s, 0, INDIGO_SEARCH_ROWS) == &s.items[1]);
+    CHECK(indigo_search_row(&s, 0, INDIGO_SEARCH_ROWS) == &s.results.actors[1]);
 
     /* Already at the top: up does nothing rather than going negative. */
     s.selected = 0;
@@ -1789,6 +1797,68 @@ test_people_lists(void)
     CHECK(strcmp(indigo_search_title(&app.search), "Following") == 0);
 }
 
+/* Post search shares the screen with the people lists but not the result
+ * type, so what matters is that the kind routes the request and that posts
+ * are not read back through the actor accessors. */
+static void
+test_post_search(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_post p[2];
+
+    /* Open the More menu the way the person does, then choose "Find posts",
+     * which is the fourth row. */
+    indigo_app_init(&app);
+    indigo_app_sign_in_succeeded(&app, "ewancroft.uk");
+    {
+        indigo_rect mr = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+        indigo_input in = {.touch_pressed = true, .touch_x = (int) (mr.x + 4),
+                           .touch_y = (int) (mr.y + 4)};
+
+        indigo_app_update(&app, &in);
+    }
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
+    for (unsigned i = 0; i < 3; i++) {
+        indigo_app_update(&app, &(indigo_input) {.down = true});
+    }
+    indigo_app_update(&app, &(indigo_input) {.confirm = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_POSTS);
+    CHECK(indigo_search_is_posts(&app.search));
+    CHECK(indigo_search_is_typed(&app.search));
+    CHECK(strcmp(indigo_search_title(&app.search), "Post search") == 0);
+
+    /* Signing in asks for the home timeline, and a search will not start
+     * while a request is pending. */
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    /* Submitting a post query asks for the post request, not the actor one. */
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    indigo_app_set_query(&app, "welsh borders");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_POST_SEARCH);
+
+    memset(p, 0, sizeof p);
+    snprintf(p[0].uri, sizeof p[0].uri, "at://did:plc:a/app.bsky.feed.post/1");
+    snprintf(p[0].text, sizeof p[0].text, "Rivers before roads.");
+    snprintf(p[0].handle, sizeof p[0].handle, "rhi.example.social");
+    snprintf(p[0].display_name, sizeof p[0].display_name, "Rhiannon");
+    snprintf(p[1].uri, sizeof p[1].uri, "at://did:plc:a/app.bsky.feed.post/2");
+    snprintf(p[1].text, sizeof p[1].text, "Old stones and newer roads.");
+    indigo_app_post_search_loaded(&app, p, 2);
+    CHECK(app.search.count == 2);
+    CHECK(app.search.searched);
+    CHECK(indigo_search_selected_post(&app.search) != NULL);
+    CHECK(strcmp(indigo_search_selected_post(&app.search)->text, "Rivers before roads.") == 0);
+    CHECK(indigo_search_row_post(&app.search, 0, INDIGO_SEARCH_ROWS) != NULL);
+
+    /* "No posts matched" is distinct from not having searched. */
+    indigo_app_post_search_loaded(&app, NULL, 0);
+    CHECK(app.search.count == 0);
+    CHECK(app.search.searched);
+    CHECK(strcmp(app.search.status, "No posts matched that.") == 0);
+}
+
 int
 main(void)
 {
@@ -1837,6 +1907,7 @@ main(void)
     test_block_without_uri();
     test_graph_guards();
     test_people_lists();
+    test_post_search();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

@@ -7,6 +7,14 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Post search, as "Find posts" beside "Find people". It shares the search
+  screen rather than adding one: same rows, same navigation, same header box.
+  The results are posts rather than people, so they share storage with the
+  actor list through a union — an indigo_post is roughly twenty times an
+  indigo_actor, and the 3DS should not pay for both. Rows lead with the author
+  because a row of text is not identifiable by its text, and SEL opens the
+  thread rather than a profile. Bounded to 20 like actor search; the cursor is
+  dropped rather than kept for a page that will never be fetched.
 - A person's followers and following, from the two count buttons on their
   profile. They reuse the search screen rather than adding two near-identical
   ones: same rows, same navigation, same result type, so only the request

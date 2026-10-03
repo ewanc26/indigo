@@ -27,6 +27,7 @@ typedef enum {
     INDIGO_SESSION_EVENT_PUBLISH_FAILED,
     INDIGO_SESSION_EVENT_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_SEARCH_FAILED,
+    INDIGO_SESSION_EVENT_POST_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_FOLLOW_DONE,
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
     INDIGO_SESSION_EVENT_GRAPH_DONE,
@@ -117,6 +118,10 @@ bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
  * there is no paging, because a 3DS list that cannot show page two is not a
  * list worth paging. */
 bool indigo_session_submit_search(const char *query);
+/* Post search. Results are indigo_post, so this has its own result array and
+ * its own event rather than sharing the actor search's. */
+bool indigo_session_submit_post_search(const char *query);
+void indigo_session_post_search_results(const indigo_post **posts, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
  * array and its events, because the result type is the same. */
 bool indigo_session_submit_people(indigo_search_kind kind, const char *subject);

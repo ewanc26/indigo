@@ -466,6 +466,38 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_actor a[3];
 
         memset(a, 0, sizeof a);
+        if (s->timeline == 6 || s->timeline == 7) {
+            /* Post search: same screen, but rows lead with the author and
+             * the top screen shows the post rather than a profile. */
+            indigo_post ps[2];
+
+            q->kind = INDIGO_SEARCH_POSTS;
+            indigo_copy_utf8(q->query, sizeof q->query, s->timeline == 6 ? "welsh borders" : "");
+            memset(ps, 0, sizeof ps);
+            if (s->timeline == 6) {
+                snprintf(ps[0].uri, sizeof ps[0].uri, "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.feed.post/3kqz");
+                snprintf(ps[0].handle, sizeof ps[0].handle, "rhi.example.social");
+                snprintf(ps[0].display_name, sizeof ps[0].display_name, "Rhiannon");
+                snprintf(ps[0].text, sizeof ps[0].text,
+                         "Rivers before roads, always. A walk along the Wye at first "
+                         "light, and the old stones doing what they have always done, "
+                         "which is nothing at all, patiently.");
+                ps[0].reply_count = 12;
+                ps[0].repost_count = 34;
+                ps[0].like_count = 210;
+                snprintf(ps[1].uri, sizeof ps[1].uri, "at://did:plc:bear4kq8vz2n7xwm3/app.bsky.feed.post/9d2f");
+                snprintf(ps[1].handle, sizeof ps[1].handle, "rhibear.example.social");
+                snprintf(ps[1].display_name, sizeof ps[1].display_name, "Rhiannon Bear");
+                snprintf(ps[1].text, sizeof ps[1].text,
+                         "Drawn from that same walk. Ink on board, as usual, and not "
+                         "one straight line in the whole thing.");
+                ps[1].reply_count = 3;
+                ps[1].repost_count = 7;
+                ps[1].like_count = 88;
+            }
+            indigo_app_post_search_loaded(app, ps, s->timeline == 6 ? 2u : 0u);
+            return;
+        }
         if (s->timeline == 4 || s->timeline == 5) {
             /* The followers and following lists: same screen and rows as a
              * person search, with the subject named in the header instead of
@@ -549,6 +581,8 @@ main(int argc, char **argv)
         {"search-error", INDIGO_SCREEN_SEARCH, false, 0, 0, 3, 0},
         {"search-followers", INDIGO_SCREEN_SEARCH, false, 0, 0, 4, 0},
         {"search-following", INDIGO_SCREEN_SEARCH, false, 0, 0, 5, 0},
+        {"post-search", INDIGO_SCREEN_SEARCH, false, 0, 0, 6, 0},
+        {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0},
     };
 
     if (argc != 2) {

@@ -61,6 +61,7 @@ typedef enum {
     INDIGO_REQUEST_FOLLOW,
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
+    INDIGO_REQUEST_POST_SEARCH,
 } indigo_request_kind;
 
 typedef struct {
@@ -155,6 +156,9 @@ void indigo_app_search_failed(indigo_app *app, const char *message);
  * drops the previous results rather than showing one list under the other's
  * heading, the same rule the query has. */
 void indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject);
+/* Post search results, which are posts rather than people. Kept separate from
+ * the actor-loaded path because indigo_actor is the wrong type for them. */
+void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count);
 /* Follow/unfollow. The toggle flips `following` at once and reverts it if the
  * job fails, so the button responds to the press rather than to the network. */
 void indigo_app_toggle_follow(indigo_app *app);

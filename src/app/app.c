@@ -244,14 +244,14 @@ open_menu(indigo_app *app)
 /* Search keeps its query and results across visits: retyping a name to reach
  * the same list again would be the wrong trade on a system keyboard. */
 static void
-open_search(indigo_app *app)
+/* The kind is set by the caller because the menu offers both a person and a
+ * post search. Either way it is set explicitly: inheriting the previous
+ * list's kind would show that list's results under the wrong heading. */
+open_search(indigo_app *app, indigo_search_kind kind)
 {
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
-    /* Opening search from the menu starts a person search, so the kind is
-     * reset: leaving it as the previous followers list would show that
-     * list's results under a "Search" heading. */
-    app->search.kind = INDIGO_SEARCH_PEOPLE;
+    app->search.kind = kind;
     app->search.loading = false;
 }
 
@@ -265,7 +265,9 @@ submit_search(indigo_app *app)
     }
     s->loading = true;
     s->status[0] = '\0';
-    app->request = INDIGO_REQUEST_SEARCH;
+    /* One screen searches two things; the kind decides which request the
+     * session receives. */
+    app->request = indigo_search_is_posts(s) ? INDIGO_REQUEST_POST_SEARCH : INDIGO_REQUEST_SEARCH;
 }
 
 static void
@@ -437,6 +439,7 @@ update_thread(indigo_app *app, const indigo_input *input)
                 open_profile(app, sel->handle);
             }
             break;
+            break;
         case INDIGO_ACTION_BACK:
             go_back(app);
             break;
@@ -607,7 +610,11 @@ menu_choose(indigo_app *app, unsigned item)
         break;
     case INDIGO_MENU_FIND_PEOPLE:
         go_back(app);
-        open_search(app);
+        open_search(app, INDIGO_SEARCH_PEOPLE);
+        break;
+    case INDIGO_MENU_FIND_POSTS:
+        go_back(app);
+        open_search(app, INDIGO_SEARCH_POSTS);
         break;
     case INDIGO_MENU_MY_PROFILE:
         go_back(app);
@@ -683,8 +690,16 @@ update_search(indigo_app *app, const indigo_input *input)
         edit_query(app);
     }
     /* SEL already opens the selected person's profile on the thread screen. */
-    if (input->refresh && sel) {
-        open_profile(app, sel->handle);
+    if (input->refresh) {
+        if (indigo_search_is_posts(s)) {
+            const indigo_post *p = indigo_search_selected_post(s);
+
+            if (p) {
+                open_thread(app, p->uri);
+            }
+        } else if (sel) {
+            open_profile(app, sel->handle);
+        }
     }
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
@@ -702,7 +717,13 @@ update_search(indigo_app *app, const indigo_input *input)
             }
             break;
         case INDIGO_ACTION_AUTHOR:
-            if (sel) {
+            if (indigo_search_is_posts(s)) {
+                const indigo_post *p = indigo_search_selected_post(s);
+
+                if (p) {
+                    open_thread(app, p->uri);
+                }
+            } else if (sel) {
                 open_profile(app, sel->handle);
             }
             break;
@@ -958,7 +979,7 @@ indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned c
 
     indigo_search_clear(s);
     for (unsigned i = 0; actors && i < count && i < INDIGO_SEARCH_MAX; i++) {
-        s->items[s->count++] = actors[i];
+        s->results.actors[s->count++] = actors[i];
     }
     s->searched = true;
     if (s->count == 0) {
@@ -988,6 +1009,21 @@ indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *sub
     app->request_people = kind;
     indigo_copy_utf8(app->request_subject, sizeof app->request_subject, subject);
     app->request = INDIGO_REQUEST_PEOPLE;
+}
+
+void
+indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count)
+{
+    indigo_search *s = &app->search;
+
+    indigo_search_clear(s);
+    for (unsigned i = 0; i < count && s->count < INDIGO_SEARCH_MAX; i++) {
+        s->results.posts[s->count++] = posts[i];
+    }
+    s->searched = true;
+    if (s->count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status, "No posts matched that.");
+    }
 }
 
 void
