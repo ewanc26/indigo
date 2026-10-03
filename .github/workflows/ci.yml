@@ -30,6 +30,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ewanc26/wolfram
+          # Indigo uses Wolfram's post_display and thread_typed APIs, which are
+          # on this branch and not yet on Wolfram's main. Move this to the
+          # default branch as soon as those land there.
+          ref: feat/post-display
           path: wolfram
       - name: Build Wolfram for 3DS
         working-directory: indigo
