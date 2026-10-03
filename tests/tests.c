@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static int s_checks;
 static int s_failures;
@@ -466,7 +467,7 @@ test_log_file(void)
     char buf[128];
     FILE *f;
 
-    system("mkdir -p build-host");
+    mkdir("build-host", 0777);
     remove("build-host/test.log.old");
     CHECK(indigo_log_open_file("build-host/test.log"));
     indigo_log_info("first run %d", 1);

@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <strings.h>
 
 void
 indigo_signin_init(indigo_signin *s)
