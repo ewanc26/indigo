@@ -21,6 +21,13 @@ publishes the section matching the version you pass it.
   match and failure.
 
 ### Fixed
+- A source file edited in the same second as the object it should replace was
+  never recompiled, because `make` compares modification times at one-second
+  granularity (the filesystem keeps nanoseconds; the comparison discards
+  them). It surfaced as undefined references to functions that were defined
+  and compiled in the same file, which reads like a missing definition rather
+  than a stale object. Diagnose it by comparing the `.o` and `.c` timestamps;
+  `make clean` clears it.
 - The 3DS build was broken against a sibling Wolfram checkout on the
   `local/indigo-build` branch, which still carried the pre-merge
   `post_display.h`. PR #89 renamed that header's facet struct
