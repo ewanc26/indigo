@@ -1736,6 +1736,59 @@ test_graph_guards(void)
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
 }
 
+/* Followers and following reuse the search screen, so what matters is that
+ * they arrive with the right subject, drop the previous list, and refuse to
+ * pretend a query box applies to them. */
+static void
+test_people_lists(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_actor a[3];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    snprintf(app.profile.handle, sizeof app.profile.handle, "rhi.example.social");
+    app.profile.loaded = true;
+    app.profile.followers = 1204;
+    app.profile.follows = 310;
+
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 80, 168) == INDIGO_ACTION_FOLLOWERS);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 230, 168) == INDIGO_ACTION_FOLLOWING);
+
+    indigo_app_open_people(&app, INDIGO_SEARCH_FOLLOWERS, app.profile.handle);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_FOLLOWERS);
+    CHECK(strcmp(app.search.subject, "rhi.example.social") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PEOPLE);
+
+    /* A people list is not a search: no query box, no typing. */
+    CHECK(!indigo_search_is_typed(&app.search));
+    CHECK(strcmp(indigo_search_title(&app.search), "Followers") == 0);
+    CHECK(strcmp(indigo_search_title(&(indigo_search) {.kind = INDIGO_SEARCH_FOLLOWING}),
+           "Following") == 0);
+    CHECK(strcmp(indigo_search_title(&(indigo_search) {.kind = INDIGO_SEARCH_PEOPLE}),
+           "Search") == 0);
+
+    /* Switching kind must not leave the previous list under the new heading. */
+    memset(a, 0, sizeof a);
+    snprintf(a[0].handle, sizeof a[0].handle, "one.example");
+    indigo_app_search_loaded(&app, a, 1);
+    CHECK(app.search.count == 1);
+    indigo_app_open_people(&app, INDIGO_SEARCH_FOLLOWING, app.profile.handle);
+    CHECK(app.search.count == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PEOPLE);
+
+    /* Opening search from the menu resets the kind; indigo_search_clear is
+     * the shared reset and must not clear the kind itself, or a people list
+     * would silently become a person search. */
+    indigo_search_clear(&app.search);
+    CHECK(app.search.kind == INDIGO_SEARCH_FOLLOWING);
+    CHECK(strcmp(indigo_search_title(&app.search), "Following") == 0);
+}
+
 int
 main(void)
 {
@@ -1783,6 +1836,7 @@ main(void)
     test_mute_block_failure_reverts();
     test_block_without_uri();
     test_graph_guards();
+    test_people_lists();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

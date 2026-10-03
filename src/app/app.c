@@ -248,6 +248,10 @@ open_search(indigo_app *app)
 {
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
+    /* Opening search from the menu starts a person search, so the kind is
+     * reset: leaving it as the previous followers list would show that
+     * list's results under a "Search" heading. */
+    app->search.kind = INDIGO_SEARCH_PEOPLE;
     app->search.loading = false;
 }
 
@@ -475,6 +479,12 @@ update_profile(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_BLOCK:
             indigo_app_toggle_block(app);
             break;
+        case INDIGO_ACTION_FOLLOWERS:
+            indigo_app_open_people(app, INDIGO_SEARCH_FOLLOWERS, p->handle);
+            break;
+        case INDIGO_ACTION_FOLLOWING:
+            indigo_app_open_people(app, INDIGO_SEARCH_FOLLOWING, p->handle);
+            break;
         case INDIGO_ACTION_BACK:
             go_back(app);
             break;
@@ -666,8 +676,10 @@ update_search(indigo_app *app, const indigo_input *input)
     }
     /* Typing the query and running it are one action: the keyboard blocks, so
      * making the person confirm again on a list screen would be a wasted
-     * round trip through a system dialog. */
-    if (input->confirm) {
+     * round trip through a system dialog. The followers and following lists
+     * have nothing to type, so the same press only opens the keyboard in the
+     * search mode. */
+    if (input->confirm && indigo_search_is_typed(s)) {
         edit_query(app);
     }
     /* SEL already opens the selected person's profile on the thread screen. */
@@ -685,7 +697,9 @@ update_search(indigo_app *app, const indigo_input *input)
                                  INDIGO_SEARCH_ROWS);
             break;
         case INDIGO_ACTION_FIELD_QUERY:
-            edit_query(app);
+            if (indigo_search_is_typed(s)) {
+                edit_query(app);
+            }
             break;
         case INDIGO_ACTION_AUTHOR:
             if (sel) {
@@ -958,6 +972,22 @@ indigo_app_search_failed(indigo_app *app, const char *message)
     app->search.loading = false;
     indigo_copy_utf8(app->search.status, sizeof app->search.status, message);
     app->search.status_is_error = true;
+}
+
+void
+indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject)
+{
+    if (kind == INDIGO_SEARCH_PEOPLE || !subject || !subject[0]) {
+        return;
+    }
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = kind;
+    indigo_search_clear(&app->search);
+    indigo_copy_utf8(app->search.subject, sizeof app->search.subject, subject);
+    app->search.loading = true;
+    app->request_people = kind;
+    indigo_copy_utf8(app->request_subject, sizeof app->request_subject, subject);
+    app->request = INDIGO_REQUEST_PEOPLE;
 }
 
 void
