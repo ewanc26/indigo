@@ -27,14 +27,14 @@ typedef struct {
     char did[INDIGO_SEARCH_DID_MAX];
 } indigo_actor;
 
-/* One screen serves four lists. The first three are lists of people and share
- * the indigo_actor row; the fourth is a list of posts, which shares the screen
- * and the navigation but not the result type. */
+/* One screen serves five lists. The people lists share the indigo_actor row;
+ * the two post lists share the indigo_post row. */
 typedef enum {
     INDIGO_SEARCH_PEOPLE = 0,
     INDIGO_SEARCH_FOLLOWERS,
     INDIGO_SEARCH_FOLLOWING,
     INDIGO_SEARCH_POSTS,
+    INDIGO_SEARCH_AUTHOR,
 } indigo_search_kind;
 
 typedef struct {

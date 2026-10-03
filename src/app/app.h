@@ -62,6 +62,7 @@ typedef enum {
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
+    INDIGO_REQUEST_AUTHOR_FEED,
 } indigo_request_kind;
 
 typedef struct {
@@ -97,6 +98,8 @@ typedef struct {
     /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
     indigo_search_kind request_people;
     char request_subject[INDIGO_POST_NAME_MAX];
+    /* Who INDIGO_REQUEST_AUTHOR_FEED is asking about. */
+    char request_actor[INDIGO_POST_NAME_MAX];
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -156,6 +159,8 @@ void indigo_app_search_failed(indigo_app *app, const char *message);
  * drops the previous results rather than showing one list under the other's
  * heading, the same rule the query has. */
 void indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject);
+/* One person's posts. Reuses the post list that post search fills. */
+void indigo_app_open_author_posts(indigo_app *app, const char *actor);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */
 void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count);

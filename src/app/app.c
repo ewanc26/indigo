@@ -488,6 +488,9 @@ update_profile(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_FOLLOWING:
             indigo_app_open_people(app, INDIGO_SEARCH_FOLLOWING, p->handle);
             break;
+        case INDIGO_ACTION_POSTS:
+            indigo_app_open_author_posts(app, p->handle);
+            break;
         case INDIGO_ACTION_BACK:
             go_back(app);
             break;
@@ -1009,6 +1012,21 @@ indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *sub
     app->request_people = kind;
     indigo_copy_utf8(app->request_subject, sizeof app->request_subject, subject);
     app->request = INDIGO_REQUEST_PEOPLE;
+}
+
+void
+indigo_app_open_author_posts(indigo_app *app, const char *actor)
+{
+    if (!actor || !actor[0]) {
+        return;
+    }
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_AUTHOR;
+    indigo_search_clear(&app->search);
+    indigo_copy_utf8(app->search.subject, sizeof app->search.subject, actor);
+    app->search.loading = true;
+    indigo_copy_utf8(app->request_actor, sizeof app->request_actor, actor);
+    app->request = INDIGO_REQUEST_AUTHOR_FEED;
 }
 
 void

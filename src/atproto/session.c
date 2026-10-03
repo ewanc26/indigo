@@ -38,6 +38,7 @@ typedef enum {
     JOB_GRAPH,
     JOB_PEOPLE,
     JOB_POST_SEARCH,
+    JOB_AUTHOR_FEED,
 } job_kind;
 
 typedef struct {
@@ -841,6 +842,49 @@ do_post_search(const job *j)
     publish_event(&ev);
 }
 
+/* One person's posts. Same result type and same event as post search, so the
+ * results land in the same array; only the request differs. to_post is reused
+ * so reposts carry their "Reposted by" line here too. */
+static void
+do_author_feed(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_feed_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_get_author_feed_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL,
+                                        /* No filter: posts_with_replies would mix
+                                         * replies into a person's own posts, and
+                                         * replies_filter removes everything but
+                                         * them. The bare call is their posts. */
+                                        NULL, &list);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("author feed failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_post_count = 0;
+    for (size_t i = 0; i < list.item_count && s_post_count < INDIGO_SEARCH_MAX; i++) {
+        if (to_post(&list.items[i], &s_posts[s_post_count])) {
+            s_post_count++;
+        }
+    }
+    wf_agent_feed_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
+    ev.page_count = s_post_count;
+    indigo_log_info("author feed '%s': %u", j->actor, s_post_count);
+    publish_event(&ev);
+}
+
 static void
 do_follow(const job *j)
 {
@@ -1121,6 +1165,9 @@ worker(void *arg)
         case JOB_POST_SEARCH:
             do_post_search(&j);
             break;
+        case JOB_AUTHOR_FEED:
+            do_author_feed(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1320,6 +1367,18 @@ indigo_session_submit_post_search(const char *query)
         return false;
     }
     indigo_copy_utf8(j.query, sizeof j.query, query);
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_author_feed(const char *actor)
+{
+    job j = {.kind = JOB_AUTHOR_FEED};
+
+    if (!actor || !actor[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.actor, sizeof j.actor, actor);
     return submit(&j);
 }
 
@@ -1609,6 +1668,13 @@ bool
 indigo_session_submit_post_search(const char *query)
 {
     (void) query;
+    return false;
+}
+
+bool
+indigo_session_submit_author_feed(const char *actor)
+{
+    (void) actor;
     return false;
 }
 

@@ -466,6 +466,34 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_actor a[3];
 
         memset(a, 0, sizeof a);
+        if (s->timeline == 8) {
+            /* A person's own posts: same rows as a post search, but the header
+             * names them and there is no query to type. */
+            indigo_post ps[2];
+
+            q->kind = INDIGO_SEARCH_AUTHOR;
+            indigo_copy_utf8(q->subject, sizeof q->subject, "rhi.example.social");
+            memset(ps, 0, sizeof ps);
+            snprintf(ps[0].uri, sizeof ps[0].uri, "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.feed.post/3kqz");
+            snprintf(ps[0].handle, sizeof ps[0].handle, "rhi.example.social");
+            snprintf(ps[0].display_name, sizeof ps[0].display_name, "Rhiannon");
+            snprintf(ps[0].text, sizeof ps[0].text,
+                     "Rivers before roads, always. A walk along the Wye at first light.");
+            snprintf(ps[0].reposted_by, sizeof ps[0].reposted_by, "Rhiannon Bear");
+            ps[0].reply_count = 12;
+            ps[0].repost_count = 34;
+            ps[0].like_count = 210;
+            snprintf(ps[1].uri, sizeof ps[1].uri, "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.feed.post/9d2f");
+            snprintf(ps[1].handle, sizeof ps[1].handle, "rhi.example.social");
+            snprintf(ps[1].display_name, sizeof ps[1].display_name, "Rhiannon");
+            snprintf(ps[1].text, sizeof ps[1].text,
+                     "Old stones and newer roads, and the argument about which came first.");
+            ps[1].is_reply = true;
+            ps[1].reply_count = 4;
+            ps[1].like_count = 61;
+            indigo_app_post_search_loaded(app, ps, 2);
+            return;
+        }
         if (s->timeline == 6 || s->timeline == 7) {
             /* Post search: same screen, but rows lead with the author and
              * the top screen shows the post rather than a profile. */
@@ -583,6 +611,7 @@ main(int argc, char **argv)
         {"search-following", INDIGO_SCREEN_SEARCH, false, 0, 0, 5, 0},
         {"post-search", INDIGO_SCREEN_SEARCH, false, 0, 0, 6, 0},
         {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0},
+        {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0},
     };
 
     if (argc != 2) {

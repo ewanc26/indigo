@@ -42,6 +42,7 @@ typedef enum {
     INDIGO_ACTION_BLOCK,
     INDIGO_ACTION_FOLLOWERS,
     INDIGO_ACTION_FOLLOWING,
+    INDIGO_ACTION_POSTS,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */
