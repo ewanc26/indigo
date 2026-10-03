@@ -7,6 +7,13 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- A person's own posts, from a Posts button on their profile. It reuses the
+  post list that post search fills, the way the followers and following lists
+  reuse the actor list: same rows, same navigation, same thread-opening on
+  SEL. Only the request differs. The header names them, since there is nothing
+  to type into an author's posts. Reposts carry their "Reposted by" line
+  because the timeline's conversion is reused. Bounded to 20; a profile's posts
+  are not paged, matching actor and post search.
 - Post search, as "Find posts" beside "Find people". It shares the search
   screen rather than adding one: same rows, same navigation, same header box.
   The results are posts rather than people, so they share storage with the

@@ -1859,6 +1859,48 @@ test_post_search(void)
     CHECK(strcmp(app.search.status, "No posts matched that.") == 0);
 }
 
+/* A person's posts reuse the post list that post search fills, reached from
+ * the profile. What matters is the subject travels with the request and the
+ * previous list is dropped rather than relabelled. */
+static void
+test_author_posts(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_post p[1];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    snprintf(app.profile.handle, sizeof app.profile.handle, "rhi.example.social");
+    app.profile.loaded = true;
+
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 216) == INDIGO_ACTION_POSTS);
+
+    indigo_app_open_author_posts(&app, app.profile.handle);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_AUTHOR);
+    CHECK(indigo_search_is_posts(&app.search));
+    /* No query box: there is nothing to type into an author's posts. */
+    CHECK(!indigo_search_is_typed(&app.search));
+    CHECK(strcmp(indigo_search_title(&app.search), "Posts") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_AUTHOR_FEED);
+
+    memset(p, 0, sizeof p);
+    snprintf(p[0].uri, sizeof p[0].uri, "at://did:plc:a/app.bsky.feed.post/7");
+    snprintf(p[0].text, sizeof p[0].text, "Rivers before roads.");
+    snprintf(p[0].handle, sizeof p[0].handle, "rhi.example.social");
+    indigo_app_post_search_loaded(&app, p, 1);
+    CHECK(app.search.count == 1);
+    CHECK(!app.search.loading);
+    CHECK(strcmp(indigo_search_selected_post(&app.search)->text, "Rivers before roads.") == 0);
+
+    /* Opening someone else's posts drops the first person's. */
+    indigo_app_open_author_posts(&app, "someone.else.example");
+    CHECK(app.search.count == 0);
+    CHECK(strcmp(app.search.subject, "someone.else.example") == 0);
+}
+
 int
 main(void)
 {
@@ -1908,6 +1950,7 @@ main(void)
     test_graph_guards();
     test_people_lists();
     test_post_search();
+    test_author_posts();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

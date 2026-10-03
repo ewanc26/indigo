@@ -121,6 +121,9 @@ bool indigo_session_submit_search(const char *query);
 /* Post search. Results are indigo_post, so this has its own result array and
  * its own event rather than sharing the actor search's. */
 bool indigo_session_submit_post_search(const char *query);
+/* One person's posts. Shares post search's result array and event, the way the
+ * people lists share the actor search's. */
+bool indigo_session_submit_author_feed(const char *actor);
 void indigo_session_post_search_results(const indigo_post **posts, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
  * array and its events, because the result type is the same. */

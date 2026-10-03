@@ -68,6 +68,9 @@ static const indigo_rect s_block_button = {164, 100, 142, 36};
  * profile already holds rather than being bare navigation labels. */
 static const indigo_rect s_followers_button = {14, 148, 142, 40};
 static const indigo_rect s_following_button = {164, 148, 142, 40};
+/* Full width below the counts: reading someone's posts is the main reason to
+ * open a profile, so it gets the width rather than a third of a row. */
+static const indigo_rect s_posts_button = {14, 196, 292, 40};
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
@@ -112,6 +115,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_followers_button;
     case INDIGO_ACTION_FOLLOWING:
         return s_following_button;
+    case INDIGO_ACTION_POSTS:
+        return s_posts_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -153,7 +158,8 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
         INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
     static const indigo_action profile_actions[] = {
     INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE, INDIGO_ACTION_BLOCK,
-    INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_BACK};
+    INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_POSTS,
+    INDIGO_ACTION_BACK};
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
@@ -460,6 +466,8 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
             indigo_canvas_text(c, 18, 84, 0.7f, s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                                "%.40s", s->status);
         } else if (!s->searched) {
+            /* Reached only for the two search modes: the people lists are
+             * requested on open, so they arrive loading, loaded or failed. */
             indigo_canvas_text(c, 18, 76, 0.7f, COL_TEXT_SOFT,
                                posts ? "Search posts by words in their text."
                                      : "Find people by name or handle.");
@@ -759,10 +767,14 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_rect(c, fg.x, fg.y, fg.w, fg.h, COL_PILL);
         indigo_canvas_text(c, fg.x + 10, fg.y + 5, 0.55f, COL_TEXT_SOFT, "Following");
         indigo_canvas_text(c, fg.x + 10, fg.y + 21, 0.7f, COL_TEXT, "%u", p->follows);
+
+        indigo_rect pb = indigo_layout_button_rect(INDIGO_ACTION_POSTS);
+        indigo_canvas_rect(c, pb.x, pb.y, pb.w, pb.h, COL_PILL_ACTIVE);
+        indigo_canvas_text(c, pb.x + 100, pb.y + 12, 0.7f, COL_TEXT, "Posts");
     }
 
     if (p->status[0] && p->loaded) {
-        indigo_canvas_text(c, 14, 150, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+        indigo_canvas_text(c, 14, 244, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                            "%.44s", p->status);
     }
 }

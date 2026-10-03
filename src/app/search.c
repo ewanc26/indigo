@@ -104,6 +104,8 @@ indigo_search_title(const indigo_search *s)
         return "Following";
     case INDIGO_SEARCH_POSTS:
         return "Post search";
+    case INDIGO_SEARCH_AUTHOR:
+        return "Posts";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
@@ -122,5 +124,5 @@ indigo_search_is_typed(const indigo_search *s)
 bool
 indigo_search_is_posts(const indigo_search *s)
 {
-    return s->kind == INDIGO_SEARCH_POSTS;
+    return s->kind == INDIGO_SEARCH_POSTS || s->kind == INDIGO_SEARCH_AUTHOR;
 }
