@@ -19,13 +19,13 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**Native 3DS shell. Milestone 1 (foundation) is in progress.**
+**Native 3DS shell. Milestone 1 (foundation) is ready for review.**
 
 | Check | State |
 |---|---|
 | Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host |
-| 3DS build with Wolfram linked | not yet run (devkitARM not installed on the development machine) |
-| Emulator run, screenshots of both screens | not yet run |
+| 3DS build with Wolfram linked | built with the `devkitpro/devkitarm` container; Wolfram symbols present in the link map |
+| Emulator run, screenshots of both screens | emulator-verified in Azahar 2126.1.2 (macOS arm64): boots, both screens draw, Wolfram reports linked ([screenshot](docs/screenshots/m1-azahar-home.png)) |
 | Real hardware | never run |
 
 Development and verification happen on an emulator first; nothing here has been tested on a real 3DS.
@@ -78,6 +78,8 @@ Indigo looks for Wolfram at `../wolfram/build-3ds` by default. Set `WOLFRAM_ROOT
 make run-emu                                  # Azahar at ~/Applications/Azahar.app
 make run-emu EMU=/path/to/citra               # Citra or Lime3DS as fallbacks
 ```
+
+Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` on macOS (the `sdmc:` root; the folder exists but is empty until Indigo writes a session or log in M2).
 
 Emulator results are emulator-verified only. TLS, certificates and DNS can behave differently from hardware, and emulator performance must never drive tuning. The 3D slider, sleep and the Home menu are left to the hardware pass.
 

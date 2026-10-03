@@ -17,6 +17,11 @@ publishes the section matching the version you pass it.
 - Touch-activated bottom-screen buttons with a shared hit-test.
 - CI for host checks and the devkitARM build, and `scripts/release.sh`.
 
+### Fixed
+- The original Makefile lacked the 3DS link rules and could not produce a `.3dsx`.
+- Requires the Wolfram fix aligning its `soc_ctx` buffer to a page; without it
+  Azahar aborts with a kernel assertion when `wf_platform_init` runs.
+
 ### Changed
 - The 3DS renderer now replays display lists instead of drawing directly, and
   clears the text buffer once per screen (it was cleared per string).
