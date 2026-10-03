@@ -50,7 +50,10 @@ ARCH := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS := -g -Wall -Wextra -O2 -mword-relocations           -ffunction-sections -fdata-sections           $(ARCH) $(WOLFRAM_CFLAGS)
 
 CXXFLAGS := $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++17
+CFLAGS += $(INCLUDE) -D__3DS__
+
 ASFLAGS := -g $(ARCH)
+LDFLAGS = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS := $(WOLFRAM_LIBS)         -lcitro2d -lcitro3d         -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz         -lctru -lm
 
@@ -81,6 +84,25 @@ export HFILES_BIN := $(addsuffix .h,$(subst .,_,$(BINFILES)))
 export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir))                   $(foreach dir,$(LIBDIRS),-I$(dir)/include)                   -I$(CURDIR)/$(BUILD)
 
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+export _3DSXDEPS := $(if $(NO_SMDH),,$(OUTPUT).smdh)
+
+ifeq ($(strip $(ICON)),)
+  icons := $(wildcard *.png)
+  ifneq (,$(findstring $(TARGET).png,$(icons)))
+    export APP_ICON := $(TOPDIR)/$(TARGET).png
+  else
+    ifneq (,$(findstring icon.png,$(icons)))
+      export APP_ICON := $(TOPDIR)/icon.png
+    endif
+  endif
+else
+  export APP_ICON := $(TOPDIR)/$(ICON)
+endif
+
+ifeq ($(strip $(NO_SMDH)),)
+  export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh
+endif
 
 ifneq ($(strip $(CPPFILES)),)
 export LD := $(CXX)
@@ -121,9 +143,14 @@ wolfram-3ds:
 
 else
 
-# 3ds_rules supplies the compiler, linker, dependency tracking and 3DSX/SMDH
-# packaging rules. Keeping this structure close to devkitPro's application
-# template makes Indigo easier to build with current toolchains.
+# 3ds_rules supplies the compiler, linker and 3DSX/SMDH packaging rules. The
+# two prerequisites below are what connect the object files to the final
+# executable; without them the recursive make has no targets.
+$(OUTPUT).3dsx : $(OUTPUT).elf $(_3DSXDEPS)
+
+$(OUTPUT).elf : $(OFILES)
+
+-include $(DEPSDIR)/*.d
 
 endif
 
