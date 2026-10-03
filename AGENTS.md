@@ -431,6 +431,14 @@ The Homebrew Menu recognises this as an application bundle and uses embedded SMD
 
 Do not add a CIA target merely because `.cia` files exist in the 3DS ecosystem. It is outside the current scope.
 
+That was re-checked against the tooling rather than left as a preference, and it holds. What the check found:
+
+- `3ds_rules` has no CIA target. It ships `%.smdh` (smdhtool), `%.3dsx` (3dsxtool) and `%.elf`, so a `.cia` means hand-writing a rule and owning `bannertool`/`makerom` in the build and in CI. Nothing in devkitPro's own templates does this.
+- A `.cia` gives a HOME Menu icon instead of launching from Homebrew Menu. That is the entire user-visible difference, and only for a console that can install one.
+- Installing a `.cia` means FBI or GodMode9, both of which need custom firmware; Luma3DS itself requires boot9strap. A self-signed third-party `.cia` is not installable on a stock console at all. The audience that already runs Indigo via Luma3DS can install a `.cia`, but they can equally copy a `.3dsx`, so shipping one widens the audience by exactly nothing.
+
+So a `.cia` buys a launcher icon in exchange for a Makefile rule, two extra tools, a required 256x256 title icon and a TitleID. Revisit only if Indigo wants a HOME Menu presence and CI can carry the extra toolchain.
+
 For development, 3dslink/netloader is a useful alternative to repeatedly removing the SD card. Do not hot-swap the SD card while homebrew is running.
 
 If an icon is added, wire it through the standard `APP_ICON`/SMDH path supplied by `3ds_rules` rather than inventing an application-specific packaging format.
