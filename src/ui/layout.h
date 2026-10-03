@@ -38,6 +38,8 @@ typedef enum {
     INDIGO_ACTION_TOGGLE,
     INDIGO_ACTION_SEND,
     INDIGO_ACTION_FOLLOW,
+    INDIGO_ACTION_MUTE,
+    INDIGO_ACTION_BLOCK,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

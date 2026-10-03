@@ -428,12 +428,19 @@ fill_social(indigo_app *app, const scenario *s)
              * a second press is visibly ignored rather than looking dead. */
             p->following = false;
             p->follow_busy = true;
+        } else if (s->timeline == 3) {
+            /* Muted: both toggles name the action they will perform. */
+            p->muted = true;
+            p->following = true;
+            indigo_copy_utf8(p->follow_uri, sizeof p->follow_uri,
+                             "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.graph.follow/"
+                             "self/3kqz9d2f7xw4");
         }
         p->followers = 1204;
         p->follows = 310;
         p->posts = 5821;
         p->loaded = true;
-        if (s->timeline != 1 && s->timeline != 2) {
+        if (s->timeline != 1 && s->timeline != 2 && s->timeline != 3) {
             p->following = true;
             indigo_copy_utf8(p->follow_uri, sizeof p->follow_uri,
                              "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.graph.follow/"
@@ -514,6 +521,7 @@ main(int argc, char **argv)
         {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0},
         {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0},
         {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0},
+        {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0},

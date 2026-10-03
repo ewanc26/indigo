@@ -29,6 +29,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_SEARCH_FAILED,
     INDIGO_SESSION_EVENT_FOLLOW_DONE,
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
+    INDIGO_SESSION_EVENT_GRAPH_DONE,
+    INDIGO_SESSION_EVENT_GRAPH_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -76,6 +78,9 @@ typedef struct {
      * the app already had and so reports none. */
     indigo_follow_action follow;
     char actor[INDIGO_PROFILE_DID_MAX];
+    /* GRAPH_*: what was attempted. A block reports its new record URI in
+     * `record_uri`; mute, unmute and unblock report none. */
+    indigo_graph_action graph;
 } indigo_session_event;
 
 /*
@@ -116,6 +121,10 @@ bool indigo_session_submit_search(const char *query);
  * ignored for a follow, which creates the record and reports its URI back. */
 bool indigo_session_submit_follow(indigo_follow_action action, const char *did,
                                   const char *follow_uri);
+/* Mute/unmute/block/unblock `did`. `block_uri` is required to unblock and
+ * ignored otherwise. */
+bool indigo_session_submit_graph(indigo_graph_action action, const char *did,
+                                 const char *block_uri);
 
 /* True while a job is running or its event has not been polled. */
 bool indigo_session_busy(void);

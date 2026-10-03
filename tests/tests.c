@@ -9,6 +9,7 @@
 #include "input/input.h"
 #include "ui/layout.h"
 #include "ui/wrap.h"
+#include "util/timefmt.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1588,6 +1589,153 @@ test_follow_guards(void)
     CHECK(app.profile.status_is_error);
 }
 
+/* seenAt is the only place Indigo needs a wire timestamp, so the formatter is
+ * pinned against known epochs rather than "now". */
+static void
+test_time_rfc3339(void)
+{
+    char buf[32];
+
+    CHECK(indigo_time_format_rfc3339(0, buf, sizeof buf));
+    CHECK(strcmp(buf, "1970-01-01T00:00:00Z") == 0);
+
+    CHECK(indigo_time_format_rfc3339(1791055895, buf, sizeof buf));
+    CHECK(strcmp(buf, "2026-10-03T19:31:35Z") == 0);
+
+    /* The last second before a leap day, then the leap day itself: the only
+     * date arithmetic here is gmtime's, but it is the part that would break. */
+    CHECK(indigo_time_format_rfc3339(1709164800, buf, sizeof buf));
+    CHECK(strcmp(buf, "2024-02-29T00:00:00Z") == 0);
+
+    /* Too small to hold the result is refused rather than truncated, because a
+     * half-written timestamp would be sent to the server as if it were whole. */
+    CHECK(!indigo_time_format_rfc3339(0, buf, 8));
+    CHECK(buf[0] == '\0');
+    CHECK(!indigo_time_format_rfc3339(0, NULL, sizeof buf));
+    CHECK(!indigo_time_format_rfc3339(0, buf, 0));
+}
+
+/* Mute is a flag and block is a record, so the two settle differently: block
+ * has to keep the URI an unblock deletes. */
+static void
+test_mute_block_toggle(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    snprintf(app.profile.did, sizeof app.profile.did, "did:plc:abc123");
+    app.profile.loaded = true;
+
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 80, 118) == INDIGO_ACTION_MUTE);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 230, 118) == INDIGO_ACTION_BLOCK);
+
+    indigo_app_toggle_mute(&app);
+    CHECK(app.profile.muted && app.profile.mute_busy);
+    CHECK(app.request_graph == INDIGO_GRAPH_MUTE);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_GRAPH);
+    indigo_app_graph_done(&app, INDIGO_GRAPH_MUTE, NULL);
+    CHECK(app.profile.muted && !app.profile.mute_busy);
+
+    indigo_app_toggle_mute(&app);
+    CHECK(!app.profile.muted);
+    indigo_app_take_request(&app, &f);
+    indigo_app_graph_done(&app, INDIGO_GRAPH_UNMUTE, NULL);
+    CHECK(!app.profile.muted && !app.profile.mute_busy);
+
+    /* A block reports the record it created; without it, unblock has nothing
+     * to delete and the button refuses. */
+    indigo_app_toggle_block(&app);
+    CHECK(app.profile.blocked && app.profile.block_busy);
+    CHECK(app.request_graph == INDIGO_GRAPH_BLOCK);
+    indigo_app_take_request(&app, &f);
+    indigo_app_graph_done(&app, INDIGO_GRAPH_BLOCK,
+                          "at://did:plc:abc/app.bsky.graph.block/self/1");
+    CHECK(app.profile.blocked && !app.profile.block_busy);
+    CHECK(strcmp(app.profile.block_uri,
+                 "at://did:plc:abc/app.bsky.graph.block/self/1") == 0);
+
+    indigo_app_toggle_block(&app);
+    CHECK(!app.profile.blocked);
+    CHECK(app.request_graph == INDIGO_GRAPH_UNBLOCK);
+    indigo_app_take_request(&app, &f);
+    indigo_app_graph_done(&app, INDIGO_GRAPH_UNBLOCK, NULL);
+    CHECK(!app.profile.blocked);
+    CHECK(app.profile.block_uri[0] == '\0');
+}
+
+static void
+test_mute_block_failure_reverts(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    snprintf(app.profile.did, sizeof app.profile.did, "did:plc:abc123");
+    app.profile.loaded = true;
+
+    indigo_app_toggle_mute(&app);
+    indigo_app_take_request(&app, &f);
+    indigo_app_graph_failed(&app, INDIGO_GRAPH_MUTE, "No connection.");
+    CHECK(!app.profile.muted);
+    CHECK(!app.profile.mute_busy);
+    CHECK(app.profile.status_is_error);
+
+    /* A failed block must not leave a half-made block record behind. */
+    indigo_app_toggle_block(&app);
+    indigo_app_take_request(&app, &f);
+    indigo_app_graph_failed(&app, INDIGO_GRAPH_BLOCK, "Rate limited.");
+    CHECK(!app.profile.blocked);
+    CHECK(!app.profile.block_busy);
+    CHECK(app.profile.block_uri[0] == '\0');
+}
+
+/* Blocked but holding no URI cannot unblock, so the press is refused before
+ * any request is made rather than failing at the server. */
+static void
+test_block_without_uri(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+    app.profile.blocked = true;
+    app.profile.block_uri[0] = '\0';
+
+    indigo_app_toggle_block(&app);
+    CHECK(app.profile.blocked);
+    CHECK(!app.profile.block_busy);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    CHECK(app.profile.status_is_error);
+}
+
+/* One job at a time: a second press while one is in flight is ignored. */
+static void
+test_graph_guards(void)
+{
+    indigo_app app;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+
+    app.profile.mute_busy = true;
+    indigo_app_toggle_mute(&app);
+    CHECK(!app.profile.muted);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    app.profile.mute_busy = false;
+
+    app.profile.block_busy = true;
+    indigo_app_toggle_block(&app);
+    CHECK(!app.profile.blocked);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+}
+
 int
 main(void)
 {
@@ -1631,6 +1779,11 @@ main(void)
     test_follow_toggle();
     test_follow_failure_reverts();
     test_follow_guards();
+    test_mute_block_toggle();
+    test_mute_block_failure_reverts();
+    test_block_without_uri();
+    test_graph_guards();
+    test_time_rfc3339();
     test_text_stays_on_screen();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
