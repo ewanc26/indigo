@@ -1,6 +1,6 @@
 # AGENTS.md — Indigo
 
-Indigo is a native Nintendo 3DS homebrew client for the AT Protocol / Bluesky.
+Indigo is a native Nintendo 3DS homebrew client for Bluesky. It is scoped to the Bluesky app: it is not a general AT Protocol client and speaks Bluesky's own lexicons (`app.bsky.*`). Accounts on any PDS must work, so sign-in takes a service URL (default `https://bsky.social`) and the session follows the account's own PDS.
 
 It is the 3DS counterpart to Cobalt, but it is **not a port of Cobalt**. The application, rendering, interaction model and platform integration must be designed for the 3DS.
 
@@ -242,8 +242,11 @@ src/
 ├── gfx/          platform-neutral display lists (canvas)
 ├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
-├── atproto/      Wolfram-backed protocol integration
-└── util/         logging and small helpers
+├── atproto/      Wolfram-backed integration; session.c runs login on a worker thread
+├── store/        session file codec and atomic store on sdmc
+└── util/         logging (file + stderr) and small helpers
+
+romfs/            cacert.pem, curated by tools/make_cabundle.py
 ```
 
 Keep modules responsibility-focused.
@@ -267,9 +270,11 @@ The initial useful client surface should be built incrementally:
 9. actor search;
 10. account/session management.
 
-Do not attempt to implement the entire AT Protocol ecosystem before the basic client is stable.
+Do not implement anything beyond the Bluesky app (other AT Protocol apps, custom lexicons, PDS administration). Custom PDS hosting for a Bluesky account is in scope.
 
 UI modules must not manually construct XRPC requests.
+
+Indigo contains no protocol-level code at all: no HTTP status or error-body interpretation, no credential formats, no TLS or entropy setup beyond calling Wolfram's hooks. If Wolfram lacks something, add it to Wolfram in its own PR.
 
 Feeds must be paginated and bounded. Do not keep an unbounded timeline in memory.
 

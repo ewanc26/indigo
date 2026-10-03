@@ -15,22 +15,27 @@ The goal is the same kind of hardware-first absurdity, but the implementation
 is deliberately different. Indigo is **not a port** of Cobalt. I am designing
 it around the 3DS's own hardware, input model and two-screen layout.
 
-The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality.
+The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality. Indigo is scoped to the Bluesky app, not general AT Protocol use; accounts on custom PDSes are supported.
 
 ## Status
 
-**Native 3DS shell. Milestone 1 (foundation) is ready for review.**
+**Milestone 2 (sign-in) is ready for review; it is stacked on Milestone 1.**
 
 | Check | State |
 |---|---|
-| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host |
-| 3DS build with Wolfram linked | built with the `devkitpro/devkitarm` container; Wolfram symbols present in the link map |
-| Emulator run, screenshots of both screens | emulator-verified in Azahar 2126.1.2 (macOS arm64): boots, both screens draw, Wolfram reports linked ([screenshot](docs/screenshots/m1-azahar-home.png)) |
+| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host (sign-in form, URL/handle normalising, session file codec and store, error mapping, log file) |
+| TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
+| Successful login, session save, resume on restart, sign-out | **not verified**: no app password was available. Covered by host tests only |
+| On-screen keyboard (swkbd) entry | **not verified** in the emulator |
 | Real hardware | never run |
 
-Development and verification happen on an emulator first; nothing here has been tested on a real 3DS.
+Sign-in takes a service URL (default `https://bsky.social`), a handle and an app password, and follows the account's PDS. The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
-The repository now has a proper devkitARM/libctru application lifecycle, GPU-backed citro2d rendering, native 3DS input handling and the Wolfram integration boundary. Bluesky session and feed functionality are not implemented yet.
+Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. The timeline, posting and the rest of the Bluesky app are not implemented yet.
+
+### Emulator sign-in autofill
+
+`make DEV_AUTOFILL=1` builds a binary that reads `sdmc:/3ds/indigo/autofill.txt` (`service=`, `handle=`, `password=` lines) and submits it, so the form can be exercised without the keyboard. It is for the emulator only and is never part of a normal build. Delete the file afterwards.
 
 ## Requirements
 
@@ -79,7 +84,7 @@ make run-emu                                  # Azahar at ~/Applications/Azahar.
 make run-emu EMU=/path/to/citra               # Citra or Lime3DS as fallbacks
 ```
 
-Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` on macOS (the `sdmc:` root; the folder exists but is empty until Indigo writes a session or log in M2).
+Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` on macOS (the `sdmc:` root; Indigo writes `3ds/indigo/indigo.log` and `session.dat` there).
 
 Emulator results are emulator-verified only. TLS, certificates and DNS can behave differently from hardware, and emulator performance must never drive tuning. The 3D slider, sleep and the Home menu are left to the hardware pass.
 
@@ -134,19 +139,19 @@ Platform code should use libctru for:
 - SDMC storage;
 - 3DS-specific facilities.
 
-citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the AT Protocol implementation and, once integrated, the transport stack.
+citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the protocol implementation and, once integrated, the transport stack.
 
 Do not introduce SDL merely to make Indigo resemble Cobalt. A 3DS-specific application is the point.
 
 ## Cobalt relationship
 
-Cobalt and Indigo share the same broad goal: putting native AT Protocol clients on hardware that was never designed for Bluesky.
+Cobalt and Indigo share the same broad goal: putting native Bluesky clients on hardware that was never designed for Bluesky.
 
 They do not share an application implementation.
 
 Cobalt is built around Wii U-specific facilities such as WUT, SDL2, the GamePad and Aroma. Indigo instead uses libctru, citro2d/citro3d, the 3DS's two physical screens, buttons, Circle Pad and touchscreen.
 
-Wolfram is the shared protocol layer between them because AT Protocol should not need to know which Nintendo console is running the client.
+Wolfram is the shared protocol layer between them because the protocol layer should not need to know which Nintendo console is running the client.
 
 ## Licence
 

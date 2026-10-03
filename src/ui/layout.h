@@ -14,6 +14,11 @@ typedef enum {
     INDIGO_ACTION_NONE = 0,
     INDIGO_ACTION_PROFILE,
     INDIGO_ACTION_HOME,
+    INDIGO_ACTION_FIELD_SERVICE,
+    INDIGO_ACTION_FIELD_HANDLE,
+    INDIGO_ACTION_FIELD_PASSWORD,
+    INDIGO_ACTION_SIGN_IN,
+    INDIGO_ACTION_SIGN_OUT,
 } indigo_action;
 
 typedef struct {
@@ -25,7 +30,7 @@ typedef struct {
 
 /* Touch targets on the bottom screen, shared by drawing and hit testing. */
 indigo_rect indigo_layout_button_rect(indigo_action action);
-indigo_action indigo_layout_hit(int touch_x, int touch_y);
+indigo_action indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y);
 
 /* Pure layout: fills both display lists, touches no platform API. */
 void indigo_layout_build(const indigo_app *app, const indigo_input *input,
