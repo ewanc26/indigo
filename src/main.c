@@ -199,6 +199,12 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_FOLLOW:
+        if (!indigo_session_submit_follow(app->request_follow ? INDIGO_FOLLOW : INDIGO_UNFOLLOW,
+                                          app->profile.did, app->profile.follow_uri)) {
+            indigo_app_follow_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -300,6 +306,12 @@ handle_events(indigo_app *app)
         }
         case INDIGO_SESSION_EVENT_SEARCH_FAILED:
             indigo_app_search_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_FOLLOW_DONE:
+            indigo_app_follow_done(app, ev.follow == INDIGO_FOLLOW, ev.record_uri);
+            break;
+        case INDIGO_SESSION_EVENT_FOLLOW_FAILED:
+            indigo_app_follow_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_NONE:
             break;

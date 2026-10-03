@@ -8,6 +8,11 @@
 #define INDIGO_NOTIFICATION_MAX 30
 #define INDIGO_PROFILE_BIO_MAX 320
 #define INDIGO_DRAFT_MAX 1024
+/* did:plc: identifiers are short, but a custom-domain did is whatever the
+ * domain's PLC record allows, so leave room rather than truncating one.
+ * Matches INDIGO_SEARCH_DID_MAX; the profile needs its own copy because
+ * social.h must not depend on search.h. */
+#define INDIGO_PROFILE_DID_MAX 128
 
 typedef enum {
     INDIGO_NOTE_OTHER = 0,
@@ -49,6 +54,14 @@ typedef struct {
     unsigned follows;
     unsigned posts;
     bool following;
+    /* Wolfram's getProfile gives both of these, and neither can be recovered
+     * from the fields above: follow needs the subject's did, and unfollow is
+     * by record URI with no handle to resolve it from. */
+    char did[INDIGO_PROFILE_DID_MAX];
+    char follow_uri[INDIGO_POST_URI_MAX];
+    /* Set while a follow/unfollow is in flight. The `following` flag flips
+     * immediately as an optimistic update and is put back if the job fails. */
+    bool follow_busy;
     bool loaded;
     bool loading;
     char status[INDIGO_POST_NOTE_MAX];

@@ -445,12 +445,28 @@ update_thread(indigo_app *app, const indigo_input *input)
 static void
 update_profile(indigo_app *app, const indigo_input *input)
 {
+    indigo_profile *p = &app->profile;
+
     if (input->back) {
         go_back(app);
     }
-    if (input->touch_pressed &&
-        indigo_layout_hit(app->screen, input->touch_x, input->touch_y) == INDIGO_ACTION_BACK) {
-        go_back(app);
+    /* Y follows, matching the post screen's use of Y for the primary action
+     * on the focused item. The button shows the state, so the same press
+     * unfollows once you are following. */
+    if ((input->confirm || input->like) && p->loaded && !p->loading) {
+        indigo_app_toggle_follow(app);
+    }
+    if (input->touch_pressed) {
+        switch (indigo_layout_hit(app->screen, input->touch_x, input->touch_y)) {
+        case INDIGO_ACTION_FOLLOW:
+            indigo_app_toggle_follow(app);
+            break;
+        case INDIGO_ACTION_BACK:
+            go_back(app);
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -928,6 +944,64 @@ indigo_app_search_failed(indigo_app *app, const char *message)
     app->search.loading = false;
     indigo_copy_utf8(app->search.status, sizeof app->search.status, message);
     app->search.status_is_error = true;
+}
+
+void
+indigo_app_toggle_follow(indigo_app *app)
+{
+    indigo_profile *p = &app->profile;
+
+    if (p->follow_busy || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    /* Following needs the did, which only a loaded profile carries. Guarded
+     * here rather than only at the call site, because main.c drives the
+     * request from app state this function has to have set up. */
+    if (!p->loaded || p->loading) {
+        return;
+    }
+    /* An unfollow needs the record URI. Without it there is nothing to
+     * delete, so the button stays out rather than failing after the press. */
+    if (p->following && !p->follow_uri[0]) {
+        indigo_copy_utf8(p->status, sizeof p->status, "Reload the profile first.");
+        p->status_is_error = true;
+        return;
+    }
+    p->following = !p->following;
+    p->follow_busy = true;
+    p->status[0] = '\0';
+    p->status_is_error = false;
+    app->request = INDIGO_REQUEST_FOLLOW;
+    /* app->profile.following is already the intended state; the failure path
+     * flips it back if the server disagrees. */
+    app->request_follow = p->following;
+}
+
+void
+indigo_app_follow_done(indigo_app *app, bool following, const char *follow_uri)
+{
+    indigo_profile *p = &app->profile;
+
+    p->follow_busy = false;
+    p->following = following;
+    if (following && follow_uri && follow_uri[0]) {
+        indigo_copy_utf8(p->follow_uri, sizeof p->follow_uri, follow_uri);
+    } else {
+        /* Unfollowed: the record is gone, so keeping the URI would make a
+         * second unfollow try to delete something that no longer exists. */
+        p->follow_uri[0] = '\0';
+    }
+}
+
+void
+indigo_app_follow_failed(indigo_app *app, const char *message)
+{
+    indigo_profile *p = &app->profile;
+
+    p->follow_busy = false;
+    p->following = !p->following;
+    indigo_copy_utf8(p->status, sizeof p->status, message);
+    p->status_is_error = true;
 }
 
 void

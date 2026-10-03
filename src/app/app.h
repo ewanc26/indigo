@@ -58,6 +58,7 @@ typedef enum {
     INDIGO_REQUEST_PUBLISH,
     INDIGO_REQUEST_EDIT_QUERY,
     INDIGO_REQUEST_SEARCH,
+    INDIGO_REQUEST_FOLLOW,
 } indigo_request_kind;
 
 typedef struct {
@@ -85,6 +86,9 @@ typedef struct {
     char request_post_uri[INDIGO_POST_URI_MAX];
     char request_post_cid[INDIGO_POST_CID_MAX];
     char request_undo_uri[INDIGO_POST_URI_MAX];
+    /* The state INDIGO_REQUEST_FOLLOW is asking for, so main.c can turn the
+     * optimistic toggle into a follow or an unfollow. */
+    bool request_follow;
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -140,6 +144,11 @@ void indigo_app_notifications_failed(indigo_app *app, const char *message);
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count);
 void indigo_app_search_failed(indigo_app *app, const char *message);
+/* Follow/unfollow. The toggle flips `following` at once and reverts it if the
+ * job fails, so the button responds to the press rather than to the network. */
+void indigo_app_toggle_follow(indigo_app *app);
+void indigo_app_follow_done(indigo_app *app, bool following, const char *follow_uri);
+void indigo_app_follow_failed(indigo_app *app, const char *message);
 /* The draft text came back from the keyboard. */
 void indigo_app_set_draft(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);
