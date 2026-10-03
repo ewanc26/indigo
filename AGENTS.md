@@ -533,6 +533,12 @@ When changing Wolfram's 3DS integration, build Wolfram's 3DS target as well as I
 Watch for:
 
 - missing devkitARM/devkitPro environment;
+- assuming a bare `make` that exits 0 built something. The outer make recurses
+  into `build/` and devkitPro's `3ds_rules`/`base_rules` define no `all` of
+  their own, so each half has to supply one; a missing rule fails silently as
+  "nothing to do" rather than an error. `buildinfo` is also the first real rule
+  in the file, so the default goal has to be set explicitly or `make` stamps
+  the header and stops. Check for `indigo.3dsx`, not the exit status;
 - missing citro2d/citro3d;
 - missing 3DS portlibs;
 - Wolfram built for the host instead of ARM;
