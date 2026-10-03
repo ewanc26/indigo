@@ -5,17 +5,15 @@
 #include <stddef.h>
 
 #define INDIGO_SESSION_FORMAT_VERSION 1
-#define INDIGO_SESSION_FIELD_MAX 2048
+#define INDIGO_SESSION_PAYLOAD_MAX 8192
 #define INDIGO_SESSION_FILE_MAX 12288
 
-/* Everything needed to resume a session, and nothing else. */
+/* The file envelope only: which service the user signed in to, and Wolfram's
+ * own serialised session (wf_session_data_to_json) as an opaque payload.
+ * Indigo never looks inside the payload. */
 typedef struct {
     char service[256];
-    char handle[256];
-    char did[256];
-    char pds_url[256];
-    char access_jwt[INDIGO_SESSION_FIELD_MAX];
-    char refresh_jwt[INDIGO_SESSION_FIELD_MAX];
+    char session[INDIGO_SESSION_PAYLOAD_MAX];
 } indigo_saved_session;
 
 typedef enum {

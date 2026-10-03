@@ -356,11 +356,7 @@ fill_session(indigo_saved_session *s)
 {
     memset(s, 0, sizeof *s);
     strcpy(s->service, "https://pds.example.org");
-    strcpy(s->handle, "ewancroft.uk");
-    strcpy(s->did, "did:plc:abcdefghijklmnopqrstuvwx");
-    strcpy(s->pds_url, "https://pds.example.org");
-    strcpy(s->access_jwt, "aaa.bbb.ccc");
-    strcpy(s->refresh_jwt, "ddd.eee.fff");
+    strcpy(s->session, "{\"accessJwt\":\"aaa\",\"refreshJwt\":\"ddd\"}");
 }
 
 static void
@@ -374,41 +370,38 @@ test_session_codec(void)
     CHECK(indigo_session_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
     CHECK(indigo_session_decode(buf, len, &out) == INDIGO_CODEC_OK);
     CHECK(strcmp(out.service, in.service) == 0);
-    CHECK(strcmp(out.handle, in.handle) == 0);
-    CHECK(strcmp(out.did, in.did) == 0);
-    CHECK(strcmp(out.refresh_jwt, in.refresh_jwt) == 0);
-    CHECK(strcmp(out.access_jwt, in.access_jwt) == 0);
+    CHECK(strcmp(out.session, in.session) == 0);
 
     /* Every truncation of a valid file is rejected, never half-loaded. */
     for (size_t cut = 0; cut < len; cut++) {
         indigo_codec_status st = indigo_session_decode(buf, cut, &out);
 
         CHECK(st != INDIGO_CODEC_OK);
-        CHECK(out.refresh_jwt[0] == '\0');
+        CHECK(out.session[0] == '\0');
     }
 
     CHECK(indigo_session_decode("", 0, &out) == INDIGO_CODEC_EMPTY);
     CHECK(indigo_session_decode("garbage\n", 8, &out) == INDIGO_CODEC_CORRUPT);
     CHECK(indigo_session_decode("indigo-session 9\nend\n", 21, &out) == INDIGO_CODEC_BAD_VERSION);
     {
-        const char *noend = "indigo-session 1\nservice=x\nhandle=y\nrefresh=z\n";
-        const char *ok = "indigo-session 1\nfuture=1\nservice=x\nhandle=y\nrefresh=z\nend\n";
+        const char *noend = "indigo-session 1\nservice=x\nsession=z\n";
+        const char *ok = "indigo-session 1\nfuture=1\nservice=x\nsession=z\nend\n";
 
         CHECK(indigo_session_decode(noend, strlen(noend), &out) == INDIGO_CODEC_CORRUPT);
         CHECK(indigo_session_decode(ok, strlen(ok), &out) == INDIGO_CODEC_OK);
     }
 
     /* Values that could forge extra lines are refused on the way in. */
-    strcpy(in.handle, "a\nrefresh=evil");
+    strcpy(in.session, "a\nrefresh=evil");
     CHECK(indigo_session_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_CORRUPT);
     fill_session(&in);
-    in.refresh_jwt[0] = '\0';
+    in.session[0] = '\0';
     CHECK(indigo_session_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_INCOMPLETE);
     fill_session(&in);
     CHECK(indigo_session_encode(&in, buf, 20, &len) == INDIGO_CODEC_TOO_BIG);
 
     indigo_session_wipe(&out);
-    CHECK(out.service[0] == '\0' && out.refresh_jwt[0] == '\0');
+    CHECK(out.service[0] == '\0' && out.session[0] == '\0');
 }
 
 static void
@@ -429,7 +422,7 @@ test_session_store(void)
     CHECK(indigo_session_store_save(path, &in) == INDIGO_STORE_OK);
     CHECK(indigo_session_store_save(path, &in) == INDIGO_STORE_OK); /* overwrite */
     CHECK(indigo_session_store_load(path, &out) == INDIGO_STORE_OK);
-    CHECK(strcmp(out.refresh_jwt, in.refresh_jwt) == 0);
+    CHECK(strcmp(out.session, in.session) == 0);
 
     CHECK(indigo_session_store_clear(path) == INDIGO_STORE_OK);
     CHECK(indigo_session_store_load(path, &out) == INDIGO_STORE_MISSING);

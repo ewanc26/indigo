@@ -274,6 +274,8 @@ Do not implement anything beyond the Bluesky app (other AT Protocol apps, custom
 
 UI modules must not manually construct XRPC requests.
 
+Indigo contains no protocol-level code at all: no HTTP status or error-body interpretation, no credential formats, no TLS or entropy setup beyond calling Wolfram's hooks. If Wolfram lacks something, add it to Wolfram in its own PR.
+
 Feeds must be paginated and bounded. Do not keep an unbounded timeline in memory.
 
 Network failures, expired sessions and malformed responses must become application states rather than crashes.

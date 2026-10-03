@@ -13,23 +13,20 @@ indigo_codec_status
 indigo_session_encode(const indigo_saved_session *s, char *out, size_t cap,
                       size_t *len)
 {
-    const char *vals[] = {s->service, s->handle, s->did, s->pds_url,
-                          s->access_jwt, s->refresh_jwt};
+    const char *vals[] = {s->service, s->session};
 
     for (size_t i = 0; i < sizeof vals / sizeof vals[0]; i++) {
         if (has_break(vals[i])) {
             return INDIGO_CODEC_CORRUPT;
         }
     }
-    if (!s->service[0] || !s->handle[0] || !s->refresh_jwt[0]) {
+    if (!s->service[0] || !s->session[0]) {
         return INDIGO_CODEC_INCOMPLETE;
     }
 
     int n = snprintf(out, cap,
-                     "indigo-session %d\nservice=%s\nhandle=%s\ndid=%s\npds=%s\n"
-                     "access=%s\nrefresh=%s\nend\n",
-                     INDIGO_SESSION_FORMAT_VERSION, s->service, s->handle,
-                     s->did, s->pds_url, s->access_jwt, s->refresh_jwt);
+                     "indigo-session %d\nservice=%s\nsession=%s\nend\n",
+                     INDIGO_SESSION_FORMAT_VERSION, s->service, s->session);
 
     if (n < 0 || (size_t) n >= cap) {
         return INDIGO_CODEC_TOO_BIG;
@@ -109,16 +106,8 @@ indigo_session_decode(const char *data, size_t len, indigo_saved_session *out)
 
         if (klen == 7 && memcmp(p, "service", 7) == 0) {
             ok = assign(out->service, sizeof out->service, v, vlen);
-        } else if (klen == 6 && memcmp(p, "handle", 6) == 0) {
-            ok = assign(out->handle, sizeof out->handle, v, vlen);
-        } else if (klen == 3 && memcmp(p, "did", 3) == 0) {
-            ok = assign(out->did, sizeof out->did, v, vlen);
-        } else if (klen == 3 && memcmp(p, "pds", 3) == 0) {
-            ok = assign(out->pds_url, sizeof out->pds_url, v, vlen);
-        } else if (klen == 6 && memcmp(p, "access", 6) == 0) {
-            ok = assign(out->access_jwt, sizeof out->access_jwt, v, vlen);
-        } else if (klen == 7 && memcmp(p, "refresh", 7) == 0) {
-            ok = assign(out->refresh_jwt, sizeof out->refresh_jwt, v, vlen);
+        } else if (klen == 7 && memcmp(p, "session", 7) == 0) {
+            ok = assign(out->session, sizeof out->session, v, vlen);
         } /* unknown keys are skipped so a newer file still loads */
         if (!ok) {
             indigo_session_wipe(out);
@@ -131,7 +120,7 @@ indigo_session_decode(const char *data, size_t len, indigo_saved_session *out)
         indigo_session_wipe(out);
         return INDIGO_CODEC_CORRUPT;
     }
-    if (!out->service[0] || !out->handle[0] || !out->refresh_jwt[0]) {
+    if (!out->service[0] || !out->session[0]) {
         indigo_session_wipe(out);
         return INDIGO_CODEC_INCOMPLETE;
     }

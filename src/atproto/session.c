@@ -4,6 +4,7 @@
 #include "util/log.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
@@ -42,16 +43,8 @@ static wf_agent *s_agent;
 static indigo_saved_session s_saved;
 
 static indigo_failure
-classify(wf_status st, const char *server_message)
+classify(wf_status st)
 {
-    if (server_message && server_message[0]) {
-        if (strstr(server_message, "RateLimit") || strstr(server_message, "rate limit")) {
-            return INDIGO_FAIL_RATE_LIMIT;
-        }
-        /* The server answered and refused: the credentials are the likely cause. */
-        return INDIGO_FAIL_BAD_CREDENTIALS;
-    }
-
     switch (st) {
     case WF_ERR_AUTH:
         return INDIGO_FAIL_BAD_CREDENTIALS;
@@ -118,10 +111,26 @@ new_agent(const char *service)
     return a;
 }
 
+/* The serialised session holds live tokens: scrub before freeing. */
+static void
+wipe_json(char *json)
+{
+    if (json) {
+        volatile char *p = json;
+
+        for (size_t n = strlen(json); n > 0; n--) {
+            *p++ = 0;
+        }
+        free(json);
+    }
+}
+
 static void
 remember(const char *service)
 {
     wf_session_data data;
+    wf_status st;
+    char *json = NULL;
 
     memset(&s_saved, 0, sizeof s_saved);
     if (wf_agent_get_session_data(s_agent, &data) != WF_OK) {
@@ -129,12 +138,16 @@ remember(const char *service)
         return;
     }
     snprintf(s_saved.service, sizeof s_saved.service, "%s", service);
-    snprintf(s_saved.handle, sizeof s_saved.handle, "%s", data.handle ? data.handle : "");
-    snprintf(s_saved.did, sizeof s_saved.did, "%s", data.did ? data.did : "");
-    snprintf(s_saved.pds_url, sizeof s_saved.pds_url, "%s", data.pds_url ? data.pds_url : "");
-    snprintf(s_saved.access_jwt, sizeof s_saved.access_jwt, "%s", data.access_jwt ? data.access_jwt : "");
-    snprintf(s_saved.refresh_jwt, sizeof s_saved.refresh_jwt, "%s", data.refresh_jwt ? data.refresh_jwt : "");
+    st = wf_session_data_to_json(&data, &json);
     wf_agent_session_data_free(&data);
+    if (st != WF_OK || !json || strlen(json) >= sizeof s_saved.session) {
+        indigo_log_warn("session too large or unserialisable; sign-in will not persist");
+        wipe_json(json);
+        indigo_session_wipe(&s_saved);
+        return;
+    }
+    memcpy(s_saved.session, json, strlen(json) + 1);
+    wipe_json(json);
 
     if (indigo_session_store_save(s_path, &s_saved) != INDIGO_STORE_OK) {
         indigo_log_warn("could not save the session; you will sign in again next launch");
@@ -159,7 +172,7 @@ do_login(const job *j)
     indigo_log_info("sign-in: contacting %s", j->service);
     st = wf_agent_login(s_agent, j->identifier, j->password);
     if (st != WF_OK) {
-        indigo_failure f = classify(st, wf_agent_last_error(s_agent));
+        indigo_failure f = classify(st);
 
         indigo_log_warn("sign-in failed: wolfram status %d (%s)", (int) st,
                         indigo_failure_tag(f));
@@ -200,24 +213,25 @@ do_resume(void)
         return;
     }
 
-    memset(&data, 0, sizeof data);
-    data.access_jwt = s_saved.access_jwt;
-    data.refresh_jwt = s_saved.refresh_jwt;
-    data.handle = s_saved.handle;
-    data.did = s_saved.did;
-    data.pds_url = s_saved.pds_url[0] ? s_saved.pds_url : NULL;
-    data.email_confirmed = -1;
-    data.email_auth_factor = -1;
-    data.active = -1;
+    st = wf_session_data_from_json(s_saved.session, strlen(s_saved.session), &data);
+    if (st != WF_OK) {
+        indigo_log_warn("saved session unreadable; discarded");
+        drop_agent();
+        indigo_session_wipe(&s_saved);
+        indigo_session_store_clear(s_path);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_NONE, NULL);
+        return;
+    }
 
-    indigo_log_info("resuming saved session for %s", s_saved.handle);
+    indigo_log_info("resuming saved session for %s", data.handle);
     st = wf_agent_resume(s_agent, &data);
+    wf_agent_session_data_free(&data);
     if (st == WF_OK) {
         /* Confirms the tokens still work; refreshes them if they expired. */
         st = wf_agent_get_session(s_agent);
     }
     if (st != WF_OK) {
-        indigo_failure f = classify(st, wf_agent_last_error(s_agent));
+        indigo_failure f = classify(st);
 
         indigo_log_warn("resume failed: wolfram status %d (%s)", (int) st,
                         indigo_failure_tag(f));
