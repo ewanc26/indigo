@@ -648,7 +648,8 @@ The current repository has:
 - native buttons, Circle Pad, C-Stick and touchscreen polling;
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
-- no Bluesky session/feed implementation yet.
+- sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost jobs on the session worker;
+- no avatars, threads, profiles, notifications or compose yet.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 

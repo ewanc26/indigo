@@ -74,6 +74,56 @@ indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
     return true;
 }
 
+bool
+indigo_canvas_span(indigo_canvas *canvas, unsigned start, unsigned end, uint32_t color)
+{
+    indigo_cmd *cmd;
+
+    if (canvas->count == 0 || canvas->cmds[canvas->count - 1].kind != INDIGO_CMD_TEXT ||
+        start >= end) {
+        return false;
+    }
+    if (canvas->span_count >= INDIGO_CANVAS_MAX_SPANS) {
+        canvas->overflow = true;
+        return false;
+    }
+    cmd = &canvas->cmds[canvas->count - 1];
+    if (cmd->span_count == 0) {
+        cmd->span_first = (uint16_t) canvas->span_count;
+    }
+    canvas->spans[canvas->span_count++] = (indigo_span) {
+        .start = (uint16_t) start, .end = (uint16_t) end, .color = color,
+    };
+    cmd->span_count++;
+    return true;
+}
+
+unsigned
+indigo_canvas_segments(const indigo_canvas *canvas, const indigo_cmd *cmd, indigo_segment *out)
+{
+    unsigned len = (unsigned) strlen(canvas->text + cmd->text_offset);
+    unsigned pos = 0;
+    unsigned n = 0;
+
+    for (unsigned i = 0; i < cmd->span_count; i++) {
+        const indigo_span *s = &canvas->spans[cmd->span_first + i];
+        unsigned end = s->end > len ? len : s->end;
+
+        if (s->start < pos || s->start >= end) {
+            continue;
+        }
+        if (s->start > pos) {
+            out[n++] = (indigo_segment) {(uint16_t) pos, s->start, cmd->color};
+        }
+        out[n++] = (indigo_segment) {s->start, (uint16_t) end, s->color};
+        pos = end;
+    }
+    if (pos < len || n == 0) {
+        out[n++] = (indigo_segment) {(uint16_t) pos, (uint16_t) len, cmd->color};
+    }
+    return n;
+}
+
 const char *
 indigo_canvas_cmd_text(const indigo_canvas *canvas, const indigo_cmd *cmd)
 {

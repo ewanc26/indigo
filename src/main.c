@@ -34,11 +34,48 @@ handle_edit(indigo_app *app, indigo_field f)
     memset(text, 0, sizeof text);
 }
 
+/* Undo the optimistic "busy" mark when an action did not happen. */
+static void
+action_undone(indigo_app *app, indigo_post_action action, const char *post_uri,
+              const char *undo_uri)
+{
+    switch (action) {
+    case INDIGO_POST_ACTION_LIKE:
+        indigo_timeline_set_like(&app->timeline, post_uri, "", false);
+        break;
+    case INDIGO_POST_ACTION_UNLIKE:
+        indigo_timeline_set_like(&app->timeline, post_uri, undo_uri, false);
+        break;
+    case INDIGO_POST_ACTION_REPOST:
+        indigo_timeline_set_repost(&app->timeline, post_uri, "", false);
+        break;
+    case INDIGO_POST_ACTION_UNREPOST:
+        indigo_timeline_set_repost(&app->timeline, post_uri, undo_uri, false);
+        break;
+    case INDIGO_POST_ACTION_NONE:
+        break;
+    }
+}
+
+static void
+post_action(indigo_app *app, indigo_post_action action)
+{
+    if (!indigo_session_submit_post_action(action, app->request_post_uri,
+                                           app->request_post_cid, app->request_undo_uri)) {
+        action_undone(app, action, app->request_post_uri, app->request_undo_uri);
+    }
+}
+
 static void
 handle_requests(indigo_app *app)
 {
     indigo_field f;
+    indigo_request_kind kind = indigo_app_peek_request(app);
 
+    /* Network work waits its turn: one job at a time on the worker. */
+    if (kind >= INDIGO_REQUEST_TIMELINE_REFRESH && indigo_session_busy()) {
+        return;
+    }
     switch (indigo_app_take_request(app, &f)) {
     case INDIGO_REQUEST_EDIT_FIELD:
         handle_edit(app, f);
@@ -53,6 +90,28 @@ handle_requests(indigo_app *app)
         if (indigo_session_submit_logout()) {
             indigo_app_begin_sign_in(app, "Signing out...");
         }
+        break;
+    case INDIGO_REQUEST_TIMELINE_REFRESH:
+        if (!indigo_session_submit_timeline(NULL)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_TIMELINE_MORE:
+        if (!indigo_session_submit_timeline(app->timeline.cursor)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_LIKE:
+        post_action(app, INDIGO_POST_ACTION_LIKE);
+        break;
+    case INDIGO_REQUEST_UNLIKE:
+        post_action(app, INDIGO_POST_ACTION_UNLIKE);
+        break;
+    case INDIGO_REQUEST_REPOST:
+        post_action(app, INDIGO_POST_ACTION_REPOST);
+        break;
+    case INDIGO_REQUEST_UNREPOST:
+        post_action(app, INDIGO_POST_ACTION_UNREPOST);
         break;
     case INDIGO_REQUEST_NONE:
         break;
@@ -76,6 +135,44 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_SIGNED_OUT:
             indigo_app_signed_out(app, "Signed out.");
             break;
+        case INDIGO_SESSION_EVENT_TIMELINE_PAGE: {
+            unsigned n;
+            const indigo_post *page = indigo_session_page(&n);
+
+            for (unsigned i = 0; page && i < n; i++) {
+                if (!indigo_timeline_append(&app->timeline, &page[i])) {
+                    break;
+                }
+            }
+            indigo_timeline_finish_fetch(&app->timeline, ev.cursor);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_TIMELINE_FAILED:
+            indigo_timeline_fail_fetch(&app->timeline, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_POST_ACTION_DONE:
+            if (ev.action == INDIGO_POST_ACTION_LIKE || ev.action == INDIGO_POST_ACTION_UNLIKE) {
+                indigo_timeline_set_like(&app->timeline, ev.post_uri, ev.record_uri, false);
+            } else {
+                indigo_timeline_set_repost(&app->timeline, ev.post_uri, ev.record_uri, false);
+            }
+            break;
+        case INDIGO_SESSION_EVENT_POST_ACTION_FAILED: {
+            const indigo_post *p;
+            const char *prev = "";
+
+            for (unsigned i = 0; i < app->timeline.count; i++) {
+                p = &app->timeline.posts[i];
+                if (strcmp(p->uri, ev.post_uri) == 0) {
+                    prev = (ev.action == INDIGO_POST_ACTION_UNLIKE) ? p->like_uri
+                           : (ev.action == INDIGO_POST_ACTION_UNREPOST) ? p->repost_uri
+                                                                        : "";
+                    break;
+                }
+            }
+            action_undone(app, ev.action, ev.post_uri, prev);
+            break;
+        }
         case INDIGO_SESSION_EVENT_NONE:
             break;
         }
@@ -132,7 +229,7 @@ main(void)
     indigo_input input;
     indigo_input_init(&input);
 
-    indigo_app app;
+    static indigo_app app; /* about 90KB: keep it off the stack */
     indigo_app_init(&app);
     app.wolfram_linked = indigo_atproto_available();
 
