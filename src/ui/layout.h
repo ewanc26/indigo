@@ -43,6 +43,7 @@ typedef enum {
     INDIGO_ACTION_FOLLOWERS,
     INDIGO_ACTION_FOLLOWING,
     INDIGO_ACTION_POSTS,
+    INDIGO_ACTION_PINNED,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

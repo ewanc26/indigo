@@ -66,6 +66,9 @@ typedef struct {
     bool muted;
     bool blocked;
     char block_uri[INDIGO_POST_URI_MAX];
+    /* pinnedPost.uri, or empty. getProfile already returns it, so keeping it
+     * costs nothing; opening it needs no extra request, only the URI. */
+    char pinned_uri[INDIGO_POST_URI_MAX];
     /* Set while a follow/unfollow is in flight. The `following` flag flips
      * immediately as an optimistic update and is put back if the job fails. */
     bool follow_busy;

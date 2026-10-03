@@ -6,7 +6,18 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Fixed
+- The profile screen's status line was drawn at y=244 on a 240-tall bottom
+  screen, so every follow, mute and block error message was invisible. The
+  button rows are now spaced so the status line has room, and the layout
+  spacing test asserts that room exists rather than only that each button is
+  on screen — which is what let this through.
+
 ### Added
+- A pinned post, from a Pinned button on the profile. It costs no request:
+  getProfile already returned pinnedPost.uri and Indigo was discarding it, and
+  opening a thread needs nothing more than the URI. The button is drawn
+  enabled only when the account actually has one.
 - A person's own posts, from a Posts button on their profile. It reuses the
   post list that post search fills, the way the followers and following lists
   reuse the actor list: same rows, same navigation, same thread-opening on
