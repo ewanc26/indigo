@@ -457,12 +457,6 @@ test_session_store(void)
 static void
 test_failures(void)
 {
-    CHECK(indigo_failure_from_http(401) == INDIGO_FAIL_BAD_CREDENTIALS);
-    CHECK(indigo_failure_from_http(400) == INDIGO_FAIL_BAD_CREDENTIALS);
-    CHECK(indigo_failure_from_http(429) == INDIGO_FAIL_RATE_LIMIT);
-    CHECK(indigo_failure_from_http(502) == INDIGO_FAIL_SERVER);
-    CHECK(indigo_failure_from_http(504) == INDIGO_FAIL_TIMEOUT);
-    CHECK(indigo_failure_from_http(418) == INDIGO_FAIL_OTHER);
 
     for (int f = INDIGO_FAIL_BAD_CREDENTIALS; f <= INDIGO_FAIL_OTHER; f++) {
         const char *m = indigo_failure_message((indigo_failure) f);

@@ -20,10 +20,5 @@ const char *indigo_failure_message(indigo_failure f);
 /* Stable short tag for the log file. */
 const char *indigo_failure_tag(indigo_failure f);
 
-/*
- * Classify an HTTP status from the server. 0 means the transport failed
- * before any response, which callers classify separately.
- */
-indigo_failure indigo_failure_from_http(int http_status);
 
 #endif

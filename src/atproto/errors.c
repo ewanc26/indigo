@@ -55,21 +55,3 @@ indigo_failure_tag(indigo_failure f)
     }
     return "other";
 }
-
-indigo_failure
-indigo_failure_from_http(int http_status)
-{
-    if (http_status == 400 || http_status == 401 || http_status == 403) {
-        return INDIGO_FAIL_BAD_CREDENTIALS;
-    }
-    if (http_status == 429) {
-        return INDIGO_FAIL_RATE_LIMIT;
-    }
-    if (http_status == 408 || http_status == 504) {
-        return INDIGO_FAIL_TIMEOUT;
-    }
-    if (http_status >= 500 && http_status <= 599) {
-        return INDIGO_FAIL_SERVER;
-    }
-    return INDIGO_FAIL_OTHER;
-}
