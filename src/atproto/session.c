@@ -659,6 +659,7 @@ do_profile(const job *j)
     indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
     indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
     indigo_copy_utf8(s_profile.block_uri, sizeof s_profile.block_uri, p.blocking);
+    indigo_copy_utf8(s_profile.pinned_uri, sizeof s_profile.pinned_uri, p.pinned_post_uri);
     s_profile.muted = p.muted;
     s_profile.blocked = p.blocking != NULL;
     s_profile.followers = count_of(p.followers_count);

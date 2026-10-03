@@ -431,10 +431,12 @@ fill_social(indigo_app *app, const scenario *s)
         } else if (s->timeline == 3) {
             /* Muted: both toggles name the action they will perform. */
             p->muted = true;
-            p->following = true;
-            indigo_copy_utf8(p->follow_uri, sizeof p->follow_uri,
-                             "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.graph.follow/"
-                             "self/3kqz9d2f7xw4");
+        } else if (s->timeline == 4) {
+            /* Pinned post: the URI arrives with the profile, so showing it
+             * costs no extra request. */
+            indigo_copy_utf8(p->pinned_uri, sizeof p->pinned_uri,
+                             "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.feed.post/"
+                             "3kqz9d2f7xw4");
         }
         p->followers = 1204;
         p->follows = 310;
@@ -597,6 +599,7 @@ main(int argc, char **argv)
         {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0},
         {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0},
         {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0},
+        {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0},

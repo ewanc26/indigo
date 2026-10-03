@@ -491,6 +491,14 @@ update_profile(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_POSTS:
             indigo_app_open_author_posts(app, p->handle);
             break;
+        case INDIGO_ACTION_PINNED:
+            /* Guarded here as well as by the disabled button: the action is
+             * always in the profile's hit list, so a touch on the blank spot
+             * where the pill would be still lands here. */
+            if (p->pinned_uri[0]) {
+                open_thread(app, p->pinned_uri);
+            }
+            break;
         case INDIGO_ACTION_BACK:
             go_back(app);
             break;

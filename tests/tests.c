@@ -166,6 +166,45 @@ test_buttons_spaced_and_on_screen(void)
         CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, (int) (a.x + a.w + 3), (int) a.y + 5) ==
               INDIGO_ACTION_NONE);
     }
+    /* The profile stacks five rows of buttons and still has to leave room for
+     * a status line. Asserting only that each rect is on screen would have
+     * missed a status line pushed past the bottom edge. */
+    {
+        static const indigo_action prof[] = {
+            INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE, INDIGO_ACTION_BLOCK,
+            INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_POSTS,
+            INDIGO_ACTION_PINNED, INDIGO_ACTION_BACK};
+        float lowest = 0.0f;
+
+        for (int i = 0; i < (int) (sizeof prof / sizeof prof[0]); i++) {
+            indigo_rect r = indigo_layout_button_rect(prof[i]);
+
+            CHECK(r.x >= 0 && r.x + r.w <= INDIGO_BOTTOM_WIDTH);
+            CHECK(r.y >= 0 && r.y + r.h <= INDIGO_BOTTOM_HEIGHT);
+            CHECK(r.h >= 34.0f);
+            for (int j = i + 1; j < (int) (sizeof prof / sizeof prof[0]); j++) {
+                CHECK(!overlap(r, indigo_layout_button_rect(prof[j])));
+            }
+            if (r.y + r.h > lowest) {
+                lowest = r.y + r.h;
+            }
+        }
+        /* Back sits in the header bar, so the row-based buttons end at Posts. */
+        float rows_lowest = 0.0f;
+
+        for (int i = 0; i < 7; i++) {
+            indigo_rect r = indigo_layout_button_rect(prof[i]);
+
+            if (r.y + r.h > rows_lowest) {
+                rows_lowest = r.y + r.h;
+            }
+        }
+        /* One 0.6-scale text line plus a little clearance. A status line
+         * pushed past the bottom edge is invisible, which is how the last
+         * version of this screen lost its error messages. */
+        CHECK(rows_lowest + 20.0f <= INDIGO_BOTTOM_HEIGHT);
+    }
+
     CHECK(indigo_layout_hit(INDIGO_SCREEN_HOME, 0, 0) == INDIGO_ACTION_NONE);
     CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 20) == INDIGO_ACTION_NONE);
     CHECK(indigo_layout_hit(INDIGO_SCREEN_MENU, 160, 20) == INDIGO_ACTION_NONE);
@@ -1761,8 +1800,8 @@ test_people_lists(void)
     app.profile.followers = 1204;
     app.profile.follows = 310;
 
-    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 80, 168) == INDIGO_ACTION_FOLLOWERS);
-    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 230, 168) == INDIGO_ACTION_FOLLOWING);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 80, 143) == INDIGO_ACTION_FOLLOWERS);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 230, 143) == INDIGO_ACTION_FOLLOWING);
 
     indigo_app_open_people(&app, INDIGO_SEARCH_FOLLOWERS, app.profile.handle);
     CHECK(app.screen == INDIGO_SCREEN_SEARCH);
@@ -1874,7 +1913,7 @@ test_author_posts(void)
     snprintf(app.profile.handle, sizeof app.profile.handle, "rhi.example.social");
     app.profile.loaded = true;
 
-    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 160, 216) == INDIGO_ACTION_POSTS);
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, 80, 183) == INDIGO_ACTION_POSTS);
 
     indigo_app_open_author_posts(&app, app.profile.handle);
     CHECK(app.screen == INDIGO_SCREEN_SEARCH);
@@ -1899,6 +1938,43 @@ test_author_posts(void)
     indigo_app_open_author_posts(&app, "someone.else.example");
     CHECK(app.search.count == 0);
     CHECK(strcmp(app.search.subject, "someone.else.example") == 0);
+}
+
+/* The pinned post costs no request: getProfile already returned the URI, and
+ * opening it needs nothing more. */
+static void
+test_pinned_post(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_rect r;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    snprintf(app.profile.handle, sizeof app.profile.handle, "rhi.example.social");
+    app.profile.loaded = true;
+
+    r = indigo_layout_button_rect(INDIGO_ACTION_PINNED);
+    /* Nothing pinned yet: the row is still on screen but holds nothing to
+     * open, so a touch there must not navigate anywhere. */
+    app.profile.pinned_uri[0] = '\0';
+    indigo_layout_hit(INDIGO_SCREEN_PROFILE, (int) (r.x + r.w / 2),
+                      (int) (r.y + r.h / 2));
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_PROFILE, (int) (r.x + r.w / 2),
+                            (int) (r.y + r.h / 2)) == INDIGO_ACTION_PINNED);
+
+    /* Pinned: opening it requests the thread and no extra fetch of our own. */
+    snprintf(app.profile.pinned_uri, sizeof app.profile.pinned_uri,
+             "at://did:plc:abc/app.bsky.feed.post/3kqz9d2f7xw4");
+    {
+        indigo_input in = {.touch_pressed = true,
+                           .touch_x = (int) (r.x + r.w / 2),
+                           .touch_y = (int) (r.y + r.h / 2)};
+
+        indigo_app_update(&app, &in);
+    }
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
 }
 
 int
@@ -1951,6 +2027,7 @@ main(void)
     test_people_lists();
     test_post_search();
     test_author_posts();
+    test_pinned_post();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

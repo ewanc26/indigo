@@ -59,18 +59,23 @@ static const indigo_rect s_query_button = {14, 6, 210, 30};
 /* Profile: the follow button is the screen's one action, so it gets the full
  * width a compose box uses rather than one of the four post-screen pills,
  * which the profile does not otherwise need. */
-static const indigo_rect s_follow_button = {14, 52, 292, 40};
+static const indigo_rect s_follow_button = {14, 44, 292, 36};
 /* Mute and block sit under Follow as a pair of halves, so the moderation
  * actions read as one group rather than two more full-width bars. */
-static const indigo_rect s_mute_button = {14, 100, 142, 36};
-static const indigo_rect s_block_button = {164, 100, 142, 36};
+static const indigo_rect s_mute_button = {14, 86, 142, 34};
+static const indigo_rect s_block_button = {164, 86, 142, 34};
 /* Followers and following open the people list, so they carry the counts the
  * profile already holds rather than being bare navigation labels. */
-static const indigo_rect s_followers_button = {14, 148, 142, 40};
-static const indigo_rect s_following_button = {164, 148, 142, 40};
-/* Full width below the counts: reading someone's posts is the main reason to
- * open a profile, so it gets the width rather than a third of a row. */
-static const indigo_rect s_posts_button = {14, 196, 292, 40};
+static const indigo_rect s_followers_button = {14, 126, 142, 34};
+static const indigo_rect s_following_button = {164, 126, 142, 34};
+/* Posts and the pinned post share the last row. The bottom screen is 240 tall
+ * and every row above is spoken for, so this is a pair rather than two full
+ * width bars, and the status line has to fit below it. */
+static const indigo_rect s_posts_button = {14, 166, 142, 34};
+static const indigo_rect s_pinned_button = {164, 166, 142, 34};
+/* 206 + one 0.6-scale text line clears the 240-tall bottom screen. The
+ * spacing test below pins that the button rows leave room for it. */
+#define PROFILE_STATUS_Y 206
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
@@ -117,6 +122,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_following_button;
     case INDIGO_ACTION_POSTS:
         return s_posts_button;
+    case INDIGO_ACTION_PINNED:
+        return s_pinned_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -159,7 +166,7 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     static const indigo_action profile_actions[] = {
     INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE, INDIGO_ACTION_BLOCK,
     INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_POSTS,
-    INDIGO_ACTION_BACK};
+    INDIGO_ACTION_PINNED, INDIGO_ACTION_BACK};
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
@@ -769,13 +776,18 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, fg.x + 10, fg.y + 21, 0.7f, COL_TEXT, "%u", p->follows);
 
         indigo_rect pb = indigo_layout_button_rect(INDIGO_ACTION_POSTS);
+
         indigo_canvas_rect(c, pb.x, pb.y, pb.w, pb.h, COL_PILL_ACTIVE);
-        indigo_canvas_text(c, pb.x + 100, pb.y + 12, 0.7f, COL_TEXT, "Posts");
+        indigo_canvas_text(c, pb.x + 10, pb.y + 11, 0.7f, COL_TEXT, "Posts");
+        /* Only meaningful when the profile actually has one, which is what
+         * disables it rather than drawing an empty label. */
+        action_pill(c, INDIGO_ACTION_PINNED, p->pinned_uri[0] != '\0', false, COL_PILL_ACTIVE,
+                    "Pinned");
     }
 
     if (p->status[0] && p->loaded) {
-        indigo_canvas_text(c, 14, 244, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
-                           "%.44s", p->status);
+        indigo_canvas_text(c, 14, PROFILE_STATUS_Y, 0.6f,
+                           p->status_is_error ? COL_ERROR : COL_TEXT_SOFT, "%.44s", p->status);
     }
 }
 
