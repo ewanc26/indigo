@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-static void
+static void __attribute__((format(printf, 2, 0)))
 indigo_log_v(const char *level, const char *format, va_list args)
 {
     fprintf(stderr, "[%s] ", level);

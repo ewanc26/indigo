@@ -1,0 +1,357 @@
+/*
+ * Host snapshot renderer. Replays Indigo's display lists into PNGs without a
+ * GPU or emulator. Glyphs are baked from a stand-in font, so text shapes and
+ * widths approximate the 3DS system font; use the emulator for pixel truth.
+ *
+ *   snapshot <output-dir>
+ */
+#include "app/app.h"
+#include "gfx/canvas.h"
+#include "input/input.h"
+#include "ui/layout.h"
+
+#include "snapshot_font.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define TEXT_SCALE_BASE 1.25f
+#define COMPOSITE_GAP 8
+
+typedef struct {
+    int w;
+    int h;
+    uint8_t *px; /* RGBA */
+} image;
+
+static image
+image_new(int w, int h)
+{
+    image img = {w, h, calloc((size_t) w * (size_t) h, 4)};
+
+    if (!img.px) {
+        fprintf(stderr, "out of memory\n");
+        exit(1);
+    }
+
+    for (int i = 0; i < w * h; i++) {
+        img.px[i * 4 + 3] = 255;
+    }
+
+    return img;
+}
+
+static void
+blend(image *img, int x, int y, uint32_t rgba, float coverage)
+{
+    if (x < 0 || y < 0 || x >= img->w || y >= img->h) {
+        return;
+    }
+
+    float a = coverage * (float) (rgba & 0xff) / 255.0f;
+    uint8_t *p = &img->px[((size_t) y * (size_t) img->w + (size_t) x) * 4];
+
+    for (int c = 0; c < 3; c++) {
+        float src = (float) ((rgba >> (24 - 8 * c)) & 0xff);
+        p[c] = (uint8_t) lroundf(src * a + (float) p[c] * (1.0f - a));
+    }
+}
+
+static void
+draw_rect(image *img, const indigo_cmd *cmd)
+{
+    int x0 = (int) lroundf(cmd->x);
+    int y0 = (int) lroundf(cmd->y);
+    int x1 = (int) lroundf(cmd->x + cmd->w);
+    int y1 = (int) lroundf(cmd->y + cmd->h);
+
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            blend(img, x, y, cmd->color, 1.0f);
+        }
+    }
+}
+
+static float
+sample(const snapshot_glyph *g, float sx, float sy)
+{
+    if (sx < 0 || sy < 0 || sx > (float) g->w - 1 || sy > (float) g->h - 1) {
+        return 0.0f;
+    }
+
+    int x0 = (int) sx;
+    int y0 = (int) sy;
+    int x1 = x0 + 1 < g->w ? x0 + 1 : x0;
+    int y1 = y0 + 1 < g->h ? y0 + 1 : y0;
+    float fx = sx - (float) x0;
+    float fy = sy - (float) y0;
+    const uint8_t *d = &snapshot_glyph_data[g->offset];
+    float top = (float) d[y0 * g->w + x0] * (1 - fx) + (float) d[y0 * g->w + x1] * fx;
+    float bot = (float) d[y1 * g->w + x0] * (1 - fx) + (float) d[y1 * g->w + x1] * fx;
+
+    return (top * (1 - fy) + bot * fy) / 255.0f;
+}
+
+static void
+draw_text(image *img, const char *text, const indigo_cmd *cmd)
+{
+    float scale = cmd->scale * TEXT_SCALE_BASE;
+    float pen = cmd->x;
+
+    for (const char *s = text; *s; s++) {
+        unsigned char ch = (unsigned char) *s;
+
+        if (ch < 32 || ch > 126) {
+            ch = '?';
+        }
+
+        const snapshot_glyph *g = &snapshot_glyphs[ch - 32];
+
+        if (g->w) {
+            int dx0 = (int) floorf(pen + (float) g->x * scale);
+            int dy0 = (int) floorf(cmd->y + (float) g->y * scale);
+            int dw = (int) ceilf((float) g->w * scale);
+            int dh = (int) ceilf((float) g->h * scale);
+
+            for (int y = 0; y < dh; y++) {
+                for (int x = 0; x < dw; x++) {
+                    float cov = sample(g, ((float) x + 0.5f) / scale - 0.5f,
+                                       ((float) y + 0.5f) / scale - 0.5f);
+
+                    if (cov > 0.0f) {
+                        blend(img, dx0 + x, dy0 + y, cmd->color, cov);
+                    }
+                }
+            }
+        }
+
+        pen += (float) g->advance * scale;
+    }
+}
+
+static image
+render(const indigo_canvas *canvas)
+{
+    image img = image_new(canvas->width, canvas->height);
+
+    for (unsigned i = 0; i < canvas->count; i++) {
+        const indigo_cmd *cmd = &canvas->cmds[i];
+
+        if (cmd->kind == INDIGO_CMD_RECT) {
+            draw_rect(&img, cmd);
+        } else {
+            draw_text(&img, indigo_canvas_cmd_text(canvas, cmd), cmd);
+        }
+    }
+
+    return img;
+}
+
+static uint32_t
+crc32_update(uint32_t crc, const uint8_t *data, size_t len)
+{
+    crc = ~crc;
+
+    for (size_t i = 0; i < len; i++) {
+        crc ^= data[i];
+
+        for (int k = 0; k < 8; k++) {
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+        }
+    }
+
+    return ~crc;
+}
+
+static void
+put32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t) (v >> 24);
+    p[1] = (uint8_t) (v >> 16);
+    p[2] = (uint8_t) (v >> 8);
+    p[3] = (uint8_t) v;
+}
+
+static void
+write_chunk(FILE *f, const char *type, const uint8_t *data, size_t len)
+{
+    uint8_t head[8];
+    uint8_t tail[4];
+    uint32_t crc;
+
+    put32(head, (uint32_t) len);
+    memcpy(head + 4, type, 4);
+    crc = crc32_update(0, head + 4, 4);
+    crc = crc32_update(crc, data, len);
+    put32(tail, crc);
+    fwrite(head, 1, 8, f);
+    fwrite(data, 1, len, f);
+    fwrite(tail, 1, 4, f);
+}
+
+/* Uncompressed (stored) deflate keeps the writer dependency-free. */
+static int
+write_png(const char *path, const image *img)
+{
+    FILE *f = fopen(path, "wb");
+
+    if (!f) {
+        return -1;
+    }
+
+    size_t row = 1 + (size_t) img->w * 3;
+    size_t raw_len = row * (size_t) img->h;
+    uint8_t *raw = malloc(raw_len);
+    size_t blocks = (raw_len + 65534) / 65535;
+    size_t z_len = 2 + raw_len + blocks * 5 + 4;
+    uint8_t *z = malloc(z_len);
+
+    if (!raw || !z) {
+        fclose(f);
+        free(raw);
+        free(z);
+        return -1;
+    }
+
+    for (int y = 0; y < img->h; y++) {
+        raw[(size_t) y * row] = 0;
+
+        for (int x = 0; x < img->w; x++) {
+            memcpy(&raw[(size_t) y * row + 1 + (size_t) x * 3],
+                   &img->px[((size_t) y * (size_t) img->w + (size_t) x) * 4], 3);
+        }
+    }
+
+    size_t zp = 0;
+    uint32_t a = 1;
+    uint32_t b = 0;
+
+    z[zp++] = 0x78;
+    z[zp++] = 0x01;
+
+    for (size_t off = 0; off < raw_len; off += 65535) {
+        size_t n = raw_len - off < 65535 ? raw_len - off : 65535;
+
+        z[zp++] = (off + n >= raw_len) ? 1 : 0;
+        z[zp++] = (uint8_t) (n & 0xff);
+        z[zp++] = (uint8_t) (n >> 8);
+        z[zp++] = (uint8_t) (~n & 0xff);
+        z[zp++] = (uint8_t) ((~n >> 8) & 0xff);
+        memcpy(z + zp, raw + off, n);
+        zp += n;
+    }
+
+    for (size_t i = 0; i < raw_len; i++) {
+        a = (a + raw[i]) % 65521u;
+        b = (b + a) % 65521u;
+    }
+
+    put32(z + zp, (b << 16) | a);
+    zp += 4;
+
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
+    uint8_t ihdr[13];
+
+    put32(ihdr, (uint32_t) img->w);
+    put32(ihdr + 4, (uint32_t) img->h);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    ihdr[10] = 0;
+    ihdr[11] = 0;
+    ihdr[12] = 0;
+
+    fwrite(sig, 1, 8, f);
+    write_chunk(f, "IHDR", ihdr, sizeof(ihdr));
+    write_chunk(f, "IDAT", z, zp);
+    write_chunk(f, "IEND", NULL, 0);
+
+    free(raw);
+    free(z);
+    return fclose(f);
+}
+
+/* Both screens as stacked on the console: bottom centred under the top. */
+static image
+composite(const image *top, const image *bottom)
+{
+    image out = image_new(top->w, top->h + COMPOSITE_GAP + bottom->h);
+    int bx = (top->w - bottom->w) / 2;
+
+    for (int y = 0; y < top->h; y++) {
+        memcpy(&out.px[(size_t) y * (size_t) out.w * 4], &top->px[(size_t) y * (size_t) top->w * 4],
+               (size_t) top->w * 4);
+    }
+
+    for (int y = 0; y < bottom->h; y++) {
+        memcpy(&out.px[((size_t) (top->h + COMPOSITE_GAP + y) * (size_t) out.w + (size_t) bx) * 4],
+               &bottom->px[(size_t) y * (size_t) bottom->w * 4], (size_t) bottom->w * 4);
+    }
+
+    return out;
+}
+
+typedef struct {
+    const char *name;
+    indigo_screen screen;
+    bool touching;
+    int touch_x;
+    int touch_y;
+} scenario;
+
+int
+main(int argc, char **argv)
+{
+    static const scenario scenarios[] = {
+        {"home", INDIGO_SCREEN_HOME, false, 0, 0},
+        {"profile-touch", INDIGO_SCREEN_PROFILE, true, 235, 146},
+    };
+
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s <output-dir>\n", argv[0]);
+        return 2;
+    }
+
+    for (size_t i = 0; i < sizeof(scenarios) / sizeof(scenarios[0]); i++) {
+        const scenario *s = &scenarios[i];
+        indigo_app app;
+        indigo_input input = {0};
+        static indigo_canvas top_canvas;
+        static indigo_canvas bottom_canvas;
+
+        indigo_app_init(&app);
+        app.screen = s->screen;
+        app.wolfram_linked = true;
+        input.touch_down = s->touching;
+        input.touch_x = s->touch_x;
+        input.touch_y = s->touch_y;
+
+        indigo_layout_build(&app, &input, &top_canvas, &bottom_canvas);
+
+        image top = render(&top_canvas);
+        image bottom = render(&bottom_canvas);
+        image both = composite(&top, &bottom);
+        const image *outputs[] = {&top, &bottom, &both};
+        const char *suffix[] = {"top", "bottom", "both"};
+
+        for (int k = 0; k < 3; k++) {
+            char path[1024];
+
+            snprintf(path, sizeof(path), "%s/%s-%s.png", argv[1], s->name, suffix[k]);
+
+            if (write_png(path, outputs[k]) != 0) {
+                fprintf(stderr, "could not write %s\n", path);
+                return 1;
+            }
+
+            printf("%s\n", path);
+        }
+
+        free(top.px);
+        free(bottom.px);
+        free(both.px);
+    }
+
+    return 0;
+}
