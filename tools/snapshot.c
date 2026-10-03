@@ -468,6 +468,41 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_actor a[3];
 
         memset(a, 0, sizeof a);
+        if (s->timeline == 9 || s->timeline == 10) {
+            /* Curated lists, then one list's members. The members reuse the
+             * actor rows; the lists have their own. */
+            if (s->timeline == 9) {
+                indigo_list ls[2];
+
+                q->kind = INDIGO_SEARCH_LISTS;
+                memset(ls, 0, sizeof ls);
+                snprintf(ls[0].name, sizeof ls[0].name, "Rivers");
+                snprintf(ls[0].description, sizeof ls[0].description,
+                         "People who walk the Welsh borders.");
+                snprintf(ls[0].uri, sizeof ls[0].uri,
+                         "at://did:plc:me/app.bsky.graph.list/riverfolk");
+                snprintf(ls[1].name, sizeof ls[1].name, "Old stones");
+                snprintf(ls[1].description, sizeof ls[1].description,
+                         "Megaliths, and the arguments about them.");
+                snprintf(ls[1].uri, sizeof ls[1].uri,
+                         "at://did:plc:me/app.bsky.graph.list/oldstones");
+                indigo_app_lists_loaded(app, ls, 2);
+            } else {
+                indigo_actor a[2];
+
+                q->kind = INDIGO_SEARCH_LIST_MEMBERS;
+                indigo_copy_utf8(q->subject, sizeof q->subject, "Rivers");
+                memset(a, 0, sizeof a);
+                snprintf(a[0].handle, sizeof a[0].handle, "rhi.example.social");
+                snprintf(a[0].display_name, sizeof a[0].display_name, "Rhiannon");
+                snprintf(a[0].did, sizeof a[0].did, "did:plc:rhiannon7wvx2m4qz6kbyt");
+                snprintf(a[1].handle, sizeof a[1].handle, "rhibear.example.social");
+                snprintf(a[1].display_name, sizeof a[1].display_name, "Rhiannon Bear");
+                snprintf(a[1].did, sizeof a[1].did, "did:plc:bear4kq8vz2n7xwm3");
+                indigo_app_search_loaded(app, a, 2);
+            }
+            return;
+        }
         if (s->timeline == 8) {
             /* A person's own posts: same rows as a post search, but the header
              * names them and there is no query to type. */
@@ -615,6 +650,8 @@ main(int argc, char **argv)
         {"post-search", INDIGO_SCREEN_SEARCH, false, 0, 0, 6, 0},
         {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0},
         {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0},
+        {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0},
+        {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0},
     };
 
     if (argc != 2) {

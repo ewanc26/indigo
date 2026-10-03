@@ -540,7 +540,7 @@ Watch for:
 - believing `make warnings` covers `tools/snapshot.c`. It builds only `src/`
   and `tests/`, so a snapshot scenario that does not compile is caught by
   `make snapshots` alone;
-- believing the host targets cover `src/atproto/session.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature or a missing include has passed all three and failed only the cross-build, three times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, and `wf_agent_get_author_feed_typed`'s `filter` argument. Run `make` for the console before calling a session change done;
+- believing the host targets cover `src/atproto/session.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, four times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, and `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`). Run `make` for the console before calling a session change done;
 - C/C++ linker selection errors;
 - New 3DS-only controls becoming mandatory;
 - unbounded feed/image allocations;
@@ -666,7 +666,7 @@ The current repository has:
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
-- threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following (`app/search` serves all five), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
+- threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members (`app/search` serves all seven), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
 - no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.

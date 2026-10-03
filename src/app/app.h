@@ -63,6 +63,8 @@ typedef enum {
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
     INDIGO_REQUEST_AUTHOR_FEED,
+    INDIGO_REQUEST_LISTS,
+    INDIGO_REQUEST_LIST_MEMBERS,
 } indigo_request_kind;
 
 typedef struct {
@@ -100,6 +102,8 @@ typedef struct {
     char request_subject[INDIGO_POST_NAME_MAX];
     /* Who INDIGO_REQUEST_AUTHOR_FEED is asking about. */
     char request_actor[INDIGO_POST_NAME_MAX];
+    /* Which list INDIGO_REQUEST_LIST_MEMBERS is asking for. */
+    char request_list_uri[INDIGO_POST_URI_MAX];
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -161,6 +165,11 @@ void indigo_app_search_failed(indigo_app *app, const char *message);
 void indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject);
 /* One person's posts. Reuses the post list that post search fills. */
 void indigo_app_open_author_posts(indigo_app *app, const char *actor);
+/* The signed-in account's curated lists, then one list's members. Both reuse
+ * the search screen; the members list reuses the actor rows. */
+void indigo_app_open_lists(indigo_app *app);
+void indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name);
+void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */
 void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count);

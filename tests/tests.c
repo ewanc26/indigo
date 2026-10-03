@@ -560,8 +560,8 @@ test_signin_flow(void)
     CHECK(strcmp(app.signin.account, "ewancroft.uk") == 0);
 
     /* Open the More menu the way the person does: with nothing selected it
-     * holds only the app actions, and Sign out is the fifth (Find people sits
-     * between Notifications and My profile). */
+     * holds only the app actions, and Sign out is the sixth (Find people and
+     * Find posts sit between Notifications and My profile). */
     in = (indigo_input) {0};
     r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
     in.touch_pressed = true;
@@ -569,14 +569,15 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 7);
+    CHECK(app.menu.count == 8);
     CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
-    CHECK(app.menu.items[5].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[4].label, "My profile") == 0);
+    CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
+    CHECK(app.menu.items[6].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[5].label, "My profile") == 0);
 
-    /* Sign out is the sixth item now that "Find posts" was added, so it sits
-     * one row below the window until the selection is moved onto it. */
-    for (unsigned i = 0; i < 5; i++) {
+    /* Sign out is the seventh item, so it sits below the window until the
+     * selection is moved onto it. */
+    for (unsigned i = 0; i < 6; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1043,8 +1044,8 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the six app actions. */
-    CHECK(menu.count == 10);
+    /* Three facet targets first, then the seven app actions. */
+    CHECK(menu.count == 11);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1053,7 +1054,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[9].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[10].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1071,7 +1072,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 10);
+    CHECK(app.menu.count == 11);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1092,7 +1093,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 7);
+    CHECK(menu.count == 8);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1100,12 +1101,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 7);
+    CHECK(menu.count == 8);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 7);
-    CHECK(strcmp(menu.items[4].label, "Your profile") == 0);
+    CHECK(menu.count == 8);
+    CHECK(strcmp(menu.items[5].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -1977,6 +1978,111 @@ test_pinned_post(void)
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
 }
 
+/* Curated lists reuse the search screen a third time: the lists themselves are
+ * a third row type, and a list's members are people, so they reuse the actor
+ * rows. What matters is the navigation chain stays honest -- a list row opens
+ * members, a member row opens a profile -- and that opening a second list
+ * drops the first's members rather than relabelling them. */
+static void
+test_lists(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_list lists[2];
+    indigo_actor members[2];
+    indigo_input in;
+    indigo_rect r;
+
+    indigo_app_init(&app);
+    indigo_app_sign_in_succeeded(&app, "ewancroft.uk");
+    /* Signing in asks for the timeline; take it so requests stay free. */
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+
+    /* Open the More menu the way the person does, then choose "Lists", which
+     * sits between "Find posts" and "My profile". */
+    r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+    in = (indigo_input) {.touch_pressed = true, .touch_x = (int) (r.x + 4),
+                         .touch_y = (int) (r.y + 4)};
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
+    /* Move to Lists (index 4) and confirm. */
+    for (unsigned i = 0; i < 4; i++) {
+        indigo_app_update(&app, &(indigo_input) {.down = true});
+    }
+    indigo_app_update(&app, &(indigo_input) {.confirm = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LISTS);
+    CHECK(indigo_search_is_lists(&app.search));
+    CHECK(!indigo_search_is_typed(&app.search));
+    CHECK(strcmp(indigo_search_title(&app.search), "Lists") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_LISTS);
+
+    memset(lists, 0, sizeof lists);
+    snprintf(lists[0].name, sizeof lists[0].name, "Rivers");
+    snprintf(lists[0].description, sizeof lists[0].description,
+             "People who walk the Welsh borders.");
+    snprintf(lists[0].uri, sizeof lists[0].uri,
+             "at://did:plc:me/app.bsky.graph.list/riverfolk");
+    snprintf(lists[1].name, sizeof lists[1].name, "Stones");
+    snprintf(lists[1].uri, sizeof lists[1].uri,
+             "at://did:plc:me/app.bsky.graph.list/oldstones");
+    indigo_app_lists_loaded(&app, lists, 2);
+    CHECK(app.search.count == 2);
+    CHECK(!app.search.loading);
+    CHECK(strcmp(indigo_search_selected_list(&app.search)->name, "Rivers") == 0);
+    CHECK(indigo_search_row_list(&app.search, 0, INDIGO_SEARCH_ROWS) != NULL);
+    CHECK(indigo_search_row_list(&app.search, 2, INDIGO_SEARCH_ROWS) == NULL);
+
+    /* SEL opens the selected list's members, carrying its name as the title. */
+    in = (indigo_input) {.refresh = true};
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LIST_MEMBERS);
+    CHECK(strcmp(indigo_search_title(&app.search), "Members") == 0);
+    CHECK(strcmp(app.search.subject, "Rivers") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_LIST_MEMBERS);
+    CHECK(strcmp(app.request_list_uri, "at://did:plc:me/app.bsky.graph.list/riverfolk") == 0);
+
+    /* Members are actors: the same loaded call and accessors as the people
+     * lists, because the result type is the same. */
+    memset(members, 0, sizeof members);
+    snprintf(members[0].handle, sizeof members[0].handle, "rhi.example.social");
+    snprintf(members[0].display_name, sizeof members[0].display_name, "Rhiannon");
+    snprintf(members[1].handle, sizeof members[1].handle, "rhibear.example.social");
+    indigo_app_search_loaded(&app, members, 2);
+    CHECK(app.search.count == 2);
+    CHECK(!app.search.loading);
+    CHECK(strcmp(indigo_search_selected(&app.search)->handle, "rhi.example.social") == 0);
+
+    /* SEL on a member opens their profile, not another list. */
+    in = (indigo_input) {.refresh = true};
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE);
+    CHECK(strcmp(app.request_post_uri, "rhi.example.social") == 0);
+
+    /* Back twice returns to the lists, which are still held: the lists array
+     * is not cleared by viewing members. */
+    indigo_app_update(&app, &(indigo_input) {.back = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LIST_MEMBERS);
+    indigo_app_update(&app, &(indigo_input) {.back = true});
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LISTS);
+    CHECK(app.search.count == 2);
+    CHECK(strcmp(indigo_search_selected_list(&app.search)->name, "Rivers") == 0);
+
+    /* Opening a different list drops the first's members. */
+    indigo_app_open_list_members(&app, lists[1].uri, lists[1].name);
+    CHECK(app.search.kind == INDIGO_SEARCH_LIST_MEMBERS);
+    CHECK(app.search.count == 0);
+    CHECK(app.search.loading);
+    CHECK(strcmp(app.search.subject, "Stones") == 0);
+}
+
 int
 main(void)
 {
@@ -2028,6 +2134,7 @@ main(void)
     test_post_search();
     test_author_posts();
     test_pinned_post();
+    test_lists();
     test_time_rfc3339();
     test_text_stays_on_screen();
 

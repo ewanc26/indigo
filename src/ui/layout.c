@@ -459,33 +459,49 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
     const indigo_search *s = &app->search;
     const indigo_actor *sel = indigo_search_selected(s);
     const indigo_post *psel = indigo_search_selected_post(s);
+    const indigo_list *lsel = indigo_search_selected_list(s);
     bool posts = indigo_search_is_posts(s);
+    bool lists = indigo_search_is_lists(s);
 
     /* SEL opens whatever the row is: a profile for a person, a thread for a
-     * post. Both read as "Open" here, so the hint is stated once. */
-    top_title(c, indigo_search_title(s), "A  Type   SEL  Open");
+     * post, a member list for a curated list. All read as "Open" here, so the
+     * hint is stated once. The lists have nothing to type, so the A hint is
+     * only offered where the header box takes typing. */
+    top_title(c, indigo_search_title(s),
+              indigo_search_is_typed(s) ? "A  Type   SEL  Open" : "SEL  Open");
     if (s->loading) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Searching...");
         return;
     }
-    if (posts ? !psel : !sel) {
+    if (posts ? !psel : lists ? !lsel : !sel) {
         if (s->status[0]) {
             indigo_canvas_text(c, 18, 84, 0.7f, s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                                "%.40s", s->status);
         } else if (!s->searched) {
-            /* Reached only for the two search modes: the people lists are
-             * requested on open, so they arrive loading, loaded or failed. */
+            /* Reached only for the two search modes: every other kind is
+             * requested on open, so those arrive loading, loaded or failed. */
             indigo_canvas_text(c, 18, 76, 0.7f, COL_TEXT_SOFT,
                                posts ? "Search posts by words in their text."
                                      : "Find people by name or handle.");
-            indigo_canvas_text(c, 18, 104, 0.6f, COL_TEXT_DIM,
-                               "Press A, or tap the box, to type.");
+            if (indigo_search_is_typed(s)) {
+                indigo_canvas_text(c, 18, 104, 0.6f, COL_TEXT_DIM,
+                                   "Press A, or tap the box, to type.");
+            }
         } else {
             indigo_canvas_text(c, 18, 90, 0.7f, COL_TEXT_SOFT, "No results.");
         }
         return;
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", s->selected + 1, s->count);
+    if (lists && s->kind == INDIGO_SEARCH_LISTS) {
+        indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s", lsel->name);
+        if (lsel->description[0]) {
+            top_paragraph(c, 18, 82, 0.6f, COL_TEXT_SOFT, 3, lsel->description);
+        }
+        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
+        indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open members");
+        return;
+    }
     if (posts) {
         indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
                            author_name(psel));
@@ -906,6 +922,19 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         unsigned idx = s->scroll + row;
         char title[96];
 
+        if (indigo_search_is_lists(s) && s->kind == INDIGO_SEARCH_LISTS) {
+            const indigo_list *l = indigo_search_row_list(s, row, INDIGO_SEARCH_ROWS);
+
+            if (!l) {
+                break;
+            }
+            /* A list row shows its description where a person row shows a
+             * handle: it is the one line that says what the list is for. */
+            snprintf(title, sizeof title, "%.30s", l->name);
+            list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
+                     l->description[0] ? l->description : "No description");
+            continue;
+        }
         if (indigo_search_is_posts(s)) {
             const indigo_post *p = indigo_search_row_post(s, row, INDIGO_SEARCH_ROWS);
 
@@ -939,8 +968,11 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
      * a 74px pill in the baked font. */
     action_pill(c, INDIGO_ACTION_AUTHOR,
                 posts ? indigo_search_selected_post(s) != NULL
-                      : indigo_search_selected(s) != NULL,
-                s->loading, COL_PILL_ACTIVE, posts ? "Thread" : "Profile");
+                      : indigo_search_is_lists(s) ? indigo_search_selected_list(s) != NULL
+                                                  : indigo_search_selected(s) != NULL,
+                s->loading, COL_PILL_ACTIVE,
+                posts ? "Thread"
+                      : s->kind == INDIGO_SEARCH_LISTS ? "Open" : "Profile");
 }
 
 static void

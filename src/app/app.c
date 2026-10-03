@@ -114,7 +114,25 @@ push_screen(indigo_app *app)
 static void
 go_back(indigo_app *app)
 {
-    app->screen = app->history_count ? app->history[--app->history_count] : INDIGO_SCREEN_HOME;
+    indigo_screen prev =
+        app->history_count ? app->history[--app->history_count] : INDIGO_SCREEN_HOME;
+
+    /* History holds screens, not search kinds, and the search screen serves
+     * seven of them. Returning from a list's members to the lists is the one
+     * case where the same screen is stacked on itself with a different kind:
+     * the members are actors in the same union the lists live in, so both
+     * the kind and the rows have to be restored by hand. */
+    if (prev == INDIGO_SCREEN_SEARCH && app->screen == INDIGO_SCREEN_SEARCH
+        && app->search.kind == INDIGO_SEARCH_LIST_MEMBERS && app->search.held_count > 0) {
+        app->search.kind = INDIGO_SEARCH_LISTS;
+        memcpy(app->search.results.lists, app->search.held_lists,
+               sizeof app->search.results.lists);
+        app->search.count = app->search.held_count;
+        app->search.selected = 0;
+        app->search.scroll = 0;
+        app->search.loading = false;
+    }
+    app->screen = prev;
 }
 
 indigo_timeline *
@@ -439,7 +457,6 @@ update_thread(indigo_app *app, const indigo_input *input)
                 open_profile(app, sel->handle);
             }
             break;
-            break;
         case INDIGO_ACTION_BACK:
             go_back(app);
             break;
@@ -627,6 +644,10 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         open_search(app, INDIGO_SEARCH_POSTS);
         break;
+    case INDIGO_MENU_LISTS:
+        go_back(app);
+        indigo_app_open_lists(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         go_back(app);
         open_profile(app, app->signin.account);
@@ -670,11 +691,46 @@ update_menu(indigo_app *app, const indigo_input *input)
     }
 }
 
+/* Open the search screen's selected row: a thread for a post, a member list
+ * for a curated list, a profile for a person. The list-members kind opens a
+ * profile through the member's handle; a list row itself carries only a URI,
+ * which open_profile cannot take. */
+static void
+open_search_selection(indigo_app *app)
+{
+    indigo_search *s = &app->search;
+
+    if (indigo_search_is_posts(s)) {
+        const indigo_post *p = indigo_search_selected_post(s);
+
+        if (p) {
+            open_thread(app, p->uri);
+        }
+    } else if (s->kind == INDIGO_SEARCH_LISTS) {
+        const indigo_list *l = indigo_search_selected_list(s);
+
+        if (l) {
+            indigo_app_open_list_members(app, l->uri, l->name);
+        }
+    } else if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
+        const indigo_actor *a = indigo_search_selected(s);
+
+        if (a) {
+            open_profile(app, a->handle);
+        }
+    } else {
+        const indigo_actor *a = indigo_search_selected(s);
+
+        if (a) {
+            open_profile(app, a->handle);
+        }
+    }
+}
+
 static void
 update_search(indigo_app *app, const indigo_input *input)
 {
     indigo_search *s = &app->search;
-    const indigo_actor *sel = indigo_search_selected(s);
 
     if (input->up) {
         indigo_search_move(s, -1, INDIGO_SEARCH_ROWS);
@@ -702,15 +758,7 @@ update_search(indigo_app *app, const indigo_input *input)
     }
     /* SEL already opens the selected person's profile on the thread screen. */
     if (input->refresh) {
-        if (indigo_search_is_posts(s)) {
-            const indigo_post *p = indigo_search_selected_post(s);
-
-            if (p) {
-                open_thread(app, p->uri);
-            }
-        } else if (sel) {
-            open_profile(app, sel->handle);
-        }
+        open_search_selection(app);
     }
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
@@ -728,15 +776,7 @@ update_search(indigo_app *app, const indigo_input *input)
             }
             break;
         case INDIGO_ACTION_AUTHOR:
-            if (indigo_search_is_posts(s)) {
-                const indigo_post *p = indigo_search_selected_post(s);
-
-                if (p) {
-                    open_thread(app, p->uri);
-                }
-            } else if (sel) {
-                open_profile(app, sel->handle);
-            }
+            open_search_selection(app);
             break;
         case INDIGO_ACTION_BACK:
             go_back(app);
@@ -1035,6 +1075,68 @@ indigo_app_open_author_posts(indigo_app *app, const char *actor)
     app->search.loading = true;
     indigo_copy_utf8(app->request_actor, sizeof app->request_actor, actor);
     app->request = INDIGO_REQUEST_AUTHOR_FEED;
+}
+
+void
+indigo_app_open_lists(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_LISTS;
+    indigo_search_clear(&app->search);
+    app->search.loading = true;
+    app->request = INDIGO_REQUEST_LISTS;
+}
+
+void
+indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name)
+{
+    indigo_search *s = &app->search;
+
+    if (!list_uri || !list_uri[0]) {
+        return;
+    }
+    /* Keep the lists that are being browsed: their members are actors and
+     * land in the same union, so without this the members would overwrite
+     * the lists and Back would return to a corrupted screen. */
+    if (s->kind == INDIGO_SEARCH_LISTS) {
+        memcpy(s->held_lists, s->results.lists, sizeof s->held_lists);
+        s->held_count = s->count;
+    }
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    s->kind = INDIGO_SEARCH_LIST_MEMBERS;
+    indigo_search_clear(s);
+    indigo_copy_utf8(s->subject, sizeof s->subject, name && name[0] ? name : "Members");
+    s->loading = true;
+    indigo_copy_utf8(app->request_list_uri, sizeof app->request_list_uri, list_uri);
+    app->request = INDIGO_REQUEST_LIST_MEMBERS;
+}
+
+void
+indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind != INDIGO_SEARCH_LISTS) {
+        return;
+    }
+    memset(s->results.lists, 0, sizeof s->results.lists);
+    s->count = 0;
+    s->selected = 0;
+    s->scroll = 0;
+    s->loading = false;
+    s->searched = true;
+    memset(s->held_lists, 0, sizeof s->held_lists);
+    s->held_count = 0;
+    for (unsigned i = 0; i < count && i < INDIGO_SEARCH_MAX; i++) {
+        s->results.lists[i] = lists[i];
+        s->count++;
+    }
+    if (s->count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status, "No lists yet.");
+        s->status_is_error = false;
+    }
 }
 
 void
