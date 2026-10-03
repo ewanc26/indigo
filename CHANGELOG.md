@@ -6,6 +6,8 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-03
+
 ### Added
 - Threads, profiles, notifications, compose and the More menu (M4): the top
   screen shows the thread with the focused post marked, a profile, or the
