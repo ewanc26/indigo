@@ -25,11 +25,11 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 |---|---|
 | Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host (sign-in form, URL/handle normalising, session file codec and store, error mapping, log file) |
 | TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
-| Successful login, session save, resume on restart, sign-out | **not verified**: no app password was available. Covered by host tests only |
+| Successful login to a custom PDS (eurosky.social), session save, timeline fetch | emulator-verified in Azahar: signed in, session saved, 12 posts fetched and shown on both screens ([screenshot](docs/screenshots/m3-timeline-emulator.png)). Resume on restart and sign-out are not yet exercised |
 | On-screen keyboard (swkbd) entry | **not verified** in the emulator |
 | Timeline model, wrapping, link spans, selection, paging triggers, like/repost state | verified on the host (684 checks); both screens rendered by the host snapshot renderer ([top and bottom](docs/screenshots/m3-snapshot-timeline.png), [scrolled](docs/screenshots/m3-snapshot-timeline-scrolled.png)), which are **not emulator output** |
 | M3 build boots in Azahar | emulator-verified: the sign-in screen still renders ([screenshot](docs/screenshots/m3-azahar-boot.png)) |
-| Live timeline fetch, paging, like and repost against the real service | **not verified**: no app password was available, so the worker jobs have only been cross-built, never run |
+| Paging, like and repost against the real service | **not verified** in the emulator yet |
 | Avatars | **not implemented** (deferred: no image decoder yet) |
 | Real hardware | never run |
 

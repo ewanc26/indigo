@@ -156,7 +156,7 @@ wipe_json(char *json)
 static void
 remember(const char *service)
 {
-    wf_session_data data;
+    wf_session_data data = {0};
     wf_status st;
     char *json = NULL;
 
@@ -219,7 +219,7 @@ static void
 do_resume(void)
 {
     indigo_store_status ss = indigo_session_store_load(s_path, &s_saved);
-    wf_session_data data;
+    wf_session_data data = {0};
     wf_status st;
     const char *who;
 
