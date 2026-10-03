@@ -57,7 +57,7 @@ indigo_atproto_shutdown(void)
 
     s_initialised = false;
     s_available = false;
-    indigo_log_info("AT Protocol layer shut down");
+    indigo_log_info("Bluesky layer shut down");
 }
 
 bool

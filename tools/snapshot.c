@@ -304,6 +304,7 @@ int
 main(int argc, char **argv)
 {
     static const scenario scenarios[] = {
+        {"signin", INDIGO_SCREEN_SIGNIN, false, 0, 0},
         {"home", INDIGO_SCREEN_HOME, false, 0, 0},
         {"profile-touch", INDIGO_SCREEN_PROFILE, true, 235, 146},
     };

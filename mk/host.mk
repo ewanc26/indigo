@@ -11,7 +11,7 @@ HOST_WARN := -std=c11 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wstrict-prot
 HOST_INC := -Isrc -Itools
 
 # Sources that never touch libctru/citro2d.
-HOST_SRCS := src/app/app.c src/gfx/canvas.c src/ui/layout.c src/util/log.c
+HOST_SRCS := src/app/app.c src/app/signin.c src/atproto/errors.c src/store/session_codec.c src/store/session_store.c src/gfx/canvas.c src/ui/layout.c src/util/log.c
 HOST_SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
 
 .PHONY: test warnings snapshots

@@ -7,6 +7,12 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Sign-in (M2): service/handle/app-password form on the touch screen, a
+  worker thread for login so the UI never blocks, a curated CA bundle in
+  romfs (`tools/make_cabundle.py`), a versioned session file with atomic
+  save and corrupt-file quarantine, auto-resume on launch, sign-out, clear
+  error messages, and a log file on the SD card.
+- `DEV_AUTOFILL=1` emulator-only build option.
 - Display-list canvas (`src/gfx`) and a pure layout module, so screens are
   laid out without any platform API and replayed by a backend.
 - Host unit tests (`make test`, ASan + UBSan, warnings as errors), a
