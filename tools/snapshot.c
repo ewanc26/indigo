@@ -438,6 +438,33 @@ fill_social(indigo_app *app, const scenario *s)
         n[2].kind = INDIGO_NOTE_FOLLOW;
         indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
         indigo_app_notifications_loaded(app, n, 3);
+    } else if (s->screen == INDIGO_SCREEN_SEARCH) {
+        indigo_search *q = &app->search;
+        indigo_actor a[3];
+
+        memset(a, 0, sizeof a);
+        indigo_copy_utf8(q->query, sizeof q->query, "rhi");
+        if (s->timeline == 1) {
+            indigo_copy_utf8(a[0].handle, sizeof a[0].handle, "rhi.example.social");
+            indigo_copy_utf8(a[0].display_name, sizeof a[0].display_name, "Rhiannon");
+            indigo_copy_utf8(a[0].did, sizeof a[0].did,
+                             "did:plc:rhiannon7wvx2m4qz6kbyt");
+            indigo_copy_utf8(a[1].handle, sizeof a[1].handle, "rhibear.example.social");
+            indigo_copy_utf8(a[1].display_name, sizeof a[1].display_name, "Rhiannon Bear");
+            indigo_copy_utf8(a[1].did, sizeof a[1].did, "did:plc:bear4kq8vz2n7xwm3");
+            indigo_copy_utf8(a[2].handle, sizeof a[2].handle, "rhidraws.example");
+            indigo_copy_utf8(a[2].display_name, sizeof a[2].display_name, "Rhi Draws");
+            indigo_copy_utf8(a[2].did, sizeof a[2].did, "did:plc:draws9mqx4v2k7b");
+            indigo_app_search_loaded(app, a, 3);
+            if (s->select < 3) {
+                q->selected = s->select;
+            }
+        } else if (s->timeline == 2) {
+            /* Searched, and nobody matched: not the same screen as untried. */
+            indigo_app_search_loaded(app, NULL, 0);
+        } else if (s->timeline == 3) {
+            indigo_app_search_failed(app, "Could not reach the server.");
+        }
     } else if (s->screen == INDIGO_SCREEN_COMPOSE) {
         indigo_compose *c = &app->compose;
 
@@ -475,6 +502,10 @@ main(int argc, char **argv)
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5},
         {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0},
         {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0},
+        {"search", INDIGO_SCREEN_SEARCH, false, 0, 0, 0, 0},
+        {"search-results", INDIGO_SCREEN_SEARCH, false, 0, 0, 1, 1},
+        {"search-none", INDIGO_SCREEN_SEARCH, false, 0, 0, 2, 0},
+        {"search-error", INDIGO_SCREEN_SEARCH, false, 0, 0, 3, 0},
     };
 
     if (argc != 2) {

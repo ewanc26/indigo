@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
 
@@ -23,6 +24,7 @@ typedef enum {
     INDIGO_SCREEN_NOTIFICATIONS,
     INDIGO_SCREEN_MENU,
     INDIGO_SCREEN_COMPOSE,
+    INDIGO_SCREEN_SEARCH,
 } indigo_screen;
 
 typedef enum {
@@ -54,6 +56,8 @@ typedef enum {
     INDIGO_REQUEST_NOTIFICATIONS,
     INDIGO_REQUEST_EDIT_DRAFT,
     INDIGO_REQUEST_PUBLISH,
+    INDIGO_REQUEST_EDIT_QUERY,
+    INDIGO_REQUEST_SEARCH,
 } indigo_request_kind;
 
 typedef struct {
@@ -90,6 +94,7 @@ typedef struct {
     indigo_profile profile;
     indigo_notifications notifications;
     indigo_compose compose;
+    indigo_search search;
     /* Where B goes back to; a short stack so thread -> profile -> back works. */
     indigo_screen history[6];
     unsigned history_count;
@@ -131,6 +136,10 @@ void indigo_app_profile_failed(indigo_app *app, const char *message);
 void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
                                      unsigned count);
 void indigo_app_notifications_failed(indigo_app *app, const char *message);
+/* The search query came back from the keyboard. */
+void indigo_app_set_query(indigo_app *app, const char *text);
+void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count);
+void indigo_app_search_failed(indigo_app *app, const char *message);
 /* The draft text came back from the keyboard. */
 void indigo_app_set_draft(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);
