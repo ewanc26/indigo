@@ -1,29 +1,42 @@
 #include "ui/ui.h"
+#include "gfx/canvas.h"
+#include "ui/layout.h"
 
 #include <citro2d.h>
-
-#include <stdio.h>
-
-#define TOP_WIDTH 400.0f
-#define TOP_HEIGHT 240.0f
-#define BOTTOM_WIDTH 320.0f
-#define BOTTOM_HEIGHT 240.0f
 
 static C3D_RenderTarget *s_top;
 static C3D_RenderTarget *s_bottom;
 static C2D_TextBuf s_text_buf;
 
-static bool
-indigo_ui_text(C2D_Text *text, const char *string)
-{
-    if (!s_text_buf) {
-        return false;
-    }
+static indigo_canvas s_top_canvas;
+static indigo_canvas s_bottom_canvas;
 
+static u32
+to_c2d(uint32_t rgba)
+{
+    return C2D_Color32((rgba >> 24) & 0xff, (rgba >> 16) & 0xff, (rgba >> 8) & 0xff,
+                       rgba & 0xff);
+}
+
+static void
+replay(const indigo_canvas *canvas)
+{
     C2D_TextBufClear(s_text_buf);
-    C2D_TextParse(text, s_text_buf, string);
-    C2D_TextOptimize(text);
-    return true;
+
+    for (unsigned i = 0; i < canvas->count; i++) {
+        const indigo_cmd *cmd = &canvas->cmds[i];
+
+        if (cmd->kind == INDIGO_CMD_RECT) {
+            C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
+            continue;
+        }
+
+        C2D_Text text;
+        C2D_TextParse(&text, s_text_buf, indigo_canvas_cmd_text(canvas, cmd));
+        C2D_TextOptimize(&text);
+        C2D_DrawText(&text, C2D_WithColor, cmd->x, cmd->y, 0.0f, cmd->scale, cmd->scale,
+                     to_c2d(cmd->color));
+    }
 }
 
 bool
@@ -55,68 +68,15 @@ indigo_ui_init(void)
 void
 indigo_ui_draw(const indigo_app *app, const indigo_input *input)
 {
-    C2D_Text title;
-    C2D_Text subtitle;
-    C2D_Text controls;
-    C2D_Text touch;
+    indigo_layout_build(app, input, &s_top_canvas, &s_bottom_canvas);
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-    C2D_TargetClear(s_top, C2D_Color32(18, 20, 26, 255));
     C2D_SceneBegin(s_top);
+    replay(&s_top_canvas);
 
-    C2D_DrawRectangle(0, 0, 0, TOP_WIDTH, 46, C2D_Color32(30, 34, 44, 255));
-
-    if (indigo_ui_text(&title, "Indigo")) {
-        C2D_DrawText(&title, C2D_WithColor, 18, 12, 0.0f, 1.0f, 1.0f,
-                     C2D_Color32(255, 255, 255, 255));
-    }
-
-    if (indigo_ui_text(&subtitle, "Native AT Protocol / Bluesky client")) {
-        C2D_DrawText(&subtitle, C2D_WithColor, 18, 62, 0.0f, 0.7f, 0.7f,
-                     C2D_Color32(220, 224, 232, 255));
-    }
-
-    if (indigo_ui_text(&controls,
-                       app->screen == INDIGO_SCREEN_HOME
-                           ? "A  Open profile\nB  Return home\nSTART  Exit"
-                           : "B  Return home\nSTART  Exit")) {
-        C2D_DrawText(&controls, C2D_WithColor, 18, 104, 0.0f, 0.8f, 0.8f,
-                     C2D_Color32(255, 255, 255, 255));
-    }
-
-    C2D_DrawText(&controls, C2D_WithColor, 18, 190, 0.0f, 0.65f, 0.65f,
-                 C2D_Color32(160, 168, 184, 255));
-
-    C2D_TargetClear(s_bottom, C2D_Color32(12, 14, 18, 255));
     C2D_SceneBegin(s_bottom);
-
-    C2D_DrawRectangle(0, 0, 0, BOTTOM_WIDTH, 42, C2D_Color32(30, 34, 44, 255));
-
-    if (indigo_ui_text(&touch, "Touch input")) {
-        C2D_DrawText(&touch, C2D_WithColor, 14, 10, 0.0f, 0.75f, 0.75f,
-                     C2D_Color32(255, 255, 255, 255));
-    }
-
-    char status[96];
-    snprintf(status, sizeof(status), "x: %d  y: %d  %s",
-             input->touch_x, input->touch_y,
-             input->touch_down ? "touching" : "not touching");
-
-    if (indigo_ui_text(&touch, status)) {
-        C2D_DrawText(&touch, C2D_WithColor, 14, 58, 0.0f, 0.7f, 0.7f,
-                     C2D_Color32(220, 224, 232, 255));
-    }
-
-    char sticks[96];
-    snprintf(sticks, sizeof(sticks), "Circle: %d, %d\nC-Stick: %d, %d",
-             input->circle_x, input->circle_y,
-             input->cstick_x, input->cstick_y);
-
-    if (indigo_ui_text(&touch, sticks)) {
-        C2D_DrawText(&touch, C2D_WithColor, 14, 104, 0.0f, 0.65f, 0.65f,
-                     C2D_Color32(180, 188, 204, 255));
-    }
+    replay(&s_bottom_canvas);
 
     C3D_FrameEnd(0);
 }

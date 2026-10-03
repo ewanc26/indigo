@@ -27,6 +27,7 @@ main(void)
 
     indigo_app app;
     indigo_app_init(&app);
+    app.wolfram_linked = indigo_atproto_available();
 
     while (aptMainLoop() && !indigo_app_should_quit(&app)) {
         hidScanInput();

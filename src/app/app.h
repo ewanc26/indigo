@@ -14,6 +14,7 @@ typedef enum {
 typedef struct {
     indigo_screen screen;
     bool quit_requested;
+    bool wolfram_linked;
 } indigo_app;
 
 void indigo_app_init(indigo_app *app);
