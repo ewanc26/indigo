@@ -445,19 +445,24 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
     const indigo_actor *sel = indigo_search_selected(s);
+    const indigo_post *psel = indigo_search_selected_post(s);
+    bool posts = indigo_search_is_posts(s);
 
+    /* SEL opens whatever the row is: a profile for a person, a thread for a
+     * post. Both read as "Open" here, so the hint is stated once. */
     top_title(c, indigo_search_title(s), "A  Type   SEL  Open");
     if (s->loading) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Searching...");
         return;
     }
-    if (!sel) {
+    if (posts ? !psel : !sel) {
         if (s->status[0]) {
             indigo_canvas_text(c, 18, 84, 0.7f, s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                                "%.40s", s->status);
         } else if (!s->searched) {
             indigo_canvas_text(c, 18, 76, 0.7f, COL_TEXT_SOFT,
-                               "Find people by name or handle.");
+                               posts ? "Search posts by words in their text."
+                                     : "Find people by name or handle.");
             indigo_canvas_text(c, 18, 104, 0.6f, COL_TEXT_DIM,
                                "Press A, or tap the box, to type.");
         } else {
@@ -466,6 +471,20 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         return;
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", s->selected + 1, s->count);
+    if (posts) {
+        indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
+                           author_name(psel));
+        indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", psel->handle);
+        draw_post_text(c, psel);
+        if (psel->embed_note[0]) {
+            indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", psel->embed_note);
+        }
+        indigo_canvas_text(c, 18, 214, 0.55f, COL_TEXT_DIM, "%u replies", psel->reply_count);
+        indigo_canvas_text(c, 118, 214, 0.55f, COL_TEXT_DIM, "%u reposts",
+                           psel->repost_count);
+        indigo_canvas_text(c, 218, 214, 0.55f, COL_TEXT_DIM, "%u likes", psel->like_count);
+        return;
+    }
     indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s",
                        sel->display_name[0] ? sel->display_name : sel->handle);
     indigo_canvas_text(c, 18, 82, 0.65f, COL_TEXT_DIM, "@%s", sel->handle);
@@ -841,13 +860,16 @@ static void
 build_bottom_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
+    bool posts = indigo_search_is_posts(s);
     indigo_rect q = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
 
     indigo_canvas_rect(c, q.x, q.y, q.w, q.h, s->query[0] ? COL_PILL_ACTIVE : COL_PILL);
     if (indigo_search_is_typed(s)) {
+        const char *hint = posts ? "Tap to type words" : "Tap to type a name";
+
         indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f,
                            s->query[0] ? COL_TEXT : COL_TEXT_DIM, "%s",
-                           s->query[0] ? s->query : "Tap to type a name");
+                           s->query[0] ? s->query : hint);
     } else {
         /* The followers and following lists have no query; the box names whose
          * list this is instead of inviting typing nothing would act on. */
@@ -858,24 +880,43 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
 
     for (unsigned row = 0; row < INDIGO_SEARCH_ROWS; row++) {
         unsigned idx = s->scroll + row;
-        const indigo_actor *it = indigo_search_row(s, row, INDIGO_SEARCH_ROWS);
         char title[96];
 
-        if (!it) {
-            break;
+        if (indigo_search_is_posts(s)) {
+            const indigo_post *p = indigo_search_row_post(s, row, INDIGO_SEARCH_ROWS);
+
+            if (!p) {
+                break;
+            }
+            /* A post row leads with its author, because the text is too long
+             * for one row to be identifiable by. */
+            snprintf(title, sizeof title, "%.30s",
+                     p->display_name[0] ? p->display_name : p->handle);
+            list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
+                     p->text);
+            continue;
         }
-        snprintf(title, sizeof title, "%.30s",
-                 it->display_name[0] ? it->display_name : it->handle);
-        list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
-                 it->handle);
+        {
+            const indigo_actor *it = indigo_search_row(s, row, INDIGO_SEARCH_ROWS);
+
+            if (!it) {
+                break;
+            }
+            snprintf(title, sizeof title, "%.30s",
+                     it->display_name[0] ? it->display_name : it->handle);
+            list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
+                     it->handle);
+        }
     }
     /* Only one pill: typing is the header box, and a second "A Type" pill at
      * the bottom would either overlap that box or need an action that means
      * something else to the touch handler. Same label as the thread screen's
      * author pill: SEL opens a profile there too, and "SEL Open" does not fit
      * a 74px pill in the baked font. */
-    action_pill(c, INDIGO_ACTION_AUTHOR, indigo_search_selected(s) != NULL, s->loading,
-                COL_PILL_ACTIVE, "Profile");
+    action_pill(c, INDIGO_ACTION_AUTHOR,
+                posts ? indigo_search_selected_post(s) != NULL
+                      : indigo_search_selected(s) != NULL,
+                s->loading, COL_PILL_ACTIVE, posts ? "Thread" : "Profile");
 }
 
 static void

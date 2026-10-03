@@ -658,8 +658,8 @@ The current repository has:
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
-- threads, profiles, notifications (marked seen), compose, the More menu, actor search, followers and following (`app/search` serves all three), and follow/unfollow, mute/unmute and block/unblock from a profile;
-- no avatars or media yet, and no paging on the search results.
+- threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, followers and following (`app/search` serves all four), and follow/unfollow, mute/unmute and block/unblock from a profile;
+- no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 

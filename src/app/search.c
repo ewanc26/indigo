@@ -55,7 +55,13 @@ indigo_search_move(indigo_search *s, int delta, unsigned rows)
 const indigo_actor *
 indigo_search_selected(const indigo_search *s)
 {
-    return s->selected < s->count ? &s->items[s->selected] : NULL;
+    return s->selected < s->count ? &s->results.actors[s->selected] : NULL;
+}
+
+const indigo_post *
+indigo_search_selected_post(const indigo_search *s)
+{
+    return s->selected < s->count ? &s->results.posts[s->selected] : NULL;
 }
 
 const indigo_actor *
@@ -67,7 +73,19 @@ indigo_search_row(const indigo_search *s, unsigned row, unsigned rows)
         return NULL;
     }
     index = s->scroll + row;
-    return index < s->count ? &s->items[index] : NULL;
+    return index < s->count ? &s->results.actors[index] : NULL;
+}
+
+const indigo_post *
+indigo_search_row_post(const indigo_search *s, unsigned row, unsigned rows)
+{
+    unsigned index;
+
+    if (rows == 0 || row >= rows) {
+        return NULL;
+    }
+    index = s->scroll + row;
+    return index < s->count ? &s->results.posts[index] : NULL;
 }
 
 bool
@@ -84,17 +102,25 @@ indigo_search_title(const indigo_search *s)
         return "Followers";
     case INDIGO_SEARCH_FOLLOWING:
         return "Following";
+    case INDIGO_SEARCH_POSTS:
+        return "Post search";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
     return "Search";
 }
 
-/* Only the search mode has something to type; the other two are a list around
- * one person, and offering a query box there would invite a search that
- * nothing acts on. */
+/* Only the two search modes have something to type. The people lists are a
+ * list around one person, and offering a query box there would invite a
+ * search that nothing acts on. */
 bool
 indigo_search_is_typed(const indigo_search *s)
 {
-    return s->kind == INDIGO_SEARCH_PEOPLE;
+    return s->kind == INDIGO_SEARCH_PEOPLE || s->kind == INDIGO_SEARCH_POSTS;
+}
+
+bool
+indigo_search_is_posts(const indigo_search *s)
+{
+    return s->kind == INDIGO_SEARCH_POSTS;
 }

@@ -37,6 +37,7 @@ typedef enum {
     JOB_FOLLOW,
     JOB_GRAPH,
     JOB_PEOPLE,
+    JOB_POST_SEARCH,
 } job_kind;
 
 typedef struct {
@@ -86,6 +87,11 @@ static indigo_notification s_notes[INDIGO_NOTIFICATION_MAX];
 static unsigned s_note_count;
 static indigo_actor s_actors[INDIGO_SEARCH_MAX];
 static unsigned s_actor_count;
+/* Post search keeps its own results: indigo_post is a different type from
+ * indigo_actor, and the screen shows one list at a time but still needs both
+ * to be valid until the next result arrives. */
+static indigo_post s_posts[INDIGO_SEARCH_MAX];
+static unsigned s_post_count;
 
 static indigo_failure
 classify(wf_status st)
@@ -796,6 +802,46 @@ do_people(const job *j)
 }
 
 static void
+do_post_search(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_post_list list;
+    char *next = NULL;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_search_posts_typed(s_agent, j->query, INDIGO_SEARCH_MAX, NULL, &list, &next);
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("post search failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_post_count = 0;
+    for (size_t i = 0; i < list.post_count && s_post_count < INDIGO_SEARCH_MAX; i++) {
+        if (fill_post(&list.posts[i], &s_posts[s_post_count])) {
+            s_post_count++;
+        }
+    }
+    /* Search results are bounded like actor search: a 3DS list that cannot show
+     * page two is not a list worth paging, so the cursor is dropped rather
+     * than kept for a page that will never be fetched. */
+    free(next);
+    wf_agent_post_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
+    ev.page_count = s_post_count;
+    indigo_log_info("post search '%s': %u", j->query, s_post_count);
+    publish_event(&ev);
+}
+
+static void
 do_follow(const job *j)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_FOLLOW_FAILED,
@@ -1072,6 +1118,9 @@ worker(void *arg)
         case JOB_PEOPLE:
             do_people(&j);
             break;
+        case JOB_POST_SEARCH:
+            do_post_search(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1263,6 +1312,18 @@ indigo_session_submit_search(const char *query)
 }
 
 bool
+indigo_session_submit_post_search(const char *query)
+{
+    job j = {.kind = JOB_POST_SEARCH};
+
+    if (!query) {
+        return false;
+    }
+    indigo_copy_utf8(j.query, sizeof j.query, query);
+    return submit(&j);
+}
+
+bool
 indigo_session_submit_follow(indigo_follow_action action, const char *did,
                              const char *follow_uri)
 {
@@ -1306,6 +1367,17 @@ indigo_session_submit_people(indigo_search_kind kind, const char *subject)
     }
     indigo_copy_utf8(j.actor, sizeof j.actor, subject);
     return submit(&j);
+}
+
+void
+indigo_session_post_search_results(const indigo_post **posts, unsigned *count)
+{
+    if (posts) {
+        *posts = s_posts;
+    }
+    if (count) {
+        *count = s_post_count;
+    }
 }
 
 const indigo_actor *
@@ -1531,6 +1603,20 @@ indigo_session_submit_people(indigo_search_kind kind, const char *subject)
     (void) kind;
     (void) subject;
     return false;
+}
+
+bool
+indigo_session_submit_post_search(const char *query)
+{
+    (void) query;
+    return false;
+}
+
+void
+indigo_session_post_search_results(const indigo_post **posts, unsigned *count)
+{
+    (void) posts;
+    (void) count;
 }
 
 const indigo_actor *

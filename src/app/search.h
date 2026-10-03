@@ -27,13 +27,14 @@ typedef struct {
     char did[INDIGO_SEARCH_DID_MAX];
 } indigo_actor;
 
-/* One screen serves three lists of people. They are the same list of the same
- * type reached three ways, so they share the screen, the rows and the
- * navigation rather than becoming three near-identical screens. */
+/* One screen serves four lists. The first three are lists of people and share
+ * the indigo_actor row; the fourth is a list of posts, which shares the screen
+ * and the navigation but not the result type. */
 typedef enum {
     INDIGO_SEARCH_PEOPLE = 0,
     INDIGO_SEARCH_FOLLOWERS,
     INDIGO_SEARCH_FOLLOWING,
+    INDIGO_SEARCH_POSTS,
 } indigo_search_kind;
 
 typedef struct {
@@ -42,7 +43,13 @@ typedef struct {
     char query[INDIGO_SEARCH_QUERY_MAX];
     indigo_search_kind kind;
     char subject[INDIGO_POST_NAME_MAX];
-    indigo_actor items[INDIGO_SEARCH_MAX];
+    /* Only one kind is ever on screen, and a post is roughly twenty times an
+     * actor (2KB of text and URIs against 300 bytes of names), so the results
+     * share storage rather than costing both. */
+    union {
+        indigo_actor actors[INDIGO_SEARCH_MAX];
+        indigo_post posts[INDIGO_SEARCH_MAX];
+    } results;
     unsigned count;
     unsigned selected;
     unsigned scroll;
@@ -60,10 +67,16 @@ bool indigo_search_select(indigo_search *s, unsigned index, unsigned rows);
 const indigo_actor *indigo_search_selected(const indigo_search *s);
 /* The result shown in visible row `row`, or NULL when that row is empty. */
 const indigo_actor *indigo_search_row(const indigo_search *s, unsigned row, unsigned rows);
+/* The same two for the post list. Reading the actor view while the kind is
+ * posts would reinterpret a post's first bytes as a name, so callers pick
+ * with indigo_search_is_posts(). */
+const indigo_post *indigo_search_selected_post(const indigo_search *s);
+const indigo_post *indigo_search_row_post(const indigo_search *s, unsigned row, unsigned rows);
 /* A search needs something to search for and must not already be running. */
 bool indigo_search_can_submit(const indigo_search *s);
 /* The screen title for this list, and whether the header box takes typing. */
 const char *indigo_search_title(const indigo_search *s);
 bool indigo_search_is_typed(const indigo_search *s);
+bool indigo_search_is_posts(const indigo_search *s);
 
 #endif

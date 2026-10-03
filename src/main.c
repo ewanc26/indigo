@@ -216,6 +216,11 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_POST_SEARCH:
+        if (!indigo_session_submit_post_search(app->search.query)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }
@@ -318,6 +323,14 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_SEARCH_FAILED:
             indigo_app_search_failed(app, indigo_failure_message(ev.failure));
             break;
+        case INDIGO_SESSION_EVENT_POST_SEARCH_PAGE: {
+            const indigo_post *posts;
+            unsigned pn;
+
+            indigo_session_post_search_results(&posts, &pn);
+            indigo_app_post_search_loaded(app, posts, pn);
+            break;
+        }
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:
             indigo_app_follow_done(app, ev.follow == INDIGO_FOLLOW, ev.record_uri);
             break;
