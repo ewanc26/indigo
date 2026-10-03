@@ -2,6 +2,7 @@
 #include "app/signin.h"
 #include "input/input.h"
 #include "ui/layout.h"
+#include "util/buildinfo.h"
 
 #include <string.h>
 
@@ -199,7 +200,12 @@ refresh_timeline(indigo_app *app)
         return;
     }
     indigo_timeline_begin_fetch(&app->timeline, true);
-    app->request = INDIGO_REQUEST_TIMELINE_REFRESH;
+    if (app->feed_uri[0]) {
+        /* A feed view refreshes its feed; the request fields still hold it. */
+        app->request = INDIGO_REQUEST_FEED;
+    } else {
+        app->request = INDIGO_REQUEST_TIMELINE_REFRESH;
+    }
 }
 
 static void
@@ -361,6 +367,18 @@ update_list(indigo_app *app, const indigo_input *input, indigo_timeline *t)
     }
 }
 
+/* A feed view's B returns to the picker it came from, and the home screen goes
+ * back to the Following timeline. */
+static void
+leave_feed(indigo_app *app)
+{
+    app->feed_uri[0] = '\0';
+    app->feed_name[0] = '\0';
+    go_back(app);
+    indigo_timeline_begin_fetch(&app->timeline, true);
+    app->request = INDIGO_REQUEST_TIMELINE_REFRESH;
+}
+
 static void
 update_home(indigo_app *app, const indigo_input *input)
 {
@@ -372,7 +390,11 @@ update_home(indigo_app *app, const indigo_input *input)
         open_thread(app, sel->uri);
     }
     if (input->back) {
-        open_menu(app);
+        if (app->feed_uri[0]) {
+            leave_feed(app);
+        } else {
+            open_menu(app);
+        }
     }
     if (input->refresh) {
         refresh_timeline(app);
@@ -402,7 +424,12 @@ update_home(indigo_app *app, const indigo_input *input)
             refresh_timeline(app);
             break;
         case INDIGO_ACTION_MENU:
-            open_menu(app);
+            /* The bottom-right button does what B does on this screen. */
+            if (app->feed_uri[0]) {
+                leave_feed(app);
+            } else {
+                open_menu(app);
+            }
             break;
         default:
             break;
@@ -410,7 +437,11 @@ update_home(indigo_app *app, const indigo_input *input)
     }
     if (app->request == INDIGO_REQUEST_NONE && indigo_timeline_wants_page(t)) {
         indigo_timeline_begin_fetch(t, false);
-        app->request = INDIGO_REQUEST_TIMELINE_MORE;
+        if (app->feed_uri[0]) {
+            app->request = INDIGO_REQUEST_FEED;
+        } else {
+            app->request = INDIGO_REQUEST_TIMELINE_MORE;
+        }
     }
 }
 
@@ -648,6 +679,10 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         indigo_app_open_lists(app);
         break;
+    case INDIGO_MENU_FEEDS:
+        go_back(app);
+        indigo_app_open_feeds(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         go_back(app);
         open_profile(app, app->signin.account);
@@ -711,6 +746,12 @@ open_search_selection(indigo_app *app)
 
         if (l) {
             indigo_app_open_list_members(app, l->uri, l->name);
+        }
+    } else if (s->kind == INDIGO_SEARCH_FEEDS) {
+        const indigo_list *f = indigo_search_selected_list(s);
+
+        if (f) {
+            indigo_app_open_feed(app, f->uri, f->name);
         }
     } else if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
         const indigo_actor *a = indigo_search_selected(s);
@@ -1086,6 +1127,61 @@ indigo_app_open_lists(indigo_app *app)
     indigo_search_clear(&app->search);
     app->search.loading = true;
     app->request = INDIGO_REQUEST_LISTS;
+}
+
+void
+indigo_app_open_feeds(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_FEEDS;
+    indigo_search_clear(&app->search);
+    app->search.loading = true;
+    app->request = INDIGO_REQUEST_FEEDS;
+}
+
+void
+indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *name)
+{
+    if (!feed_uri || !feed_uri[0]) {
+        return;
+    }
+    /* The picker stays on the search screen; the feed shows on the home
+     * screen, so Back lands on the picker again. */
+    push_screen(app);
+    indigo_copy_utf8(app->feed_uri, sizeof app->feed_uri, feed_uri);
+    indigo_copy_utf8(app->feed_name, sizeof app->feed_name,
+                     name && name[0] ? name : "Feed");
+    indigo_copy_utf8(app->request_feed_uri, sizeof app->request_feed_uri, feed_uri);
+    indigo_copy_utf8(app->request_feed_name, sizeof app->request_feed_name,
+                     name && name[0] ? name : "Feed");
+    app->screen = INDIGO_SCREEN_HOME;
+    indigo_timeline_begin_fetch(&app->timeline, true);
+    app->request = INDIGO_REQUEST_FEED;
+}
+
+void
+indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind != INDIGO_SEARCH_FEEDS) {
+        return;
+    }
+    memset(s->results.lists, 0, sizeof s->results.lists);
+    s->count = 0;
+    s->selected = 0;
+    s->scroll = 0;
+    s->loading = false;
+    s->searched = true;
+    for (unsigned i = 0; i < count && i < INDIGO_SEARCH_MAX; i++) {
+        s->results.lists[i] = feeds[i];
+        s->count++;
+    }
+    if (s->count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status, "No saved feeds.");
+        s->status_is_error = false;
+    }
 }
 
 void

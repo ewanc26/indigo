@@ -8,4 +8,5 @@ build-host/
 *.3ds
 *.map
 compile_commands.json
+src/util/buildinfo_gen.h
 .DS_Store

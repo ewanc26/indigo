@@ -2,7 +2,23 @@
 # Indigo — native Nintendo 3DS homebrew
 #---------------------------------------------------------------------------------
 
-HOST_GOALS := test warnings snapshots
+# Project root, independent of CURDIR (which flips between outer and inner make).
+PROJECT_ROOT := $(abspath $(dir $(abspath $(firstword $(MAKEFILE_LIST)))))
+
+# Build identity, stamped by the buildinfo target below. This target runs in the
+# outer make and does not require devkitARM.
+BUILDINFO := $(PROJECT_ROOT)/src/util/buildinfo_gen.h
+
+.PHONY: buildinfo
+
+buildinfo:
+	@c=$$(git -C $(PROJECT_ROOT) describe --tags --always --dirty 2>/dev/null || echo unknown); \
+	n=$$(git -C $(PROJECT_ROOT) rev-list --count HEAD 2>/dev/null || echo 0); \
+	d=$$(date +%Y-%m-%d); \
+	printf '#pragma once\n#define INDIGO_BUILD_COMMIT "%s"\n#define INDIGO_BUILD_NUMBER %s\n#define INDIGO_BUILD_DATE "%s"\n' "$$c" "$$n" "$$d" > $(BUILDINFO).tmp; \
+	if cmp -s $(BUILDINFO).tmp $(BUILDINFO); then rm $(BUILDINFO).tmp; else mv $(BUILDINFO).tmp $(BUILDINFO); echo "buildinfo ... $$n $$c"; fi
+
+HOST_GOALS := test warnings snapshots buildinfo
 ifneq ($(filter $(HOST_GOALS),$(MAKECMDGOALS)),)
 include mk/host.mk
 else
@@ -118,7 +134,7 @@ else
 export LD := $(CC)
 endif
 
-.PHONY: all clean run run-emu wolfram-3ds build-3ds
+.PHONY: all clean run run-emu wolfram-3ds build-3ds test warnings snapshots
 
 # Emulator used by run-emu. Override with EMU=/path/to/emulator.
 EMU ?= $(HOME)/Applications/Azahar.app/Contents/MacOS/azahar
@@ -126,7 +142,12 @@ EMU ?= $(HOME)/Applications/Azahar.app/Contents/MacOS/azahar
 # The recursive make owns dependency tracking (objects, ELF, 3DSX), so it runs
 # on every build. Depending on $(TARGET).3dsx here instead would let a stale
 # executable survive a source change: the outer make has no rule for it.
-all:
+all: buildinfo
+	@if [ -z "$(WOLFRAM_LIBS)" ]; then \
+		echo "all ... REFUSED: Wolfram is not linked — every ATProto/Bluesky call in this build would fail." >&2; \
+		echo "all ... Build it first (see the Wolfram comment in the Makefile), then re-run make." >&2; \
+		exit 1; \
+	fi
 	@mkdir -p $(BUILD)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
