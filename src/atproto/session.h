@@ -1,6 +1,7 @@
 #ifndef INDIGO_SESSION_H
 #define INDIGO_SESSION_H
 
+#include "app/social.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
 
@@ -15,6 +16,14 @@ typedef enum {
     INDIGO_SESSION_EVENT_TIMELINE_FAILED,
     INDIGO_SESSION_EVENT_POST_ACTION_DONE,
     INDIGO_SESSION_EVENT_POST_ACTION_FAILED,
+    INDIGO_SESSION_EVENT_THREAD_PAGE,
+    INDIGO_SESSION_EVENT_THREAD_FAILED,
+    INDIGO_SESSION_EVENT_PROFILE_LOADED,
+    INDIGO_SESSION_EVENT_PROFILE_FAILED,
+    INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE,
+    INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED,
+    INDIGO_SESSION_EVENT_PUBLISHED,
+    INDIGO_SESSION_EVENT_PUBLISH_FAILED,
 } indigo_session_event_kind;
 
 typedef enum {
@@ -27,6 +36,8 @@ typedef enum {
 
 /* Posts fetched per timeline request. */
 #define INDIGO_PAGE_SIZE 15
+/* Posts kept from a thread: ancestors, the post, then replies in order. */
+#define INDIGO_THREAD_MAX 40
 
 typedef struct {
     indigo_session_event_kind kind;
@@ -41,6 +52,11 @@ typedef struct {
     indigo_post_action action;
     char post_uri[INDIGO_POST_URI_MAX];
     char record_uri[INDIGO_POST_URI_MAX];
+    /* THREAD_PAGE: index in indigo_session_page() of the post that was asked
+     * for. NOTIFICATIONS_PAGE: page_count counts notifications. */
+    unsigned focus;
+    /* PUBLISHED: what was published (the app refreshes the right view). */
+    indigo_compose_mode compose_mode;
 } indigo_session_event;
 
 /*
@@ -63,12 +79,28 @@ bool indigo_session_submit_timeline(const char *cursor);
 bool indigo_session_submit_post_action(indigo_post_action action, const char *post_uri,
                                        const char *post_cid, const char *undo_uri);
 
+/* Replies, ancestors and the post itself; `uri` is an at:// post URI. */
+bool indigo_session_submit_thread(const char *uri);
+/* `actor` is a handle or DID. */
+bool indigo_session_submit_profile(const char *actor);
+bool indigo_session_submit_notifications(void);
+/* Publish a post, reply or quote. For a reply, `root_*` is the thread root
+ * and `target_*` the post being answered; for a quote, `target_*` is quoted. */
+bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
+                                   const char *target_uri, const char *target_cid,
+                                   const char *root_uri, const char *root_cid);
+
 /* True while a job is running or its event has not been polled. */
 bool indigo_session_busy(void);
 
 /* The posts of the last TIMELINE_PAGE event. Valid until the next submit, so
  * read it as soon as the event is polled. */
 const indigo_post *indigo_session_page(unsigned *count);
+
+/* Results of the last PROFILE_LOADED / NOTIFICATIONS_PAGE event; same
+ * lifetime rule as indigo_session_page(). */
+const indigo_profile *indigo_session_profile(void);
+const indigo_notification *indigo_session_notifications(unsigned *count);
 
 /* Returns true and fills `out` when a job finished since the last poll. */
 bool indigo_session_poll(indigo_session_event *out);
