@@ -80,6 +80,7 @@ Indigo looks for Wolfram at `../wolfram/build-3ds` by default. Set `WOLFRAM_ROOT
 | `make wolfram-3ds` | Build the sibling Wolfram checkout for 3DS |
 | `make run` | Print the SD-card installation path |
 | `make run-emu` | Build, then launch the `.3dsx` in an emulator (`EMU=` selects it) |
+| `tools/emu-shot.sh FILE.3dsx` | Screenshot the emulator window on macOS (see [Capturing the emulator window](#capturing-the-emulator-window)) |
 | `make test` | Host unit tests (ASan + UBSan, warnings are errors); no devkitARM needed |
 | `make warnings` | Warnings-as-errors sweep of every host-portable source |
 | `make snapshots` | Render PNGs of both screens to `build-host/snapshots/` |
@@ -97,6 +98,23 @@ Azahar keeps its virtual SD card at `~/Library/Application Support/Azahar/sdmc` 
 Emulator results are emulator-verified only. TLS, certificates and DNS can behave differently from hardware, and emulator performance must never drive tuning. The 3D slider, sleep and the Home menu are left to the hardware pass.
 
 One font caveat is worth knowing before trusting any screenshot: Azahar has no 3DS system shared font and logs `Shared Font file missing. Loading open source replacement from memory` on every launch. Indigo draws with the 3DS system font, so glyph coverage and advance widths in an emulator capture are Azahar's substitute, not the console's. Layout and behaviour can be checked in the emulator; text metrics cannot.
+
+#### Capturing the emulator window
+
+Azahar has no `--screenshot`, and `--dump-video` writes nothing on macOS, so a capture has to come from the window itself:
+
+```sh
+tools/emu-shot.sh indigo.3dsx                       # -> build-host/emu-shots/shot-<timestamp>.png
+tools/emu-shot.sh --out /tmp/az.png --keep indigo.3dsx
+```
+
+Three things make this work, each of which is a failure mode worth knowing about:
+
+- **Launch through LaunchServices.** `MacOS/azahar file.3dsx` ignores the argument, never opens a window and sits on its HOME menu. The script uses `open -a`, the same route as `make run-emu`.
+- **Wait for the window, and expect ~30s.** Azahar needs roughly half a minute to bring up Vulkan and map its window; there is no output to watch. The script polls, restarts once if no window appears, and captures that window's rectangle.
+- **The screen must be unlocked.** With the session at the login window the emulator still runs and still renders — its log shows Vulkan up and the game executing — but it maps no window, so there is nothing to capture. The script checks for this and fails immediately instead of waiting out its timeout.
+
+`Screen Recording` permission is required for `screencapture`, and `Accessibility` for the window lookup; grant both to the terminal running it. Captures are Retina, so a 1706x752 window yields a 3412x1504 PNG.
 
 ### Host snapshots
 
