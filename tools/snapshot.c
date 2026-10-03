@@ -466,6 +466,21 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_actor a[3];
 
         memset(a, 0, sizeof a);
+        if (s->timeline == 4 || s->timeline == 5) {
+            /* The followers and following lists: same screen and rows as a
+             * person search, with the subject named in the header instead of
+             * a query box. */
+            q->kind = s->timeline == 4 ? INDIGO_SEARCH_FOLLOWERS : INDIGO_SEARCH_FOLLOWING;
+            indigo_copy_utf8(q->subject, sizeof q->subject, "rhi.example.social");
+            indigo_copy_utf8(a[0].handle, sizeof a[0].handle, "rhibear.example.social");
+            indigo_copy_utf8(a[0].display_name, sizeof a[0].display_name, "Rhiannon Bear");
+            indigo_copy_utf8(a[0].did, sizeof a[0].did, "did:plc:bear4kq8vz2n7xwm3");
+            indigo_copy_utf8(a[1].handle, sizeof a[1].handle, "rhidraws.example");
+            indigo_copy_utf8(a[1].display_name, sizeof a[1].display_name, "Rhi Draws");
+            indigo_copy_utf8(a[1].did, sizeof a[1].did, "did:plc:draws9mqx4v2k7b");
+            indigo_app_search_loaded(app, a, 2);
+            return;
+        }
         indigo_copy_utf8(q->query, sizeof q->query, "rhi");
         if (s->timeline == 1) {
             indigo_copy_utf8(a[0].handle, sizeof a[0].handle, "rhi.example.social");
@@ -532,6 +547,8 @@ main(int argc, char **argv)
         {"search-results", INDIGO_SCREEN_SEARCH, false, 0, 0, 1, 1},
         {"search-none", INDIGO_SCREEN_SEARCH, false, 0, 0, 2, 0},
         {"search-error", INDIGO_SCREEN_SEARCH, false, 0, 0, 3, 0},
+        {"search-followers", INDIGO_SCREEN_SEARCH, false, 0, 0, 4, 0},
+        {"search-following", INDIGO_SCREEN_SEARCH, false, 0, 0, 5, 0},
     };
 
     if (argc != 2) {

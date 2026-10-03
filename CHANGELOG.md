@@ -7,6 +7,11 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- A person's followers and following, from the two count buttons on their
+  profile. They reuse the search screen rather than adding two near-identical
+  ones: same rows, same navigation, same result type, so only the request
+  differs. The header names the subject instead of offering a query box,
+  because there is nothing there to type.
 - Mute, unmute, block and unblock from a person's profile. Mute is X and
   block is R on the profile screen, with both also on the touch buttons as a
   pair under Follow; the buttons name the action they perform rather than the

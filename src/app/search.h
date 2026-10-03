@@ -27,8 +27,21 @@ typedef struct {
     char did[INDIGO_SEARCH_DID_MAX];
 } indigo_actor;
 
+/* One screen serves three lists of people. They are the same list of the same
+ * type reached three ways, so they share the screen, the rows and the
+ * navigation rather than becoming three near-identical screens. */
+typedef enum {
+    INDIGO_SEARCH_PEOPLE = 0,
+    INDIGO_SEARCH_FOLLOWERS,
+    INDIGO_SEARCH_FOLLOWING,
+} indigo_search_kind;
+
 typedef struct {
+    /* Only meaningful for INDIGO_SEARCH_PEOPLE. The other two are lists
+     * around one person, so they carry the subject instead of a query. */
     char query[INDIGO_SEARCH_QUERY_MAX];
+    indigo_search_kind kind;
+    char subject[INDIGO_POST_NAME_MAX];
     indigo_actor items[INDIGO_SEARCH_MAX];
     unsigned count;
     unsigned selected;
@@ -49,5 +62,8 @@ const indigo_actor *indigo_search_selected(const indigo_search *s);
 const indigo_actor *indigo_search_row(const indigo_search *s, unsigned row, unsigned rows);
 /* A search needs something to search for and must not already be running. */
 bool indigo_search_can_submit(const indigo_search *s);
+/* The screen title for this list, and whether the header box takes typing. */
+const char *indigo_search_title(const indigo_search *s);
+bool indigo_search_is_typed(const indigo_search *s);
 
 #endif

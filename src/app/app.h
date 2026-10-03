@@ -60,6 +60,7 @@ typedef enum {
     INDIGO_REQUEST_SEARCH,
     INDIGO_REQUEST_FOLLOW,
     INDIGO_REQUEST_GRAPH,
+    INDIGO_REQUEST_PEOPLE,
 } indigo_request_kind;
 
 typedef struct {
@@ -92,6 +93,9 @@ typedef struct {
     bool request_follow;
     /* The state INDIGO_REQUEST_GRAPH is asking for. */
     indigo_graph_action request_graph;
+    /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
+    indigo_search_kind request_people;
+    char request_subject[INDIGO_POST_NAME_MAX];
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -147,6 +151,10 @@ void indigo_app_notifications_failed(indigo_app *app, const char *message);
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count);
 void indigo_app_search_failed(indigo_app *app, const char *message);
+/* Open the people list for a subject's followers or following. Switching kind
+ * drops the previous results rather than showing one list under the other's
+ * heading, the same rule the query has. */
+void indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject);
 /* Follow/unfollow. The toggle flips `following` at once and reverts it if the
  * job fails, so the button responds to the press rather than to the network. */
 void indigo_app_toggle_follow(indigo_app *app);

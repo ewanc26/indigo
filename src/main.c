@@ -211,6 +211,11 @@ handle_requests(indigo_app *app)
             indigo_app_graph_failed(app, app->request_graph, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_PEOPLE:
+        if (!indigo_session_submit_people(app->request_people, app->request_subject)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }

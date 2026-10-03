@@ -36,6 +36,7 @@ typedef enum {
     JOB_SEARCH,
     JOB_FOLLOW,
     JOB_GRAPH,
+    JOB_PEOPLE,
 } job_kind;
 
 typedef struct {
@@ -55,6 +56,7 @@ typedef struct {
     char query[INDIGO_SEARCH_QUERY_MAX];
     indigo_follow_action follow;
     indigo_graph_action graph;
+    indigo_search_kind people_kind;
     char actor[INDIGO_PROFILE_DID_MAX];
 } job;
 
@@ -742,6 +744,57 @@ do_search(const job *j)
     publish_event(&ev);
 }
 
+/* Followers and following return the same actor view as searchActors, and the
+ * screen shows one list at a time, so the results land in the same array and
+ * report through the same events. Only the request differs. */
+static void
+do_people(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    wf_agent_actor_list list;
+    wf_status st = WF_ERR_INVALID_ARG;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    if (j->people_kind == INDIGO_SEARCH_FOLLOWERS) {
+        st = wf_agent_get_followers_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL, &list);
+    } else {
+        st = wf_agent_get_follows_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL, &list);
+    }
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("people failed: wolfram status %d (%s)", (int) st,
+                        indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_actor_count = 0;
+    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+        const wf_agent_profile_view *a = &list.actors[i];
+        indigo_actor *o = &s_actors[s_actor_count];
+
+        if (!a->handle || !a->handle[0]) {
+            continue;
+        }
+        memset(o, 0, sizeof *o);
+        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
+        indigo_copy_utf8(o->display_name, sizeof o->display_name,
+                         a->display_name ? a->display_name : "");
+        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
+        s_actor_count++;
+    }
+    wf_agent_actor_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+    ev.page_count = s_actor_count;
+    indigo_log_info("people %d '%s': %u", (int) j->people_kind, j->actor, s_actor_count);
+    publish_event(&ev);
+}
+
 static void
 do_follow(const job *j)
 {
@@ -1016,6 +1069,9 @@ worker(void *arg)
         case JOB_GRAPH:
             do_graph(&j);
             break;
+        case JOB_PEOPLE:
+            do_people(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1240,6 +1296,18 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
     return submit(&j);
 }
 
+bool
+indigo_session_submit_people(indigo_search_kind kind, const char *subject)
+{
+    job j = {.kind = JOB_PEOPLE, .people_kind = kind};
+
+    if (kind == INDIGO_SEARCH_PEOPLE || !subject || !subject[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.actor, sizeof j.actor, subject);
+    return submit(&j);
+}
+
 const indigo_actor *
 indigo_session_search_results(unsigned *count)
 {
@@ -1454,6 +1522,14 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
     (void) action;
     (void) did;
     (void) block_uri;
+    return false;
+}
+
+bool
+indigo_session_submit_people(indigo_search_kind kind, const char *subject)
+{
+    (void) kind;
+    (void) subject;
     return false;
 }
 

@@ -64,6 +64,10 @@ static const indigo_rect s_follow_button = {14, 52, 292, 40};
  * actions read as one group rather than two more full-width bars. */
 static const indigo_rect s_mute_button = {14, 100, 142, 36};
 static const indigo_rect s_block_button = {164, 100, 142, 36};
+/* Followers and following open the people list, so they carry the counts the
+ * profile already holds rather than being bare navigation labels. */
+static const indigo_rect s_followers_button = {14, 148, 142, 40};
+static const indigo_rect s_following_button = {164, 148, 142, 40};
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
@@ -104,6 +108,10 @@ indigo_layout_button_rect(indigo_action action)
         return s_mute_button;
     case INDIGO_ACTION_BLOCK:
         return s_block_button;
+    case INDIGO_ACTION_FOLLOWERS:
+        return s_followers_button;
+    case INDIGO_ACTION_FOLLOWING:
+        return s_following_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -143,8 +151,9 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
         INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
-    static const indigo_action profile_actions[] = {INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE,
-                                                INDIGO_ACTION_BLOCK, INDIGO_ACTION_BACK};
+    static const indigo_action profile_actions[] = {
+    INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE, INDIGO_ACTION_BLOCK,
+    INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_BACK};
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
@@ -437,7 +446,7 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
     const indigo_search *s = &app->search;
     const indigo_actor *sel = indigo_search_selected(s);
 
-    top_title(c, "Search", "A  Type   SEL  Open");
+    top_title(c, indigo_search_title(s), "A  Type   SEL  Open");
     if (s->loading) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Searching...");
         return;
@@ -719,6 +728,20 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
     toggle_button(c, INDIGO_ACTION_MUTE, ready, p->mute_busy, "Unmute", "Mute");
     toggle_button(c, INDIGO_ACTION_BLOCK, ready, p->block_busy, "Unblock", "Block");
 
+    /* The counts the profile already holds, as the way into the lists. */
+    if (ready) {
+        indigo_rect fl = indigo_layout_button_rect(INDIGO_ACTION_FOLLOWERS);
+        indigo_rect fg = indigo_layout_button_rect(INDIGO_ACTION_FOLLOWING);
+
+        indigo_canvas_rect(c, fl.x, fl.y, fl.w, fl.h, COL_PILL);
+        indigo_canvas_text(c, fl.x + 10, fl.y + 5, 0.55f, COL_TEXT_SOFT, "Followers");
+        indigo_canvas_text(c, fl.x + 10, fl.y + 21, 0.7f, COL_TEXT, "%u", p->followers);
+
+        indigo_canvas_rect(c, fg.x, fg.y, fg.w, fg.h, COL_PILL);
+        indigo_canvas_text(c, fg.x + 10, fg.y + 5, 0.55f, COL_TEXT_SOFT, "Following");
+        indigo_canvas_text(c, fg.x + 10, fg.y + 21, 0.7f, COL_TEXT, "%u", p->follows);
+    }
+
     if (p->status[0] && p->loaded) {
         indigo_canvas_text(c, 14, 150, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                            "%.44s", p->status);
@@ -821,8 +844,16 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
     indigo_rect q = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
 
     indigo_canvas_rect(c, q.x, q.y, q.w, q.h, s->query[0] ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, s->query[0] ? COL_TEXT : COL_TEXT_DIM, "%s",
-                       s->query[0] ? s->query : "Tap to type a name");
+    if (indigo_search_is_typed(s)) {
+        indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f,
+                           s->query[0] ? COL_TEXT : COL_TEXT_DIM, "%s",
+                           s->query[0] ? s->query : "Tap to type a name");
+    } else {
+        /* The followers and following lists have no query; the box names whose
+         * list this is instead of inviting typing nothing would act on. */
+        indigo_canvas_rect(c, q.x, q.y, q.w, q.h, COL_PILL);
+        indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s", s->subject);
+    }
     back_button(c, INDIGO_ACTION_BACK, "Back");
 
     for (unsigned row = 0; row < INDIGO_SEARCH_ROWS; row++) {

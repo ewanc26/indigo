@@ -75,3 +75,26 @@ indigo_search_can_submit(const indigo_search *s)
 {
     return !s->loading && s->query[0] != '\0';
 }
+
+const char *
+indigo_search_title(const indigo_search *s)
+{
+    switch (s->kind) {
+    case INDIGO_SEARCH_FOLLOWERS:
+        return "Followers";
+    case INDIGO_SEARCH_FOLLOWING:
+        return "Following";
+    case INDIGO_SEARCH_PEOPLE:
+        break;
+    }
+    return "Search";
+}
+
+/* Only the search mode has something to type; the other two are a list around
+ * one person, and offering a query box there would invite a search that
+ * nothing acts on. */
+bool
+indigo_search_is_typed(const indigo_search *s)
+{
+    return s->kind == INDIGO_SEARCH_PEOPLE;
+}
