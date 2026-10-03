@@ -381,7 +381,7 @@ to_post(const wf_agent_feed_item *item, indigo_post *out)
             indigo_copy_utf8(out->embed_note, sizeof out->embed_note, note);
         }
         for (size_t i = 0; i < d.facet_count && out->facet_count < INDIGO_POST_FACETS_MAX; i++) {
-            const wf_post_facet *f = &d.facets[i];
+            const wf_display_facet *f = &d.facets[i];
 
             if (f->byte_end > strlen(out->text)) {
                 break; /* the text was truncated before this facet */
