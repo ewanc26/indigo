@@ -6,6 +6,31 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Added
+- Find people (actor search, phase 5): a "Find people" entry in the More menu
+  opens a search screen whose query box sits in the bottom-screen header, so
+  the result rows keep the standard list geometry. Accepting the keyboard runs
+  the search in the same step rather than making the person confirm again on a
+  list screen. Results come from Wolfram's `wf_agent_search_actors_typed`, are
+  bounded to 20 with no paging (a 3DS list that cannot show page two is not a
+  list worth paging), and SELECT or the Profile pill opens the selected
+  person's profile. The query and results survive leaving and reopening the
+  screen; a changed query drops stale results so no one can open a profile the
+  new query never matched. "Searched and found nobody" is a distinct state
+  from "not searched yet". Four snapshot scenarios cover idle, results, no
+  match and failure.
+
+### Fixed
+- The 3DS build was broken against a sibling Wolfram checkout on the
+  `local/indigo-build` branch, which still carried the pre-merge
+  `post_display.h`. PR #89 renamed that header's facet struct
+  `wf_post_facet` -> `wf_display_facet` because `post_view_typed.h` declares a
+  different facet of the old name, so the 3DS cross-build failed on a type
+  Indigo had already been written against. `make test`, `make warnings` and
+  `make snapshots` all still passed, since the adapter sits behind `__3DS__` —
+  so facet targets have never actually been built for the console. Merging
+  `main` into Wolfram's `local/indigo-build` resolves it; no Indigo change.
+
 ## [0.1.0] - 2026-10-03
 
 ### Added
