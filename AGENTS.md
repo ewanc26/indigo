@@ -239,7 +239,8 @@ Current source boundaries are:
 src/
 ├── main.c        libctru lifecycle and frame loop
 ├── app/          application state and navigation
-├── ui/           citro2d/citro3d rendering
+├── gfx/          platform-neutral display lists (canvas)
+├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
 ├── atproto/      Wolfram-backed protocol integration
 └── util/         logging and small helpers
@@ -472,6 +473,8 @@ Do not claim a build succeeded without actually running it.
 Do not silently substitute a host compiler or desktop libraries.
 
 ## 22. Testing
+
+Layout is pure: `ui/layout.c` fills `gfx/canvas` display lists and never calls libctru or citro2d, so `make test`, `make warnings` and `make snapshots` run on the host without devkitARM. `ui/ui.c` only replays display lists. Keep new screens in layout so they can be snapshotted; UI work needs a snapshot or emulator screenshot of both screens.
 
 Validation has distinct levels.
 

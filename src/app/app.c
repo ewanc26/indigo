@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "input/input.h"
+#include "ui/layout.h"
 
 void
 indigo_app_init(indigo_app *app)
@@ -23,6 +24,19 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
 
     if (input->back) {
         app->screen = INDIGO_SCREEN_HOME;
+    }
+
+    if (input->touch_pressed) {
+        switch (indigo_layout_hit(input->touch_x, input->touch_y)) {
+        case INDIGO_ACTION_PROFILE:
+            app->screen = INDIGO_SCREEN_PROFILE;
+            break;
+        case INDIGO_ACTION_HOME:
+            app->screen = INDIGO_SCREEN_HOME;
+            break;
+        case INDIGO_ACTION_NONE:
+            break;
+        }
     }
 }
 

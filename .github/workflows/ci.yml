@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host:
+    name: Host tests and warnings sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+      - run: make warnings
+      - run: make snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: layout-snapshots
+          path: build-host/snapshots/*.png
+
+  build-3ds:
+    name: 3DS build (devkitARM)
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: indigo
+      - uses: actions/checkout@v4
+        with:
+          repository: ewanc26/wolfram
+          path: wolfram
+      - name: Install 3DS portlibs and CMake
+        run: |
+          dkp-pacman -Sy --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib 3ds-cmake cmake make
+      - name: Build Wolfram for 3DS
+        working-directory: indigo
+        run: make wolfram-3ds
+      - name: Build Indigo
+        working-directory: indigo
+        run: make
+      - uses: actions/upload-artifact@v4
+        with:
+          name: indigo-3dsx
+          path: indigo/indigo.3dsx

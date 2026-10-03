@@ -1,8 +1,11 @@
 build/
+build-host/
 *.3dsx
 *.elf
 *.smdh
+*.lst
 *.cia
 *.3ds
 *.map
 compile_commands.json
+.DS_Store

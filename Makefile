@@ -2,6 +2,10 @@
 # Indigo — native Nintendo 3DS homebrew
 #---------------------------------------------------------------------------------
 
+HOST_GOALS := test warnings snapshots
+ifneq ($(filter $(HOST_GOALS),$(MAKECMDGOALS)),)
+include mk/host.mk
+else
 ifeq ($(strip $(DEVKITARM)),)
 $(error "Please set DEVKITARM in your environment")
 endif
@@ -13,7 +17,7 @@ include $(DEVKITARM)/3ds_rules
 TARGET := indigo
 BUILD := build
 
-SOURCES := src src/app src/ui src/input src/atproto src/util
+SOURCES := src src/app src/ui src/input src/atproto src/util src/gfx
 DATA :=
 INCLUDES := src
 GRAPHICS :=
@@ -36,6 +40,7 @@ ifneq ($(wildcard $(WOLFRAM_LIB)),)
   WOLFRAM_CFLAGS := -DWOLFRAM_3DS -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
   WOLFRAM_LIBS := $(WOLFRAM_LIB)                   $(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a                   $(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a
 else
+  $(warning Wolfram is not built for 3DS at $(WOLFRAM_LIB); building without protocol support. Run: make wolfram-3ds)
   WOLFRAM_CFLAGS :=
   WOLFRAM_LIBS :=
 endif
@@ -83,7 +88,10 @@ else
 export LD := $(CC)
 endif
 
-.PHONY: all clean run
+.PHONY: all clean run run-emu wolfram-3ds
+
+# Emulator used by run-emu. Override with EMU=/path/to/emulator.
+EMU ?= $(HOME)/Applications/Azahar.app/Contents/MacOS/azahar
 
 all: $(BUILD) $(TARGET).3dsx
 
@@ -97,10 +105,26 @@ clean:
 run: all
 	@echo "Copy $(TARGET).3dsx to sd:/3ds/indigo/indigo.3dsx"
 
+# Build, then launch the .3dsx in an emulator (Azahar by default; Citra or
+# Lime3DS also work: make run-emu EMU=/path/to/citra). Emulator-only: this
+# says nothing about real hardware.
+run-emu: all
+	@test -x "$(EMU)" || { echo "emulator not found at $(EMU); set EMU=/path/to/azahar"; exit 1; }
+	"$(EMU)" "$(CURDIR)/$(TARGET).3dsx"
+
+# Build Wolfram (the sibling checkout) for 3DS using its own toolchain file.
+wolfram-3ds:
+	cmake -S "$(WOLFRAM_ROOT)" -B "$(WOLFRAM_BUILD)" \
+	  -DCMAKE_TOOLCHAIN_FILE="$(WOLFRAM_ROOT)/.devdeps/3ds.cmake" \
+	  -DWOLFRAM_BUILD_3DS=ON -DWOLFRAM_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug
+	cmake --build "$(WOLFRAM_BUILD)"
+
 else
 
 # 3ds_rules supplies the compiler, linker, dependency tracking and 3DSX/SMDH
 # packaging rules. Keeping this structure close to devkitPro's application
 # template makes Indigo easier to build with current toolchains.
+
+endif
 
 endif

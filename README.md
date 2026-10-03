@@ -19,7 +19,16 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**Native 3DS shell.**
+**Native 3DS shell. Milestone 1 (foundation) is in progress.**
+
+| Check | State |
+|---|---|
+| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host |
+| 3DS build with Wolfram linked | not yet run (devkitARM not installed on the development machine) |
+| Emulator run, screenshots of both screens | not yet run |
+| Real hardware | never run |
+
+Development and verification happen on an emulator first; nothing here has been tested on a real 3DS.
 
 The repository now has a proper devkitARM/libctru application lifecycle, GPU-backed citro2d rendering, native 3DS input handling and the Wolfram integration boundary. Bluesky session and feed functionality are not implemented yet.
 
@@ -43,15 +52,8 @@ Build Wolfram for 3DS first:
 ```sh
 git clone https://github.com/ewanc26/wolfram ../wolfram
 
-cd ../wolfram
-cmake -S . -B build-3ds \
-  -DCMAKE_TOOLCHAIN_FILE=$PWD/.devdeps/3ds.cmake \
-  -DWOLFRAM_BUILD_3DS=ON \
-  -DWOLFRAM_BUILD_TESTS=OFF \
-  -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-3ds
-
-cd ../indigo
+cd indigo
+make wolfram-3ds   # runs Wolfram's own CMake toolchain file for 3DS
 make
 ```
 
@@ -62,8 +64,30 @@ Indigo looks for Wolfram at `../wolfram/build-3ds` by default. Set `WOLFRAM_ROOT
 | Command | Purpose |
 |---|---|
 | `make` | Build the 3DS application |
+| `make wolfram-3ds` | Build the sibling Wolfram checkout for 3DS |
 | `make run` | Print the SD-card installation path |
+| `make run-emu` | Build, then launch the `.3dsx` in an emulator (`EMU=` selects it) |
+| `make test` | Host unit tests (ASan + UBSan, warnings are errors); no devkitARM needed |
+| `make warnings` | Warnings-as-errors sweep of every host-portable source |
+| `make snapshots` | Render PNGs of both screens to `build-host/snapshots/` |
 | `make clean` | Remove generated build output |
+
+### Emulator
+
+```sh
+make run-emu                                  # Azahar at ~/Applications/Azahar.app
+make run-emu EMU=/path/to/citra               # Citra or Lime3DS as fallbacks
+```
+
+Emulator results are emulator-verified only. TLS, certificates and DNS can behave differently from hardware, and emulator performance must never drive tuning. The 3D slider, sleep and the Home menu are left to the hardware pass.
+
+### Host snapshots
+
+`make snapshots` replays the same display lists the 3DS draws into PNGs without a GPU. Glyphs come from a stand-in font, so text widths are approximate; the emulator is the pixel reference.
+
+### Releases
+
+`scripts/release.sh [--dry-run] <version>` tags, builds and publishes a GitHub release with the `.3dsx`. It refuses to run unless you are on a clean `main` that equals `origin/main`, and it needs a matching `CHANGELOG.md` section.
 
 The devkitPro `3ds_rules` infrastructure produces the `.3dsx` executable and embedded SMDH metadata. Indigo is intended to be launched through the Homebrew Menu.
 
@@ -85,7 +109,8 @@ For development, the Homebrew Menu's 3dslink/netloader path can also be used whe
 src/
 ├── main.c        libctru lifecycle and frame loop
 ├── app/          application state and navigation
-├── ui/           citro2d/citro3d rendering
+├── gfx/          platform-neutral display lists (canvas)
+├── ui/           layout (pure) and citro2d/citro3d backend
 ├── input/        buttons, sticks and touchscreen
 ├── atproto/      Wolfram-backed protocol integration
 └── util/         logging and small helpers
