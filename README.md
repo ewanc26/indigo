@@ -2,7 +2,7 @@
 
 A native Bluesky client for the Nintendo 3DS.
 
-**Version 0.2.0**
+**Version 0.3.0**
 
 Indigo exists because apparently making a Wii U post to Bluesky was not enough.
 
@@ -19,28 +19,30 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**Milestone 4 (threads, profiles, notifications, More menu, compose) is ready for review. It is stacked on Milestone 3, which is stacked on Milestone 2, which is stacked on Milestone 1.** Milestones 1 to 3 are open as pull requests #1, #2 and #3 and are not merged yet.
+**0.3.0 is released** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.3.0)). Sign-in, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, mute and block, a settings screen, and — as of 0.3.0 — an image pipeline with avatars on every row. Post images, link cards and a full-size viewer are the next stage; they are tracked as issues, not as work in progress.
+
+Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
 | Check | State |
 |---|---|
-| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host (sign-in form, URL/handle normalising, session file codec and store, error mapping, log file) |
+| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host: 2592 checks, 0 failures, with AddressSanitizer and UBSan, and a warnings-as-errors sweep over every host-portable source. `make test` raises its own stack limit, because the suite peaks around 11MB and the default shell allows 8MB |
 | TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
 | Sign-in to a custom PDS (eurosky.social), session save, resume on restart, sign-out | emulator-verified in Azahar: signed in, session saved, relaunch resumed it without credentials, Sign out deleted the session file and returned to the sign-in screen ([signed out](docs/screenshots/m3-emulator-signed-out.png)) |
 | On-screen keyboard (swkbd) entry | **not verified** in the emulator (credentials were supplied by the dev autofill file) |
-| Timeline model, wrapping, link spans, selection, paging triggers, like/repost state | verified on the host (684 checks); both screens rendered by the host snapshot renderer ([top and bottom](docs/screenshots/m3-snapshot-timeline.png), [scrolled](docs/screenshots/m3-snapshot-timeline-scrolled.png)), which are **not emulator output** |
+| Timeline model, wrapping, link spans, selection, paging triggers, like/repost state | verified on the host; both screens rendered by the host snapshot renderer ([top and bottom](docs/screenshots/m3-snapshot-timeline.png), [scrolled](docs/screenshots/m3-snapshot-timeline-scrolled.png)), which are **not emulator output** |
 | M3 build boots in Azahar | emulator-verified: the sign-in screen still renders ([screenshot](docs/screenshots/m3-azahar-boot.png)) |
 | Timeline fetch, paging, reload, like, unlike, repost, unrepost against the real service | emulator-verified in Azahar on the live account: first page, a second page (26 posts, [screenshot](docs/screenshots/m3-emulator-paging.png)), reload, and like/unlike and repost/unrepost with the counts moving by one each way ([liked](docs/screenshots/m3-emulator-liked.png)); every like and repost was undone afterwards |
 | Thread fetch, profile fetch, notifications fetch, compose of a post, a reply and a quote | emulator-verified in Azahar against the live account: `indigo.log` on the virtual SD records `thread: 2 posts`, `notifications: 30` and `published (mode 0)`, `(mode 1)` and `(mode 2)` |
-| More menu built from the post being read, with its facet targets, scrolling, and choosing a mention to open that profile | verified on the host (1045 checks, including label text, payload, scrolling bounds, out-of-range facet ranges and the touch/action mapping); both screens rendered by the host snapshot renderer ([facet targets](docs/screenshots/m4-snapshot-menu-facets.png), [scrolled](docs/screenshots/m4-snapshot-menu-facets-scrolled.png)), which are **not emulator output**. The menu itself was opened in the emulator and both screens rendered ([more menu](docs/screenshots/m4-azahar-more-menu.png)), though the capture cannot be read back here to confirm which post's targets it listed |
+| More menu built from the post being read, with its facet targets, scrolling, and choosing a mention to open that profile | verified on the host (including label text, payload, scrolling bounds, out-of-range facet ranges and the touch/action mapping); both screens rendered by the host snapshot renderer ([facet targets](docs/screenshots/m4-snapshot-menu-facets.png), [scrolled](docs/screenshots/m4-snapshot-menu-facets-scrolled.png)), which are **not emulator output**. The menu itself was opened in the emulator and both screens rendered ([more menu](docs/screenshots/m4-azahar-more-menu.png)), though the capture cannot be read back here to confirm which post's targets it listed |
 | M4 build boots in Azahar and renders both screens | emulator-verified: `make run-emu` builds, launches, resumes the saved session and fetches a page; the top screen shows the selected post and the bottom screen the touch list ([both screens](docs/screenshots/m4-azahar-home.png)) |
-| Every control is hinted exactly once and no text runs off a screen | verified on the host: a test walks both display lists for every screen and fails if a button glyph is hinted on both displays or if any text exceeds its canvas |
+| Every control is hinted exactly once, and no text, rect or image runs off a screen | verified on the host: a test walks both display lists for every screen and fails if a button glyph is hinted on both displays, or if any text, rect or image exceeds its canvas |
 | Avatars and the image pipeline behind them | verified on the host (2591 checks): the decoded-image cache's claim/publish/fail/evict rules, its byte budget, the per-slot generation that drops a result whose slot was reused, its refusal to evict anything still in flight, and that a row with no avatar emits no image command at all. Avatars are drawn on every row that has a person in it. The decode path itself — Wolfram's `wf_image_decode_rgba` — is verified by Wolfram's own suite, and both backends draw the same per-URL tinted placeholder for an image that has not arrived yet. **not emulator-verified**: no Azahar here, so the fetched-and-uploaded texture has not been seen on a screen |
 | Decoded image memory | bounded by construction: 24 slots, a 512KB total budget, a 96px decode cap and a 256KB download cap, checked before anything is allocated; the 3DS build grows by 112KB of code, which is stb_image's decoder |
 | Real hardware | never run |
 
 Sign-in takes a service URL (default `https://bsky.social`), a handle and an app password, and follows the account's PDS. The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
-Development and verification happen on an emulator first; nothing here has been tested on a real 3DS. Sound, sleep, the HOME menu and the icon and banner are the hardware pass (Milestone 5) and are untouched.
+Development and verification happen on the host and on an emulator; nothing here has been tested on real 3DS hardware. Sound, sleep, the HOME menu, the icon and the banner are untouched.
 
 ### Emulator sign-in autofill
 

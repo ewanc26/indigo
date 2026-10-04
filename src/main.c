@@ -471,7 +471,7 @@ main(void)
     indigo_input input;
     indigo_input_init(&input);
 
-    static indigo_app app; /* about 90KB: keep it off the stack */
+    static indigo_app app; /* about 370KB, mostly posts: keep it off the stack */
     indigo_app_init(&app);
     indigo_app_set_settings(&app, &settings);
     app.wolfram_linked = indigo_atproto_available();
