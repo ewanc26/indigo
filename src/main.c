@@ -290,6 +290,10 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_SIGNED_OUT:
             indigo_app_signed_out(app, "Signed out.");
+            /* The decoded images and their GPU textures are not the
+             * signed-out account's to keep, and on a shared device they are
+             * a record of who was signed in before. */
+            indigo_ui_clear_images();
             break;
         case INDIGO_SESSION_EVENT_TIMELINE_PAGE: {
             unsigned n;
