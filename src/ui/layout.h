@@ -5,6 +5,8 @@
 #include "gfx/canvas.h"
 #include "input/input.h"
 
+#include <stdbool.h>
+
 #define INDIGO_TOP_WIDTH 400
 #define INDIGO_TOP_HEIGHT 240
 #define INDIGO_BOTTOM_WIDTH 320
@@ -65,6 +67,13 @@ typedef struct {
 
 /* Touch targets on the bottom screen, shared by drawing and hit testing. */
 indigo_rect indigo_layout_button_rect(indigo_action action);
+/* The hit test reads two things out of the app -- which screen, and whether
+ * touch targets are enlarged -- so it takes those two rather than the app.
+ * Building a 370KB indigo_app on the stack to read one field was the single
+ * largest stack frame in the program, in a function called per touch event and
+ * per target in the layout tests. */
+indigo_action indigo_layout_hit_settings(indigo_screen screen, bool large_targets,
+                                         int touch_x, int touch_y);
 indigo_action indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y);
 indigo_action indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y);
 
