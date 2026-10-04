@@ -4,7 +4,7 @@ All notable changes to Indigo are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `scripts/release.sh`
 publishes the section matching the version you pass it.
 
-## [Unreleased]
+## [0.5.0] - 2026-10-04
 
 ### Added
 - Search results page in. Actor search, post search, a profile's posts,
