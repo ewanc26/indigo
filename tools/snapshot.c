@@ -683,6 +683,7 @@ main(int argc, char **argv)
         {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0},
         {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0},
         {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0},
+        {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0},
     };
 
     if (argc != 2) {

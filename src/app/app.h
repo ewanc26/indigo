@@ -26,6 +26,7 @@ typedef enum {
     INDIGO_SCREEN_MENU,
     INDIGO_SCREEN_COMPOSE,
     INDIGO_SCREEN_SEARCH,
+    INDIGO_SCREEN_SETTINGS,
 } indigo_screen;
 
 typedef enum {
@@ -70,6 +71,7 @@ typedef enum {
     INDIGO_REQUEST_FEED,
     INDIGO_REQUEST_MUTES,
     INDIGO_REQUEST_BLOCKS,
+    INDIGO_REQUEST_SAVE_SETTINGS,
 } indigo_request_kind;
 
 typedef struct {
@@ -118,8 +120,9 @@ typedef struct {
     char feed_uri[INDIGO_POST_URI_MAX];
     char feed_name[INDIGO_POST_NAME_MAX];
     /* Loaded at startup and kept here so a settings screen can read and change
-     * it. Nothing mutates these yet. */
+     * it. */
     indigo_settings settings;
+    unsigned settings_selected;
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -201,6 +204,7 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
  * from that person's profile, which is where it was made. */
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
+void indigo_app_open_settings(indigo_app *app);
 void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */

@@ -734,18 +734,19 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 11);
+    CHECK(app.menu.count == 12);
     CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
     CHECK(app.menu.items[6].kind == INDIGO_MENU_MUTED);
     CHECK(app.menu.items[7].kind == INDIGO_MENU_BLOCKED);
-    CHECK(app.menu.items[9].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(app.menu.items[9].kind == INDIGO_MENU_SETTINGS);
+    CHECK(app.menu.items[10].kind == INDIGO_MENU_SIGN_OUT);
     CHECK(strcmp(app.menu.items[8].label, "My profile") == 0);
 
-    /* Sign out is the tenth item, so it sits below the window until the
+    /* Sign out is the eleventh item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 9; i++) {
+    for (unsigned i = 0; i < 10; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1471,8 +1472,8 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the eleven app actions. */
-    CHECK(menu.count == 14);
+    /* Three facet targets first, then the twelve app actions. */
+    CHECK(menu.count == 15);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1481,7 +1482,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[13].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[14].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1499,7 +1500,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 14);
+    CHECK(app.menu.count == 15);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1520,7 +1521,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 11);
+    CHECK(menu.count == 12);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1528,11 +1529,11 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 11);
+    CHECK(menu.count == 12);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 11);
+    CHECK(menu.count == 12);
     CHECK(strcmp(menu.items[8].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
@@ -1558,8 +1559,8 @@ test_facet_menu_edges(void)
         indigo_copy_utf8(big.text, sizeof big.text, text);
 
         indigo_menu_build(&menu, &big, "me.example.com");
-        /* Eight facets plus the six app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 8);
+        /* Eight facets plus the twelve app actions, and no more than the cap. */
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 12);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -1683,7 +1684,7 @@ test_no_duplicate_back_hints(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,  INDIGO_SCREEN_HOME,       INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE, INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH};
+        INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH,     INDIGO_SCREEN_SETTINGS};
     indigo_app app;
     indigo_input in = {0};
 
@@ -1745,7 +1746,7 @@ test_text_stays_on_screen(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH};
+        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS};
     /* A feed name is the only title a person writes, and the bar beside it
      * holds a hint and the post counter, so its lengths are measured too: a
      * short one leaves the hint where every other screen keeps it, a long one
@@ -2647,6 +2648,48 @@ test_feeds(void)
     CHECK(app.feed_uri[0] == '\0');
 }
 
+static void
+test_settings_screen(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+
+    indigo_app_init(&app);
+    indigo_app_open_settings(&app);
+    CHECK(app.screen == INDIGO_SCREEN_SETTINGS);
+    CHECK(app.settings_selected == 0);
+
+    /* Navigate down through settings options. */
+    in.down = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 1);
+
+    /* Toggle text scale with A button (NORMAL -> LARGE). */
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings.text_scale == INDIGO_TEXT_SCALE_LARGE);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
+
+    /* Toggle theme with touch on Row 0. */
+    in = (indigo_input) {0};
+    indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_SETTINGS_ROW0);
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 0);
+    CHECK(app.settings.theme == INDIGO_THEME_LIGHT);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
+
+    /* Exit settings back with B button. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
+}
+
 int
 main(void)
 {
@@ -2709,6 +2752,7 @@ main(void)
     test_feeds();
     test_time_rfc3339();
     test_text_stays_on_screen();
+    test_settings_screen();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

@@ -726,11 +726,11 @@ The current repository has:
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
 - threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
-- a settings module with a versioned codec and an atomic store (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on. There is still no screen for changing them, so a hand-edited file is the only way to set the rest;
+- a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
 - no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings persistence is done and loaded at startup, and what remains is a screen to change them, session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, and what remains is session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.
