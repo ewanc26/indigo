@@ -7,6 +7,7 @@
 #include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
+#include "store/settings_codec.h"
 
 typedef struct indigo_input indigo_input;
 
@@ -114,6 +115,9 @@ typedef struct {
      * timeline. Outlives the request, so the title and Back survive paging. */
     char feed_uri[INDIGO_POST_URI_MAX];
     char feed_name[INDIGO_POST_NAME_MAX];
+    /* Loaded at startup and kept here so a settings screen can read and change
+     * it. Nothing mutates these yet. */
+    indigo_settings settings;
     indigo_timeline timeline;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
@@ -133,6 +137,11 @@ void indigo_app_init(indigo_app *app);
 void indigo_app_update(indigo_app *app, const indigo_input *input);
 void indigo_app_shutdown(indigo_app *app);
 bool indigo_app_should_quit(const indigo_app *app);
+
+/* Apply settings loaded from SDMC. Clamped, because app_init() zeroes the
+ * struct and a zeroed text_scale is not one of the valid scales. Call once,
+ * after init and before the first sign-in attempt. */
+void indigo_app_set_settings(indigo_app *app, const indigo_settings *settings);
 
 /* Returns the pending request once, then clears it. */
 indigo_request_kind indigo_app_take_request(indigo_app *app,

@@ -381,10 +381,20 @@ every non-OK return" true, and the truncation test in `tests/tests.c` is what
 holds it honest. `indigo_settings_encode` clamps before writing, so a caller that
 filled a struct by hand cannot produce a file the decoder would have to reject.
 
-Nothing reads or writes settings yet: there is no settings screen, and `main.c`
-does not load the file. Until something calls them the linker drops both objects
-under the `--gc-sections` in `3dsx.specs`, so a green cross-build proves the
-settings code compiles for ARM but not that it is reachable.
+`main.c` loads the file before it opens the log, because `diagnostics` decides
+whether one is written. That setting defaults to on, matching the behaviour from
+before settings existed: a log that stopped being written because a new file
+appeared on the card would be a regression nobody asked for.
+
+Two of the fields take effect at startup. `default_feed` is what
+`indigo_app_sign_in_succeeded` opens instead of the Following timeline, which is
+the single funnel to Home for both a fresh sign-in and a resumed session. It does
+not use `indigo_app_open_feed`, because that pushes a history entry and B from
+Home would then go back to sign-in. The accessibility fields are carried on the
+app but read by nothing yet: there is no settings screen, so they cannot be
+changed from inside the app and a hand-edited file is the only way to set them.
+`indigo_app_init` calls `indigo_settings_defaults` because its `memset` leaves
+`text_scale` at 0, which is not one of the valid scales.
 
 ## 15. Offline behaviour
 
@@ -716,11 +726,11 @@ The current repository has:
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
 - threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
-- a settings module with a versioned codec and an atomic store (`store/settings_codec`, `store/settings_store`), tested but not yet reachable from the app;
+- a settings module with a versioned codec and an atomic store (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on. There is still no screen for changing them, so a hand-edited file is the only way to set the rest;
 - no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings persistence is done, and what remains is session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings persistence is done and loaded at startup, and what remains is a screen to change them, session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.

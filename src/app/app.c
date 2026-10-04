@@ -23,6 +23,15 @@ indigo_app_init(indigo_app *app)
     indigo_signin_init(&app->signin);
     indigo_timeline_init(&app->timeline);
     indigo_timeline_init(&app->thread);
+    /* The memset above leaves text_scale at 0, which is not a valid scale. */
+    indigo_settings_defaults(&app->settings);
+}
+
+void
+indigo_app_set_settings(indigo_app *app, const indigo_settings *settings)
+{
+    app->settings = *settings;
+    indigo_settings_clamp(&app->settings);
 }
 
 static void
@@ -956,6 +965,23 @@ indigo_app_sign_in_succeeded(indigo_app *app, const char *account)
     app->screen = INDIGO_SCREEN_HOME;
     app->history_count = 0;
     indigo_timeline_begin_fetch(&app->timeline, true);
+
+    /* A default feed replaces the Following timeline for the first screen
+     * only. indigo_app_open_feed() is the wrong entry point here: it pushes a
+     * history entry, which at startup would send B from Home back to sign-in.
+     * The name is the record key's until the feed is named by a later lookup;
+     * the picker is where a named title comes from. */
+    if (app->settings.default_feed[0]) {
+        indigo_copy_utf8(app->feed_uri, sizeof app->feed_uri,
+                         app->settings.default_feed);
+        indigo_copy_utf8(app->feed_name, sizeof app->feed_name, "Feed");
+        indigo_copy_utf8(app->request_feed_uri, sizeof app->request_feed_uri,
+                         app->settings.default_feed);
+        indigo_copy_utf8(app->request_feed_name, sizeof app->request_feed_name,
+                         "Feed");
+        app->request = INDIGO_REQUEST_FEED;
+        return;
+    }
     app->request = INDIGO_REQUEST_TIMELINE_REFRESH;
 }
 
