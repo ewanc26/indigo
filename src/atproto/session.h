@@ -112,10 +112,18 @@ bool indigo_session_submit_thread(const char *uri);
 bool indigo_session_submit_profile(const char *actor);
 bool indigo_session_submit_notifications(void);
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
- * and `target_*` the post being answered; for a quote, `target_*` is quoted. */
+ * and `target_*` the post being answered; for a quote, `target_*` is quoted.
+ *
+ * `reply_gate` is a plain int matching `indigo_reply_gate` rather than that
+ * enum, because atproto/ sits below app/ and must not reach back up for it. It
+ * is ignored unless `mode` is INDIGO_COMPOSE_POST. Any value other than 0
+ * writes a threadgate record just after the post succeeds; a failure there is
+ * logged but does not undo the post, which then exists ungated rather than
+ * silently vanishing. 0 everyone, 1 followed/mentioned, 2 nobody. */
 bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *target_uri, const char *target_cid,
-                                   const char *root_uri, const char *root_cid);
+                                   const char *root_uri, const char *root_cid,
+                                   int reply_gate);
 /* Find people by name or handle. Results are bounded to INDIGO_SEARCH_MAX;
  * there is no paging, because a 3DS list that cannot show page two is not a
  * list worth paging. */

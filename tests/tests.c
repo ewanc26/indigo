@@ -326,6 +326,169 @@ test_thread_navigation(void)
 }
 
 static void
+test_compose_reply_gate(void)
+{
+    indigo_compose c = {0};
+
+    c.mode = INDIGO_COMPOSE_POST;
+
+    /* Everyone is the default, and no threadgate at all already means it. */
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_EVERYONE);
+    CHECK(strcmp(indigo_compose_gate_label(&c), "Everyone") == 0);
+    CHECK(strcmp(indigo_compose_gate_short(&c), "Everyone") == 0);
+    CHECK(indigo_compose_can_gate(&c));
+
+    /* The choice cycles and wraps back round. */
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_FOLLOWED_MENTIONED);
+    CHECK(strcmp(indigo_compose_gate_label(&c), "People you follow and mention") == 0);
+    CHECK(strcmp(indigo_compose_gate_short(&c), "Follows + mentions") == 0);
+
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+    CHECK(strcmp(indigo_compose_gate_label(&c), "Nobody") == 0);
+    CHECK(strcmp(indigo_compose_gate_short(&c), "Nobody") == 0);
+
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_EVERYONE);
+
+    /* Mid-send the choice is frozen, as the reply/quote switch is, but the
+     * pill keeps showing it rather than snapping to "Plain post" under the
+     * thumb that just hit Post. */
+    c.sending = true;
+    CHECK(indigo_compose_can_gate(&c));
+    c.reply_gate = INDIGO_REPLY_GATE_NOBODY;
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+    c.sending = false;
+
+    /* Neither a reply nor a quote is offered the choice. */
+    c.has_target = true;
+    c.mode = INDIGO_COMPOSE_REPLY;
+    CHECK(!indigo_compose_can_gate(&c));
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+
+    c.mode = INDIGO_COMPOSE_QUOTE;
+    CHECK(!indigo_compose_can_gate(&c));
+    indigo_compose_gate_cycle(&c);
+    CHECK(c.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+}
+
+static void
+test_new_post_reply_gate(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+
+    /* B on Home opens the menu, and Compose is the first thing in it. */
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(app.compose.mode == INDIGO_COMPOSE_POST);
+    CHECK(!app.compose.has_target);
+
+    /* With no target there is no reply/quote to switch, so Y picks the gate. */
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_EVERYONE);
+
+    in = (indigo_input) {0};
+    in.like = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_FOLLOWED_MENTIONED);
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_EVERYONE);
+
+    /* The pill under the draft is that same control, by touch. */
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = 160;
+    in.touch_y = 162;
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_FOLLOWED_MENTIONED);
+
+    /* A reply keeps Y on the reply/quote switch and leaves the gate alone. */
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+}
+
+/* Advance width of one glyph, as wrap.h prices it for line breaking. */
+static unsigned
+advance_count(const char *s)
+{
+    unsigned n = 0;
+
+    for (; *s; s++) {
+        if (((unsigned char) *s & 0xC0) != 0x80) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* The reply gate's three wordings all have to fit the compose pill, and the
+ * longest is easy to lengthen by accident, so check every one of them. */
+static void
+test_compose_gate_text_fits(void)
+{
+    static const char *drafts[] = {
+        "",
+        "A draft that runs long enough to fill every line the compose box allows, "
+        "so the gate line below it is pushed as far down as it will go.",
+    };
+    indigo_app app;
+    indigo_input in = {0};
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.compose.mode = INDIGO_COMPOSE_POST;
+
+    for (unsigned d = 0; d < sizeof drafts / sizeof drafts[0]; d++) {
+        indigo_copy_utf8(app.compose.text, sizeof app.compose.text, drafts[d]);
+
+        for (unsigned g = 0; g < (unsigned) INDIGO_REPLY_GATE_COUNT; g++) {
+            indigo_canvas top;
+            indigo_canvas bot;
+            const indigo_canvas *screens[2];
+
+            app.compose.reply_gate = (indigo_reply_gate) g;
+            indigo_layout_build(&app, &in, &top, &bot);
+            screens[0] = &top;
+            screens[1] = &bot;
+
+            for (unsigned s = 0; s < 2; s++) {
+                const indigo_canvas *c = screens[s];
+
+                CHECK(!c->overflow);
+                for (unsigned i = 0; i < c->count; i++) {
+                    const indigo_cmd *cmd = &c->cmds[i];
+                    double right;
+
+                    if (cmd->kind != INDIGO_CMD_TEXT) {
+                        continue;
+                    }
+                    right = (double) cmd->x +
+                            (double) advance_count(indigo_canvas_cmd_text(c, cmd)) *
+                                (double) INDIGO_CHAR_WIDTH * (double) cmd->scale;
+                    /* No text may run off the edge of its own screen. */
+                    CHECK(right <= (double) c->width);
+                }
+            }
+        }
+    }
+}
+
+static void
 test_compose_flow(void)
 {
     indigo_app app;
@@ -2492,6 +2655,9 @@ main(void)
     test_buttons_spaced_and_on_screen();
     test_layout_invariants();
     test_thread_navigation();
+    test_compose_reply_gate();
+    test_new_post_reply_gate();
+    test_compose_gate_text_fits();
     test_compose_flow();
     test_notifications();
     test_normalise_service();
