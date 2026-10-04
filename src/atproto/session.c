@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <cJSON.h>
 
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
@@ -29,6 +30,7 @@
 typedef enum {
     JOB_NONE = 0,
     JOB_LOGIN,
+    JOB_OAUTH,
     JOB_RESUME,
     JOB_LOGOUT,
     JOB_TIMELINE,
@@ -95,6 +97,9 @@ static bool s_event_ready;
 /* Worker thread only. */
 static wf_agent *s_agent;
 static indigo_saved_session s_saved;
+static bool s_node_session;
+static char s_pair_url[INDIGO_OAUTH_URL_MAX];
+static char s_pair_code[INDIGO_OAUTH_CODE_MAX];
 
 /* Written by the worker before it publishes TIMELINE_PAGE; the main thread
  * reads it after polling that event and before the next submit. */
@@ -218,7 +223,6 @@ remember(const char *service)
 {
     wf_session_data data = {0};
     wf_status st;
-    char *json = NULL;
 
     memset(&s_saved, 0, sizeof s_saved);
     if (wf_agent_get_session_data(s_agent, &data) != WF_OK) {
@@ -226,16 +230,44 @@ remember(const char *service)
         return;
     }
     snprintf(s_saved.service, sizeof s_saved.service, "%s", service);
-    st = wf_session_data_to_json(&data, &json);
-    wf_agent_session_data_free(&data);
-    if (st != WF_OK || !json || strlen(json) >= sizeof s_saved.session) {
-        indigo_log_warn("session too large or unserialisable; sign-in will not persist");
+
+    if (s_node_session) {
+        cJSON *root = cJSON_CreateObject();
+        if (!root ||
+            !cJSON_AddStringToObject(root, "kind", "oauth-node") ||
+            !cJSON_AddStringToObject(root, "accessJwt", data.access_jwt) ||
+            !cJSON_AddStringToObject(root, "handle", data.handle) ||
+            !cJSON_AddStringToObject(root, "did", data.did)) {
+            cJSON_Delete(root);
+            wf_agent_session_data_free(&data);
+            indigo_session_wipe(&s_saved);
+            indigo_log_warn("could not encode OAuth-node session");
+            return;
+        }
+        char *json = cJSON_PrintUnformatted(root);
+        cJSON_Delete(root);
+        wf_agent_session_data_free(&data);
+        if (!json || strlen(json) >= sizeof s_saved.session) {
+            indigo_log_warn("OAuth-node session too large; sign-in will not persist");
+            wipe_json(json);
+            indigo_session_wipe(&s_saved);
+            return;
+        }
+        memcpy(s_saved.session, json, strlen(json) + 1);
         wipe_json(json);
-        indigo_session_wipe(&s_saved);
-        return;
+    } else {
+        char *json = NULL;
+        st = wf_session_data_to_json(&data, &json);
+        wf_agent_session_data_free(&data);
+        if (st != WF_OK || !json || strlen(json) >= sizeof s_saved.session) {
+            wipe_json(json);
+            indigo_log_warn("session too large or unserialisable; sign-in will not persist");
+            indigo_session_wipe(&s_saved);
+            return;
+        }
+        memcpy(s_saved.session, json, strlen(json) + 1);
+        wipe_json(json);
     }
-    memcpy(s_saved.session, json, strlen(json) + 1);
-    wipe_json(json);
 
     if (indigo_session_store_save(s_path, &s_saved) != INDIGO_STORE_OK) {
         indigo_log_warn("could not save the session; you will sign in again next launch");
@@ -244,10 +276,142 @@ remember(const char *service)
     }
 }
 
+
+static void
+do_oauth(const job *j)
+{
+    wf_xrpc_client *client = wf_xrpc_client_new(j->service);
+    wf_response response = {0};
+
+    if (!client) {
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TLS, NULL);
+        return;
+    }
+    wf_xrpc_client_set_ca_bundle(client, INDIGO_CA_BUNDLE_PATH);
+
+    cJSON *body = cJSON_CreateObject();
+    if (!body || !cJSON_AddStringToObject(body, "handle", j->identifier)) {
+        cJSON_Delete(body);
+        wf_xrpc_client_free(client);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
+        return;
+    }
+    char *body_json = cJSON_PrintUnformatted(body);
+    cJSON_Delete(body);
+    if (!body_json) {
+        wf_xrpc_client_free(client);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
+        return;
+    }
+
+    wf_status st = wf_xrpc_procedure(client, "uk.ewancroft.oauth.begin", body_json, &response);
+    free(body_json);
+    if (st != WF_OK) {
+        wf_response_free(&response);
+        wf_xrpc_client_free(client);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, classify(st), NULL);
+        return;
+    }
+
+    cJSON *begin = cJSON_ParseWithLength(response.body, response.body_len);
+    const cJSON *code = begin ? cJSON_GetObjectItemCaseSensitive(begin, "pair_code") : NULL;
+    const cJSON *url = begin ? cJSON_GetObjectItemCaseSensitive(begin, "pair_url") : NULL;
+    if (!begin || !cJSON_IsString(code) || !cJSON_IsString(url) ||
+        strlen(code->valuestring) >= sizeof s_pair_code ||
+        strlen(url->valuestring) >= sizeof s_pair_url) {
+        cJSON_Delete(begin);
+        wf_response_free(&response);
+        wf_xrpc_client_free(client);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_BAD_RESPONSE, NULL);
+        return;
+    }
+
+    LightLock_Lock(&s_lock);
+    snprintf(s_pair_code, sizeof s_pair_code, "%s", code->valuestring);
+    snprintf(s_pair_url, sizeof s_pair_url, "%s", url->valuestring);
+    LightLock_Unlock(&s_lock);
+
+    char code_copy[INDIGO_OAUTH_CODE_MAX];
+    snprintf(code_copy, sizeof code_copy, "%s", code->valuestring);
+    cJSON_Delete(begin);
+    wf_response_free(&response);
+
+    for (int attempt = 0; attempt < 360; attempt++) {
+        if (attempt != 0) svcSleepThread(1500000000LL);
+
+        wf_xrpc_param p = {"code", code_copy};
+        memset(&response, 0, sizeof response);
+        st = wf_xrpc_query_params(client, "uk.ewancroft.oauth.poll", &p, 1, &response);
+        if (st != WF_OK) {
+            wf_response_free(&response);
+            continue;
+        }
+
+        cJSON *poll = cJSON_ParseWithLength(response.body, response.body_len);
+        const cJSON *status = poll ? cJSON_GetObjectItemCaseSensitive(poll, "status") : NULL;
+        if (status && cJSON_IsString(status) && !strcmp(status->valuestring, "complete")) {
+            const cJSON *token = cJSON_GetObjectItemCaseSensitive(poll, "token");
+            const cJSON *handle = cJSON_GetObjectItemCaseSensitive(poll, "handle");
+            const cJSON *did = cJSON_GetObjectItemCaseSensitive(poll, "did");
+            const cJSON *service = cJSON_GetObjectItemCaseSensitive(poll, "service");
+
+            if (cJSON_IsString(token) && cJSON_IsString(handle) &&
+                cJSON_IsString(did) && cJSON_IsString(service)) {
+                drop_agent();
+                s_agent = new_agent(service->valuestring);
+                if (s_agent && wf_agent_set_bearer(s_agent, token->valuestring,
+                                                   handle->valuestring, did->valuestring) == WF_OK) {
+                    s_node_session = true;
+                    remember(service->valuestring);
+                    LightLock_Lock(&s_lock);
+                    s_pair_code[0] = '\0';
+                    s_pair_url[0] = '\0';
+                    LightLock_Unlock(&s_lock);
+                    wf_response_free(&response);
+                    cJSON_Delete(poll);
+                    wf_xrpc_client_free(client);
+                    publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, handle->valuestring);
+                    return;
+                }
+                drop_agent();
+            }
+            wf_response_free(&response);
+            cJSON_Delete(poll);
+            wf_xrpc_client_free(client);
+            publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
+            return;
+        }
+        if (status && cJSON_IsString(status) && !strcmp(status->valuestring, "error")) {
+            const cJSON *message = cJSON_GetObjectItemCaseSensitive(poll, "message");
+            indigo_log_warn("OAuth sign-in failed: %s",
+                            message && cJSON_IsString(message) ? message->valuestring : "unknown");
+            wf_response_free(&response);
+            cJSON_Delete(poll);
+            wf_xrpc_client_free(client);
+            LightLock_Lock(&s_lock);
+            s_pair_code[0] = '\0';
+            s_pair_url[0] = '\0';
+            LightLock_Unlock(&s_lock);
+            publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_SERVER, NULL);
+            return;
+        }
+        wf_response_free(&response);
+        cJSON_Delete(poll);
+    }
+
+    wf_xrpc_client_free(client);
+    LightLock_Lock(&s_lock);
+    s_pair_code[0] = '\0';
+    s_pair_url[0] = '\0';
+    LightLock_Unlock(&s_lock);
+    publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TIMEOUT, NULL);
+}
+
 static void
 do_login(const job *j)
 {
     wf_status st;
+    s_node_session = false;
     const char *who;
 
     drop_agent();
@@ -301,6 +465,34 @@ do_resume(void)
         return;
     }
 
+    {
+        cJSON *saved = cJSON_Parse(s_saved.session);
+        const cJSON *kind = saved ? cJSON_GetObjectItemCaseSensitive(saved, "kind") : NULL;
+        if (kind && cJSON_IsString(kind) && !strcmp(kind->valuestring, "oauth-node")) {
+            const cJSON *token = cJSON_GetObjectItemCaseSensitive(saved, "accessJwt");
+            const cJSON *handle = cJSON_GetObjectItemCaseSensitive(saved, "handle");
+            const cJSON *did = cJSON_GetObjectItemCaseSensitive(saved, "did");
+            if (!cJSON_IsString(token) || !cJSON_IsString(handle) ||
+                !cJSON_IsString(did) ||
+                wf_agent_set_bearer(s_agent, token->valuestring,
+                                     handle->valuestring, did->valuestring) != WF_OK) {
+                cJSON_Delete(saved);
+                drop_agent();
+                indigo_session_wipe(&s_saved);
+                indigo_session_store_clear(s_path);
+                publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_BAD_CREDENTIALS, NULL);
+                return;
+            }
+            s_node_session = true;
+            cJSON_Delete(saved);
+            who = wf_agent_get_handle(s_agent);
+            publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, who);
+            return;
+        }
+        cJSON_Delete(saved);
+    }
+
+    s_node_session = false;
     st = wf_session_data_from_json(s_saved.session, strlen(s_saved.session), &data);
     if (st != WF_OK) {
         indigo_log_warn("saved session unreadable; discarded");
@@ -315,17 +507,13 @@ do_resume(void)
     st = wf_agent_resume(s_agent, &data);
     wf_agent_session_data_free(&data);
     if (st == WF_OK) {
-        /* Confirms the tokens still work; refreshes them if they expired. */
         st = wf_agent_get_session(s_agent);
     }
     if (st != WF_OK) {
         indigo_failure f = classify(st);
-
-        indigo_log_warn("resume failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(f));
+        indigo_log_warn("resume failed: wolfram status %d (%s)", (int) st, indigo_failure_tag(f));
         drop_agent();
         indigo_session_wipe(&s_saved);
-        /* Offline is not a reason to forget the session; keep the file. */
         if (f == INDIGO_FAIL_BAD_CREDENTIALS) {
             indigo_session_store_clear(s_path);
         }
@@ -335,7 +523,6 @@ do_resume(void)
 
     {
         char service[256];
-
         snprintf(service, sizeof service, "%s", s_saved.service);
         indigo_session_wipe(&s_saved);
         remember(service);
@@ -738,7 +925,7 @@ do_profile(const job *j)
     memset(&s_profile, 0, sizeof s_profile);
     indigo_copy_utf8(s_profile.handle, sizeof s_profile.handle, p.handle);
     indigo_copy_utf8(s_profile.display_name, sizeof s_profile.display_name, p.display_name);
-    indigo_copy_utf8(s_profile.avatar, sizeof s_profile.avatar, p.avatar ? p.avatar : "");
+    indigo_copy_utf8(s_profile.avatar, sizeof s_profile.avatar, p.avatar_cid ? p.avatar_cid : "");
     indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
     indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
     indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
@@ -1574,6 +1761,9 @@ worker(void *arg)
         case JOB_LOGIN:
             do_login(&j);
             break;
+        case JOB_OAUTH:
+            do_oauth(&j);
+            break;
         case JOB_RESUME:
             do_resume();
             break;
@@ -1720,6 +1910,31 @@ indigo_session_submit_login(const char *service, const char *identifier,
     memset(&j, 0, sizeof j);
     return ok;
 }
+
+bool
+indigo_session_submit_oauth(const char *oauth_node, const char *handle)
+{
+    if (!oauth_node || !oauth_node[0] || !handle || !handle[0]) {
+        return false;
+    }
+    job j = {.kind = JOB_OAUTH};
+    snprintf(j.service, sizeof j.service, "%s", oauth_node);
+    snprintf(j.identifier, sizeof j.identifier, "%s", handle);
+    return submit(&j);
+}
+
+const char *
+indigo_session_pair_url(void)
+{
+    return s_pair_url;
+}
+
+const char *
+indigo_session_pair_code(void)
+{
+    return s_pair_code;
+}
+
 
 bool
 indigo_session_submit_resume(void)
@@ -2080,6 +2295,27 @@ indigo_session_submit_login(const char *service, const char *identifier,
     (void) password;
     return refuse(INDIGO_SESSION_EVENT_SIGN_IN_FAILED);
 }
+
+bool
+indigo_session_submit_oauth(const char *oauth_node, const char *handle)
+{
+    (void) oauth_node;
+    (void) handle;
+    return refuse(INDIGO_SESSION_EVENT_SIGN_IN_FAILED);
+}
+
+const char *
+indigo_session_pair_url(void)
+{
+    return "";
+}
+
+const char *
+indigo_session_pair_code(void)
+{
+    return "";
+}
+
 
 bool
 indigo_session_submit_resume(void)
