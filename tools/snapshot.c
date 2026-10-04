@@ -335,6 +335,7 @@ typedef struct {
     int touch_y;
     int timeline; /* 0 none, 1 populated, 2 loading, 3 error */
     unsigned select;
+    bool alt_text; /* the accessibility setting, off unless a scenario says so */
 } scenario;
 
 /* Facet byte ranges follow the text, the way Wolfram reports them. */
@@ -716,37 +717,41 @@ int
 main(int argc, char **argv)
 {
     static const scenario scenarios[] = {
-        {"signin", INDIGO_SCREEN_SIGNIN, false, 0, 0, 0, 0},
-        {"timeline", INDIGO_SCREEN_HOME, false, 0, 0, 1, 0},
-        {"timeline-scrolled", INDIGO_SCREEN_HOME, false, 0, 0, 1, 4},
-        {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0},
-        {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0},
-        {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1},
-        {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0},
-        {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0},
-        {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0},
-        {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0},
-        {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0},
-        {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0},
-        {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0},
-        {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0},
-        {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5},
-        {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0},
-        {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0},
-        {"search", INDIGO_SCREEN_SEARCH, false, 0, 0, 0, 0},
-        {"search-results", INDIGO_SCREEN_SEARCH, false, 0, 0, 1, 1},
-        {"search-none", INDIGO_SCREEN_SEARCH, false, 0, 0, 2, 0},
-        {"search-error", INDIGO_SCREEN_SEARCH, false, 0, 0, 3, 0},
-        {"search-followers", INDIGO_SCREEN_SEARCH, false, 0, 0, 4, 0},
-        {"search-following", INDIGO_SCREEN_SEARCH, false, 0, 0, 5, 0},
-        {"post-search", INDIGO_SCREEN_SEARCH, false, 0, 0, 6, 0},
-        {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0},
-        {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0},
-        {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0},
-        {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0},
-        {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0},
-        {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0},
-        {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0},
+        {"signin", INDIGO_SCREEN_SIGNIN, false, 0, 0, 0, 0, false},
+        {"timeline", INDIGO_SCREEN_HOME, false, 0, 0, 1, 0, false},
+        {"timeline-scrolled", INDIGO_SCREEN_HOME, false, 0, 0, 1, 4, false},
+        {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0, false},
+        {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0, false},
+        {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1, false},
+        {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0, false},
+        {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0, false},
+        {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0, false},
+        {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0, false},
+        {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
+        {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
+        {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
+        {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
+        {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},
+        {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0, false},
+        {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0, false},
+        {"search", INDIGO_SCREEN_SEARCH, false, 0, 0, 0, 0, false},
+        {"search-results", INDIGO_SCREEN_SEARCH, false, 0, 0, 1, 1, false},
+        {"search-none", INDIGO_SCREEN_SEARCH, false, 0, 0, 2, 0, false},
+        {"search-error", INDIGO_SCREEN_SEARCH, false, 0, 0, 3, 0, false},
+        {"search-followers", INDIGO_SCREEN_SEARCH, false, 0, 0, 4, 0, false},
+        {"search-following", INDIGO_SCREEN_SEARCH, false, 0, 0, 5, 0, false},
+        {"post-search", INDIGO_SCREEN_SEARCH, false, 0, 0, 6, 0, false},
+        {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0, false},
+        {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0, false},
+        {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0, false},
+        {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0, false},
+        {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0, false},
+        {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0, false},
+        {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0, false},
+        /* The two scenarios that exist only for the alt-text setting: a post
+         * with a picture and its description, and the settings row itself. */
+        {"timeline-alt", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, true},
+        {"settings-alt", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 5, true},
     };
 
     if (argc != 2) {
@@ -764,6 +769,7 @@ main(int argc, char **argv)
         indigo_app_init(&app);
         app.screen = s->screen;
         app.wolfram_linked = true;
+        app.settings.alt_text = s->alt_text;
         if (s->screen != INDIGO_SCREEN_SIGNIN) {
             strcpy(app.signin.account, "ewancroft.uk");
         }

@@ -18,6 +18,7 @@ indigo_settings_defaults(indigo_settings *out)
     out->reduce_motion = false;
     out->high_contrast = false;
     out->large_targets = false;
+    out->alt_text = false;
     /* On by default, matching the behaviour from before settings existed. A
      * log that stops being written because a new file appeared would be a
      * regression nobody asked for. */
@@ -69,13 +70,14 @@ indigo_settings_encode(const indigo_settings *s, char *out, size_t cap,
                      "reduce_motion=%d\n"
                      "high_contrast=%d\n"
                      "large_targets=%d\n"
+                     "alt_text=%d\n"
                      "diagnostics=%d\n"
                      "default_feed=%s\n"
                      "end\n",
                      INDIGO_SETTINGS_FORMAT_VERSION, (int) c.theme,
                      (int) c.text_scale, c.reduce_motion ? 1 : 0,
                      c.high_contrast ? 1 : 0, c.large_targets ? 1 : 0,
-                     c.diagnostics ? 1 : 0, c.default_feed);
+                     c.alt_text ? 1 : 0, c.diagnostics ? 1 : 0, c.default_feed);
 
     if (n < 0 || (size_t) n >= cap) {
         return INDIGO_CODEC_TOO_BIG;
@@ -217,6 +219,10 @@ indigo_settings_decode(const char *data, size_t len, indigo_settings *out)
         } else if (klen == 13 && memcmp(p, "reduce_motion", 13) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.reduce_motion = flag;
+            }
+        } else if (klen == 8 && memcmp(p, "alt_text", 8) == 0) {
+            if (parse_bool(v, vlen, &flag)) {
+                tmp.alt_text = flag;
             }
         } else if (klen == 13 && memcmp(p, "high_contrast", 13) == 0) {
             if (parse_bool(v, vlen, &flag)) {

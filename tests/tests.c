@@ -913,11 +913,15 @@ test_settings_codec(void)
     size_t len = 0;
 
     indigo_settings_defaults(&in);
+    /* Alt text is off by default: a reader looking at a photograph does not
+     * also want its description. */
+    CHECK(!in.alt_text);
     in.theme = INDIGO_THEME_DARK;
     in.text_scale = INDIGO_TEXT_SCALE_LARGE;
     in.reduce_motion = true;
     in.high_contrast = true;
     in.large_targets = true;
+    in.alt_text = true;
     in.diagnostics = true;
     snprintf(in.default_feed, sizeof in.default_feed,
              "at://did:plc:abc123/app.bsky.feed.generator/daily");
@@ -929,6 +933,7 @@ test_settings_codec(void)
     CHECK(out.reduce_motion == in.reduce_motion);
     CHECK(out.high_contrast == in.high_contrast);
     CHECK(out.large_targets == in.large_targets);
+    CHECK(out.alt_text == in.alt_text);
     CHECK(out.diagnostics == in.diagnostics);
     CHECK(strcmp(out.default_feed, in.default_feed) == 0);
 
@@ -958,11 +963,12 @@ test_settings_codec(void)
 
     /* Keys the file omits take their defaults rather than failing the file. */
     {
-        const char *partial = "indigo-settings 1\nlarge_targets=1\nend\n";
+        const char *partial = "indigo-settings 1\nlarge_targets=1\nalt_text=1\nend\n";
 
         CHECK(indigo_settings_decode(partial, strlen(partial), &out) ==
               INDIGO_CODEC_OK);
         CHECK(out.large_targets);
+        CHECK(out.alt_text);
         CHECK(out.theme == INDIGO_THEME_AUTO);
         CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
         CHECK(out.default_feed[0] == '\0');
@@ -971,7 +977,7 @@ test_settings_codec(void)
     /* One unusable value must not cost the user the rest of the file. */
     {
         const char *mixed = "indigo-settings 1\ntheme=9\ntext_scale=101\n"
-                            "high_contrast=yes\nlarge_targets=1\nend\n";
+                            "high_contrast=yes\nlarge_targets=1\nalt_text=2\nend\n";
 
         CHECK(indigo_settings_decode(mixed, strlen(mixed), &out) ==
               INDIGO_CODEC_OK);
@@ -979,6 +985,7 @@ test_settings_codec(void)
         CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);  /* in range, but
                                                              * not a scale */
         CHECK(!out.high_contrast);                          /* not a boolean */
+        CHECK(!out.alt_text);                               /* not a boolean */
         CHECK(out.large_targets);                           /* the good one */
     }
 
@@ -2038,6 +2045,87 @@ test_layout_draws_link_cards(void)
     CHECK(post_text_lines(&top) > 2);
 }
 
+/* Alt text is carried on the post and drawn only when the setting is on. It
+ * takes the lines it needs out of the bottom of the band, so the picture gets
+ * what is left -- and never nothing. */
+static void
+test_layout_draws_alt_text(void)
+{
+    static const char *const thumb =
+        "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/a@jpeg";
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post *p;
+    float full_h;
+    float alt_h;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    app.timeline.count = 1;
+    p = &app.timeline.posts[0];
+    indigo_copy_utf8(p->text, sizeof p->text, "A photograph.");
+    indigo_copy_utf8(p->embed_thumb, sizeof p->embed_thumb, thumb);
+    p->embed_kind = INDIGO_EMBED_IMAGE;
+    p->embed_w = 4;
+    p->embed_h = 3;
+
+    /* Off by default: nothing about the picture changes. */
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&top, "frost on the railings"));
+    CHECK(find_image(&top, thumb) != NULL);
+    full_h = find_image(&top, thumb)->h;
+
+    /* A one-sentence description costs one line. */
+    indigo_copy_utf8(p->embed_alt, sizeof p->embed_alt,
+                     "The river at dawn, with frost on the railings.");
+    app.settings.alt_text = true;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "frost on the railings"));
+    CHECK(find_image(&top, thumb) != NULL);
+    alt_h = find_image(&top, thumb)->h;
+    /* Smaller than it was, and still a box rather than a line. */
+    CHECK(alt_h < full_h);
+    CHECK(alt_h >= 29.0f);
+    /* The picture and the description do not overlap: the picture's bottom is
+     * above the first line of the description. */
+    CHECK(find_image(&top, thumb)->y + alt_h <= 192.0f - 13.0f);
+
+    /* A long description costs two lines, and the picture shrinks further
+     * without disappearing. */
+    indigo_copy_utf8(p->embed_alt, sizeof p->embed_alt,
+                     "A long description that runs on past the two lines the band "
+                     "has for it, so that the ellipsis is doing real work rather "
+                     "than being decoration.");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "..."));
+    CHECK(find_image(&top, thumb) != NULL);
+    CHECK(find_image(&top, thumb)->h < alt_h);
+    CHECK(find_image(&top, thumb)->h >= 29.0f);
+
+    /* The count label moves with the band rather than sitting under it. */
+    p->embed_count = 4;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "+3 more"));
+    for (unsigned i = 0; i < top.count; i++) {
+        if (top.cmds[i].kind == INDIGO_CMD_TEXT &&
+            strstr(top.text + top.cmds[i].text_offset, "+3 more")) {
+            CHECK(top.cmds[i].y + top.cmds[i].h <= 194.0f);
+            CHECK(top.cmds[i].y >= find_image(&top, thumb)->y);
+        }
+    }
+
+    /* Alt text on a post with a link card changes nothing: a link card's
+     * picture has no alt text of its own to show. */
+    p->embed_kind = INDIGO_EMBED_LINK;
+    indigo_copy_utf8(p->embed_uri, sizeof p->embed_uri, "https://example.com/x");
+    indigo_copy_utf8(p->embed_title, sizeof p->embed_title, "A link");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "A link"));
+    CHECK(!text_has(&top, "frost on the railings"));
+}
+
 static void
 test_shapes_stay_on_screen(void)
 {
@@ -3015,6 +3103,41 @@ test_settings_screen(void)
     CHECK(app.settings.theme == INDIGO_THEME_LIGHT);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
 
+    /* The last settings row is reachable and toggles the setting it names,
+     * rather than the diagnostics switch the row used to be. */
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    r = indigo_layout_button_rect(INDIGO_ACTION_SETTINGS_ROW5);
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 5);
+    CHECK(app.settings.alt_text);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
+    /* The rows after it kept their own settings: the new row is inserted, so a
+     * diagnostics switch is still on row 6 and not somewhere new. */
+    CHECK(app.settings.diagnostics);
+    r = indigo_layout_button_rect(INDIGO_ACTION_SETTINGS_ROW6);
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 6);
+    CHECK(!app.settings.diagnostics);
+    CHECK(app.settings.alt_text);
+    indigo_app_take_request(&app, &f);
+    /* Down past the last row stays on the last row. */
+    app.settings_selected = 7;
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 7);
+    /* Back to the first row for the rest of this test, which goes on to touch
+     * just outside row 0. */
+    app.settings_selected = 0;
+    r = indigo_layout_button_rect(INDIGO_ACTION_SETTINGS_ROW0);
+
     /* Test large_targets touch target expansion: touch 2px outside normal rect. */
     app.settings.large_targets = true;
     in = (indigo_input) {0};
@@ -3524,6 +3647,7 @@ main(void)
     test_shapes_stay_on_screen();
     test_layout_draws_post_images();
     test_layout_draws_link_cards();
+    test_layout_draws_alt_text();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;
