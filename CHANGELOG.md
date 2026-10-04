@@ -6,9 +6,19 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-03
+## [0.2.0] - 2026-10-04
 
 ### Added
+- Interactive settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the
+  More menu, providing toggling of theme, text scale, reduce motion, high
+  contrast, large touch targets, diagnostics logging, and default startup feed.
+- Accessibility settings wiring: theme palettes (Light, Dark, High Contrast)
+  and touch target expansion (4px extra touch hit area) when large touch
+  targets are enabled.
+- Browsable mute and block lists ("Muted accounts" and "Blocked accounts" in the
+  More menu).
+- Reply gate selection on post compose ("Replies: Anyone / Followed / Mentioned /
+  None" toggle).
 - The account's saved custom feeds, as "Feeds" in the More menu, and one
   feed's posts on the home screen from SEL on a feed row. The picker reuses the
   search screen and the list rows -- a feed is a name with a URI to open, which
