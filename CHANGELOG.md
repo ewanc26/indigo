@@ -32,6 +32,17 @@ publishes the section matching the version you pass it.
   thumbnails fit. An avatar still decodes at 96px; a thumbnail asks for what it
   is drawn at.
 
+## [0.4.0] - 2026-10-04
+
+### Added
+- Browser-based AT Protocol OAuth sign-in through the hosted Wolfram OAuth node, with a short-lived pairing link that can be opened on another device. The PDS handles the account password and MFA; Indigo never sees them.
+
+### Changed
+- OAuth-node sessions are persisted separately from ordinary PDS sessions and resumed through Wolfram's hosted authentication path.
+
+### Internal
+- Added the unified hosted OAuth node to Wolfram and wired Indigo to it as a thin 3DS client.
+
 ## [0.3.0] - 2026-10-04
 
 ### Added
@@ -242,3 +253,7 @@ publishes the section matching the version you pass it.
   clears the text buffer once per screen (it was cleared per string).
 - The Wolfram adapter initialises Wolfram's 3DS platform layer and proves the
   link with a pure library call.
+
+[Unreleased]: https://github.com/ewanc26/indigo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ewanc26/indigo/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/ewanc26/indigo/compare/v0.2.0...v0.3.0

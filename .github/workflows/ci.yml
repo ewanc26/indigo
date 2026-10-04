@@ -30,6 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ewanc26/wolfram
+          ref: main
           path: wolfram
       - name: Build Wolfram for 3DS
         working-directory: indigo

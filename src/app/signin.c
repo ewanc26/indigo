@@ -193,7 +193,7 @@ indigo_signin_field_label(indigo_field f)
     case INDIGO_FIELD_HANDLE:
         return "Handle or email";
     case INDIGO_FIELD_PASSWORD:
-        return "App password";
+        return "App password (optional)";
     case INDIGO_FIELD_COUNT:
         break;
     }
@@ -203,7 +203,8 @@ indigo_signin_field_label(indigo_field f)
 bool
 indigo_signin_ready(const indigo_signin *s)
 {
-    return s->service[0] && s->handle[0] && s->password[0];
+    /* An empty password selects the browser-based OAuth flow. */
+    return s->service[0] && s->handle[0];
 }
 
 void

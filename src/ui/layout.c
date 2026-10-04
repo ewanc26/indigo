@@ -1,6 +1,7 @@
 #include "ui/layout.h"
 
 #include "app/signin.h"
+#include "atproto/session.h"
 #include "media/media.h"
 #include "ui/wrap.h"
 
@@ -332,10 +333,22 @@ build_top_signin(const indigo_app *app, indigo_canvas *c)
 
     indigo_canvas_text(c, 18, 98, 0.8f, COL_TEXT, "Sign in");
     indigo_canvas_text(c, 18, 126, 0.6f, COL_TEXT_DIM,
-                       "Use an app password, not your main password.");
+                       "Empty password = browser sign-in.");
     indigo_canvas_text(c, 18, 144, 0.6f, COL_TEXT_DIM,
-                       "Make one in Settings, Privacy and security.");
+                       "The PDS handles your password + MFA.");
 
+#if defined(__3DS__)
+    if (indigo_session_pair_url()[0]) {
+        const char *url = indigo_session_pair_url();
+        const char *code = indigo_session_pair_code();
+        indigo_canvas_text(c, 18, 166, 0.55f, COL_TEXT_SOFT,
+                           "Open on your phone/computer:");
+        indigo_canvas_text(c, 18, 182, 0.45f, COL_TEXT,
+                           "%.120s", url);
+        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_SOFT,
+                           "Pair code: %s", code);
+    } else
+#endif
     if (s->status[0]) {
         indigo_canvas_text(c, 18, 172, 0.65f,
                            s->status_is_error ? COL_ERROR : COL_TEXT_SOFT, "%s",
