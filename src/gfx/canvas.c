@@ -98,6 +98,54 @@ indigo_canvas_span(indigo_canvas *canvas, unsigned start, unsigned end, uint32_t
     return true;
 }
 
+bool
+indigo_canvas_image(indigo_canvas *canvas, float x, float y, float w, float h,
+                    const char *url, uint32_t placeholder)
+{
+    indigo_cmd *cmd;
+    size_t len;
+    unsigned index = 0;
+    bool known = false;
+
+    if (!url || (len = strlen(url)) == 0 || len >= INDIGO_CANVAS_IMAGE_URL_MAX) {
+        canvas->overflow = true;
+        return false;
+    }
+    for (unsigned i = 0; i < canvas->image_count; i++) {
+        if (strcmp(canvas->images[i].url, url) == 0) {
+            index = i;
+            known = true;
+            break;
+        }
+    }
+    if (!known) {
+        if (canvas->image_count >= INDIGO_CANVAS_MAX_IMAGES) {
+            canvas->overflow = true;
+            return false;
+        }
+        index = canvas->image_count++;
+        memcpy(canvas->images[index].url, url, len + 1);
+        canvas->images[index].placeholder = placeholder;
+    }
+    cmd = indigo_canvas_push(canvas);
+
+    if (!cmd) {
+        /* The command is what makes this a failure; an unused image entry is
+         * harmless, but the overflow flag is already set. */
+        return false;
+    }
+    *cmd = (indigo_cmd) {
+        .kind = INDIGO_CMD_IMAGE,
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+        .color = placeholder,
+        .image_index = (uint16_t) index,
+    };
+    return true;
+}
+
 unsigned
 indigo_canvas_segments(const indigo_canvas *canvas, const indigo_cmd *cmd, indigo_segment *out)
 {

@@ -1,5 +1,7 @@
 #include "atproto/session.h"
 
+#include "atproto/atproto.h"
+
 #include "store/session_store.h"
 #include "util/log.h"
 #include "util/timefmt.h"
@@ -22,7 +24,6 @@
 #include <wolfram/post_display.h>
 #include <wolfram/thread_typed.h>
 
-#define CA_BUNDLE_PATH "romfs:/cacert.pem"
 #define WORKER_STACK 0x20000
 
 typedef enum {
@@ -187,7 +188,7 @@ new_agent(const char *service)
     if (!a) {
         return NULL;
     }
-    if (wf_agent_set_ca_bundle(a, CA_BUNDLE_PATH) != WF_OK) {
+    if (wf_agent_set_ca_bundle(a, INDIGO_CA_BUNDLE_PATH) != WF_OK) {
         indigo_log_error("could not apply the CA bundle");
         wf_agent_free(a);
         return NULL;
@@ -418,6 +419,7 @@ fill_post(const wf_agent_post_view *pv, indigo_post *out)
     snprintf(out->cid, sizeof out->cid, "%s", pv->cid);
     indigo_copy_utf8(out->handle, sizeof out->handle, pv->author.handle);
     indigo_copy_utf8(out->display_name, sizeof out->display_name, pv->author.display_name);
+    indigo_copy_utf8(out->avatar, sizeof out->avatar, pv->author.avatar ? pv->author.avatar : "");
     out->like_count = count_of(pv->like_count);
     out->repost_count = count_of(pv->repost_count);
     out->reply_count = count_of(pv->reply_count);
@@ -680,6 +682,7 @@ do_profile(const job *j)
     memset(&s_profile, 0, sizeof s_profile);
     indigo_copy_utf8(s_profile.handle, sizeof s_profile.handle, p.handle);
     indigo_copy_utf8(s_profile.display_name, sizeof s_profile.display_name, p.display_name);
+    indigo_copy_utf8(s_profile.avatar, sizeof s_profile.avatar, p.avatar ? p.avatar : "");
     indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
     indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
     indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
@@ -695,6 +698,27 @@ do_profile(const job *j)
     wf_agent_profile_free(&p);
     ev.kind = INDIGO_SESSION_EVENT_PROFILE_LOADED;
     publish_event(&ev);
+}
+
+/* Every list of people -- search, followers, following, list members, mutes,
+ * blocks -- arrives as the same Wolfram actor view, so they all fill the same
+ * row through this one function rather than six copies of it. The avatar URL
+ * rides along because the row has somewhere to show it. */
+static bool
+fill_actor(const wf_agent_profile_view *a, indigo_actor *o)
+{
+    if (!a->handle || !a->handle[0]) {
+        /* A profile with no handle cannot be opened, and a row that does
+         * nothing is worse than a missing one. */
+        return false;
+    }
+    memset(o, 0, sizeof *o);
+    indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
+    indigo_copy_utf8(o->display_name, sizeof o->display_name,
+                     a->display_name ? a->display_name : "");
+    indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
+    indigo_copy_utf8(o->avatar, sizeof o->avatar, a->avatar ? a->avatar : "");
+    return true;
 }
 
 static indigo_note_kind
@@ -756,19 +780,10 @@ do_search(const job *j)
     s_actor_count = 0;
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
-        indigo_actor *o = &s_actors[s_actor_count];
 
-        if (!a->handle || !a->handle[0]) {
-            /* A profile with no handle cannot be opened, and a row that does
-             * nothing is worse than a missing one. */
-            continue;
+        if (fill_actor(a, &s_actors[s_actor_count])) {
+            s_actor_count++;
         }
-        memset(o, 0, sizeof *o);
-        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
-        indigo_copy_utf8(o->display_name, sizeof o->display_name,
-                         a->display_name ? a->display_name : "");
-        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
-        s_actor_count++;
     }
     wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
@@ -809,17 +824,10 @@ do_people(const job *j)
     s_actor_count = 0;
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
-        indigo_actor *o = &s_actors[s_actor_count];
 
-        if (!a->handle || !a->handle[0]) {
-            continue;
+        if (fill_actor(a, &s_actors[s_actor_count])) {
+            s_actor_count++;
         }
-        memset(o, 0, sizeof *o);
-        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
-        indigo_copy_utf8(o->display_name, sizeof o->display_name,
-                         a->display_name ? a->display_name : "");
-        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
-        s_actor_count++;
     }
     wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
@@ -998,17 +1006,10 @@ do_list_members(const job *j)
     s_actor_count = 0;
     for (size_t i = 0; i < list.item_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.items[i].subject;
-        indigo_actor *o = &s_actors[s_actor_count];
 
-        if (!a->handle || !a->handle[0]) {
-            continue;
+        if (fill_actor(a, &s_actors[s_actor_count])) {
+            s_actor_count++;
         }
-        memset(o, 0, sizeof *o);
-        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
-        indigo_copy_utf8(o->display_name, sizeof o->display_name,
-                         a->display_name ? a->display_name : "");
-        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
-        s_actor_count++;
     }
     wf_agent_list_item_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
@@ -1052,17 +1053,10 @@ do_moderation_list(const job *j)
     s_actor_count = 0;
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
-        indigo_actor *o = &s_actors[s_actor_count];
 
-        if (!a->handle || !a->handle[0]) {
-            continue;
+        if (fill_actor(a, &s_actors[s_actor_count])) {
+            s_actor_count++;
         }
-        memset(o, 0, sizeof *o);
-        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
-        indigo_copy_utf8(o->display_name, sizeof o->display_name,
-                         a->display_name ? a->display_name : "");
-        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
-        s_actor_count++;
     }
     wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
@@ -1374,6 +1368,8 @@ do_notifications(void)
         memset(o, 0, sizeof *o);
         o->kind = note_kind(n->reason);
         indigo_copy_utf8(o->handle, sizeof o->handle, n->author.handle);
+        indigo_copy_utf8(o->avatar, sizeof o->avatar,
+                         n->author.avatar ? n->author.avatar : "");
         indigo_copy_utf8(o->name, sizeof o->name,
                          n->author.display_name && n->author.display_name[0]
                              ? n->author.display_name

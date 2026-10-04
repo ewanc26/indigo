@@ -18,13 +18,12 @@
 #define INDIGO_SEARCH_DID_MAX 128
 
 /* One result. Wolfram's typed searchActors view carries did, handle,
- * display_name and avatar; the avatar is an image URL, and Indigo has no
- * image pipeline yet (AGENTS.md §24 phase 6), so it is not kept. Opening the
- * profile fetches the full record. */
+ * display_name and avatar; opening the profile fetches the full record. */
 typedef struct {
     char handle[INDIGO_POST_NAME_MAX];
     char display_name[INDIGO_POST_NAME_MAX];
     char did[INDIGO_SEARCH_DID_MAX];
+    char avatar[INDIGO_MEDIA_URL_MAX];
 } indigo_actor;
 
 /* One entry in an account's curated lists. A list is not a person: it has no

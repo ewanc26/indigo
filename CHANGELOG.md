@@ -6,6 +6,32 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-04
+
+### Added
+- An image pipeline (`src/media`): a fixed-size, byte-budgeted decoded-image
+  cache and a fetch/decode worker thread. Images are fetched with Wolfram's
+  token-less public GET on a client of its own, decoded off the frame loop, and
+  uploaded to the GPU on the main thread; nothing decodes or touches a texture
+  where a frame is drawn.
+- Avatars everywhere a row has a person in it: timeline and thread rows, the
+  selected post's header, the profile header, the notification list and its
+  detail, and every people row — search, list members, followers, following,
+  mutes and blocks.
+- A per-URL tinted placeholder for an image that has not arrived yet, so a
+  timeline reads as a set of accounts rather than a column of grey squares.
+
+### Fixed
+- Wolfram: `wf_agent_profile` now carries the avatar URL that getProfile
+  actually sends. Only the bare-string form was read, so against a real server
+  the field stayed empty and a client had nothing to fetch for a profile's
+  avatar.
+
+### Notes
+- Post images, link cards, alt text and a full-size image viewer are not in
+  this release; the pipeline they need is.
+- The 3DS build grows by about 112KB of code, which is the image decoder.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added

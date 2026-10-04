@@ -28,6 +28,7 @@ typedef struct {
     indigo_note_kind kind;
     char name[INDIGO_POST_NAME_MAX];
     char handle[INDIGO_POST_NAME_MAX];
+    char avatar[INDIGO_MEDIA_URL_MAX];
     /* Text of the reply/mention/quote; empty for likes, reposts, follows. */
     char text[INDIGO_POST_NOTE_MAX * 2];
     /* The post to open: the notification's own post for reply/mention/quote,
@@ -49,6 +50,7 @@ typedef struct {
 typedef struct {
     char handle[INDIGO_POST_NAME_MAX];
     char display_name[INDIGO_POST_NAME_MAX];
+    char avatar[INDIGO_MEDIA_URL_MAX];
     char bio[INDIGO_PROFILE_BIO_MAX];
     unsigned followers;
     unsigned follows;

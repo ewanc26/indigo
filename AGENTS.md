@@ -282,7 +282,7 @@ Do not implement anything beyond the Bluesky app (other AT Protocol apps, custom
 
 UI modules must not manually construct XRPC requests.
 
-Indigo contains no protocol-level code at all: no HTTP status or error-body interpretation, no credential formats, no TLS or entropy setup beyond calling Wolfram's hooks. If Wolfram lacks something, add it to Wolfram in its own PR.
+Indigo contains no protocol-level code at all: no HTTP status or error-body interpretation, no credential formats, no TLS or entropy setup beyond calling Wolfram's hooks. If Wolfram lacks something, add it to Wolfram in its own PR. Image fetching is no exception: `src/media/media_loader.c` calls Wolfram's token-less `wf_http_get_public` on a client of its own, so no account credential can reach an image host and an image fetch cannot disturb a session request's state. Decoding is `wf_image_decode_rgba` too. What Indigo keeps is the cache and the drawing, neither of which is protocol knowledge.
 
 Feeds must be paginated and bounded. Do not keep an unbounded timeline in memory.
 
@@ -654,7 +654,7 @@ The intended progression is:
 - session persistence;
 - cache;
 - drafts;
-- media;
+- media (the pipeline and avatars are in; post images and link cards are not);
 - accessibility;
 - performance;
 - distribution metadata.
@@ -727,10 +727,12 @@ The current repository has:
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
 - threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
 - a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
-- no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
+- an image pipeline (`src/media`): a fixed-size, byte-budgeted decoded-image cache (`media.c`, pure and host-testable) and a fetch/decode worker thread (`media_loader.c`) that uses Wolfram's token-less public GET and `wf_image_decode_rgba`, plus an `INDIGO_CMD_IMAGE` canvas command whose replay uploads power-of-two citro3d textures on the main thread and draws a per-URL tinted placeholder while a URL is not yet decoded;
+- avatars on every row that has a person in it — timeline and thread rows, the selected post's header, the profile header, the notification list and its detail, and every people row in search, list members, followers, following, mutes and blocks;
+- still no paging on the search results, and no post images, link cards or full-size image viewer. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, and what remains is session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, the media pipeline and avatars are in, and what remains is session persistence polish, cache, drafts, post images and link cards, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.

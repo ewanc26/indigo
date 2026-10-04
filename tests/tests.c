@@ -2,6 +2,7 @@
 #include "app/signin.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
+#include "media/media.h"
 #include "store/session_codec.h"
 #include "util/log.h"
 #include "store/session_store.h"
@@ -1740,6 +1741,75 @@ check_text_on_screen(const indigo_app *app, const indigo_input *in, unsigned scr
     }
 }
 
+/* Shapes have to stay on screen too, and an image is the first thing Indigo
+ * draws that is not text or a rect: an avatar can hang off the edge of a row
+ * and nothing else in the layout would notice. */
+static void
+check_shapes_on_screen(const indigo_app *app, const indigo_input *in, unsigned screen)
+{
+    indigo_canvas top;
+    indigo_canvas bottom;
+    const indigo_canvas *both[2];
+
+    indigo_layout_build(app, in, &top, &bottom);
+    both[0] = &top;
+    both[1] = &bottom;
+    for (int k = 0; k < 2; k++) {
+        for (unsigned i = 0; i < both[k]->count; i++) {
+            const indigo_cmd *cmd = &both[k]->cmds[i];
+
+            if (cmd->kind != INDIGO_CMD_IMAGE && cmd->kind != INDIGO_CMD_RECT) {
+                continue;
+            }
+            s_checks++;
+            if (cmd->x < 0.0f || cmd->y < 0.0f || cmd->w <= 0.0f || cmd->h <= 0.0f ||
+                cmd->x + cmd->w > (float) both[k]->width ||
+                cmd->y + cmd->h > (float) both[k]->height) {
+                s_failures++;
+                fprintf(stderr,
+                        "%s:%d: shape off screen on screen %u: kind=%u x=%.1f y=%.1f "
+                        "w=%.1f h=%.1f canvas=%dx%d\n",
+                        __FILE__, __LINE__, screen, (unsigned) cmd->kind, cmd->x, cmd->y,
+                        cmd->w, cmd->h, both[k]->width, both[k]->height);
+            }
+        }
+    }
+}
+
+static void
+test_shapes_stay_on_screen(void)
+{
+    static const indigo_screen screens[] = {
+        INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
+        INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
+        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS};
+    static const char *const url =
+        "https://cdn.bsky.app/img/avatar/plain/did:plc:rhiannon/avatar@jpeg";
+    indigo_app app;
+    indigo_input in = {0};
+
+    indigo_app_init(&app);
+    /* Every screen with a row, a header or a profile gets an avatar, because
+     * the sweep is only worth anything against populated rows. */
+    indigo_timeline_append(&app.timeline, &(indigo_post) {0});
+    snprintf(app.timeline.posts[0].avatar, sizeof app.timeline.posts[0].avatar, "%s", url);
+    indigo_copy_utf8(app.profile.avatar, sizeof app.profile.avatar, url);
+    app.profile.loaded = true;
+    indigo_copy_utf8(app.profile.display_name, sizeof app.profile.display_name, "Rhiannon");
+    app.search.kind = INDIGO_SEARCH_PEOPLE;
+    app.search.count = 1;
+    indigo_copy_utf8(app.search.results.actors[0].avatar,
+                     sizeof app.search.results.actors[0].avatar, url);
+    app.search.results.actors[0].handle[0] = 'a';
+    app.notifications.count = 1;
+    snprintf(app.notifications.items[0].avatar, sizeof app.notifications.items[0].avatar,
+             "%s", url);
+    for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
+        app.screen = screens[s];
+        check_shapes_on_screen(&app, &in, s);
+    }
+}
+
 static void
 test_text_stays_on_screen(void)
 {
@@ -2699,6 +2769,412 @@ test_settings_screen(void)
     CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
 }
 
+/* --- images ------------------------------------------------------------- */
+
+/* A fake decode result: the cache never looks inside the pixels, so a block of
+ * bytes is enough to exercise ownership. Freed by the cache on eviction and on
+ * clear, which is why these are malloc'd rather than static. */
+static uint8_t *
+fake_pixels(unsigned w, unsigned h)
+{
+    return malloc((size_t) w * h * 4u);
+}
+
+static void
+test_canvas_image_dedupes_by_url(void)
+{
+    indigo_canvas c;
+
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(indigo_canvas_image(&c, 0, 0, 8, 8, "https://cdn.example/a.jpg", 0x112233ff));
+    CHECK(indigo_canvas_image(&c, 10, 0, 8, 8, "https://cdn.example/a.jpg", 0x112233ff));
+    CHECK(indigo_canvas_image(&c, 20, 0, 8, 8, "https://cdn.example/b.jpg", 0));
+    CHECK(c.image_count == 2);
+    CHECK(c.cmds[0].kind == INDIGO_CMD_IMAGE && c.cmds[1].kind == INDIGO_CMD_IMAGE);
+    /* The same avatar on two rows is one entry, and both commands point at it:
+     * otherwise one screen's repeated avatar would exhaust the entry budget. */
+    CHECK(c.cmds[0].image_index == 0 && c.cmds[1].image_index == 0);
+    CHECK(c.cmds[2].image_index == 1);
+    CHECK(strcmp(c.images[0].url, "https://cdn.example/a.jpg") == 0);
+    CHECK(c.images[0].placeholder == 0x112233ff);
+    CHECK(!c.overflow);
+}
+
+static void
+test_canvas_image_refuses_unusable_urls(void)
+{
+    indigo_canvas c;
+    char long_url[INDIGO_CANVAS_IMAGE_URL_MAX + 8];
+
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(!indigo_canvas_image(&c, 0, 0, 8, 8, "", 0));
+    CHECK(!indigo_canvas_image(&c, 0, 0, 8, 8, NULL, 0));
+    CHECK(c.overflow);
+    CHECK(c.count == 0 && c.image_count == 0);
+
+    /* A URL the cache could not hold anyway: refused here rather than drawn
+     * from a truncated key that would never match. */
+    memset(long_url, 'a', sizeof long_url - 1);
+    long_url[sizeof long_url - 1] = '\0';
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(!indigo_canvas_image(&c, 0, 0, 8, 8, long_url, 0));
+    CHECK(c.overflow && c.count == 0);
+}
+
+static void
+test_canvas_image_entry_cap(void)
+{
+    indigo_canvas c;
+    char url[64];
+
+    indigo_canvas_init(&c, 400, 240);
+    for (unsigned i = 0; i < INDIGO_CANVAS_MAX_IMAGES; i++) {
+        snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+        CHECK(indigo_canvas_image(&c, 0, 0, 4, 4, url, 0));
+    }
+    snprintf(url, sizeof url, "https://cdn.example/one-too-many.jpg");
+    CHECK(!indigo_canvas_image(&c, 0, 0, 4, 4, url, 0));
+    CHECK(c.overflow);
+    CHECK(c.image_count == INDIGO_CANVAS_MAX_IMAGES);
+}
+
+static void
+test_media_claim_and_publish(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+    unsigned spare = 99;
+
+    indigo_media_init(&c);
+    CHECK(indigo_media_ready(&c, "https://cdn.example/a.jpg") == -1);
+
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen) >= 0);
+    CHECK(gen != 0);
+    CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
+    CHECK(c.slots[0].generation == gen);
+    CHECK(indigo_media_known(&c, "https://cdn.example/a.jpg"));
+    /* A second claim for a URL already in flight would be a second fetch of
+     * the same image, which is what a per-frame request turns into without
+     * this. It also hands back no generation at all, so a caller cannot
+     * publish against a claim that never happened. */
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &spare) == -1);
+    CHECK(spare == 0);
+
+    CHECK(indigo_media_publish(&c, 0, gen, fake_pixels(8, 8), 8, 8));
+    CHECK(c.slots[0].state == INDIGO_MEDIA_READY);
+    CHECK(c.slots[0].width == 8 && c.slots[0].height == 8);
+    CHECK(c.bytes == 8u * 8u * 4u);
+    CHECK(indigo_media_ready(&c, "https://cdn.example/a.jpg") == 0);
+    CHECK(c.hits == 1 && c.misses == 1);
+
+    indigo_media_clear(&c);
+    CHECK(c.bytes == 0);
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        CHECK(c.slots[i].state == INDIGO_MEDIA_EMPTY);
+    }
+    /* A clear frees what was resident and leaves the counters, which are
+     * diagnostics rather than state. */
+    CHECK(c.hits == 1 && c.loads == 1);
+}
+
+static void
+test_media_rejects_stale_result(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+    int slot;
+    uint8_t *pixels;
+
+    indigo_media_init(&c);
+    slot = indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen);
+    CHECK(slot >= 0);
+
+    /* A result for the wrong generation is a fetch that finished after its
+     * slot was reused. It must be refused, and the caller keeps its pixels. */
+    pixels = fake_pixels(8, 8);
+    CHECK(!indigo_media_publish(&c, slot, gen + 1, pixels, 8, 8));
+    CHECK(c.slots[slot].state == INDIGO_MEDIA_LOADING);
+    free(pixels);
+
+    /* A slot index that was never claimed, and one out of range. */
+    pixels = fake_pixels(8, 8);
+    CHECK(!indigo_media_publish(&c, -1, gen, pixels, 8, 8));
+    CHECK(!indigo_media_publish(&c, INDIGO_MEDIA_SLOTS, gen, pixels, 8, 8));
+    free(pixels);
+
+    /* A decoder that ignored its own cap must not be able to spend the
+     * budget: the size check is the last line, not the first. */
+    pixels = fake_pixels(8, 8);
+    CHECK(!indigo_media_publish(&c, slot, gen, pixels, INDIGO_MEDIA_MAX_DIM + 1, 8));
+    free(pixels);
+
+    CHECK(indigo_media_publish(&c, slot, gen, fake_pixels(8, 8), 8, 8));
+    indigo_media_clear(&c);
+}
+
+static void
+test_media_failed_url_is_not_refetched(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+    int slot = indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen);
+
+    CHECK(slot >= 0);
+    indigo_media_fail(&c, slot, gen);
+    CHECK(c.slots[slot].state == INDIGO_MEDIA_FAILED);
+    CHECK(c.failures == 1);
+    CHECK(indigo_media_ready(&c, "https://cdn.example/gone.jpg") == -1);
+    /* Still known, so the loader does not ask again every frame for a URL
+     * that just failed. Only a clear makes it eligible. */
+    CHECK(indigo_media_known(&c, "https://cdn.example/gone.jpg"));
+    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen) == -1);
+    indigo_media_clear(&c);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen) >= 0);
+    indigo_media_clear(&c);
+
+    /* A failure for a slot that is no longer in flight is ignored rather than
+     * marking whatever took its place. */
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen) >= 0);
+    indigo_media_fail(&c, 0, gen + 99);
+    CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
+    indigo_media_clear(&c);
+}
+
+static void
+test_media_eviction_prefers_least_recently_used(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+    int first;
+
+    indigo_media_init(&c);
+    /* Fill every slot, then touch them oldest-first so the one to go is
+     * knowable. */
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        char url[64];
+
+        snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+        CHECK(indigo_media_claim(&c, url, &gen) >= 0);
+        CHECK(indigo_media_publish(&c, (int) i, gen, fake_pixels(8, 8), 8, 8));
+    }
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        char url[64];
+
+        snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+        CHECK(indigo_media_ready(&c, url) == (int) i);
+    }
+    first = indigo_media_claim(&c, "https://cdn.example/new.jpg", &gen);
+    CHECK(first == 0);
+    CHECK(c.evictions == 1);
+    CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
+    CHECK(strcmp(c.slots[0].url, "https://cdn.example/new.jpg") == 0);
+    /* The byte total never doubles: the evicted image's bytes came off before
+     * the new one went on. */
+    CHECK(c.bytes == (unsigned) INDIGO_MEDIA_SLOTS * 8u * 8u * 4u - 8u * 8u * 4u);
+    indigo_media_clear(&c);
+    CHECK(c.bytes == 0);
+}
+
+static void
+test_media_never_evicts_in_flight(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+
+    indigo_media_init(&c);
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        char url[64];
+
+        snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+        CHECK(indigo_media_claim(&c, url, &gen) >= 0);
+    }
+    /* Every slot is fetching. Taking one would throw away a request already
+     * paid for, so the claim is refused and the caller carries on without an
+     * image. */
+    CHECK(indigo_media_claim(&c, "https://cdn.example/one-too-many.jpg", &gen) == -1);
+    indigo_media_clear(&c);
+}
+
+static void
+test_media_byte_budget(void)
+{
+    indigo_media_cache c;
+    unsigned gens[INDIGO_MEDIA_SLOTS];
+    const unsigned dim = INDIGO_MEDIA_MAX_DIM;
+    const unsigned per_image = dim * dim * 4u;
+    unsigned at_cap = 0;
+
+    CHECK(per_image * (INDIGO_MEDIA_BYTES_MAX / per_image + 1) > INDIGO_MEDIA_BYTES_MAX);
+
+    indigo_media_init(&c);
+    /* Claim every slot first, so eviction has to make room at publish time
+     * rather than at claim time: the decoded size is not known until then.
+     * Every claim hands out its own generation, so they are kept. */
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        char url[64];
+
+        snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+        CHECK(indigo_media_claim(&c, url, &gens[i]) >= 0);
+    }
+    for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
+        uint8_t *pixels = fake_pixels(dim, dim);
+
+        if (indigo_media_publish(&c, (int) i, gens[i], pixels, dim, dim)) {
+            at_cap++;
+        } else {
+            /* Over budget with nothing left to evict: the pixels are still the
+             * caller's to free. */
+            free(pixels);
+        }
+    }
+    CHECK(c.bytes <= INDIGO_MEDIA_BYTES_MAX);
+    CHECK(c.bytes % per_image == 0);
+    /* Every publish succeeded, because each one evicted an older image to make
+     * room: the decode sizes are the same, so the resident count is what the
+     * budget actually caps, and it is fewer than the slots. That is what makes
+     * the budget a real bound rather than a number that never bites. */
+    CHECK(c.evictions > 0);
+    CHECK(c.bytes / per_image < INDIGO_MEDIA_SLOTS);
+    CHECK(at_cap == INDIGO_MEDIA_SLOTS);
+    /* The most recent images are the ones kept, and the oldest went first. */
+    CHECK(indigo_media_ready(&c, "https://cdn.example/0.jpg") < 0);
+    CHECK(indigo_media_ready(&c, "https://cdn.example/23.jpg") >= 0);
+    indigo_media_clear(&c);
+    CHECK(c.bytes == 0);
+}
+
+static void
+test_media_claim_guards(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 1234;
+    char long_url[INDIGO_MEDIA_URL_MAX + 8];
+
+    indigo_media_init(&c);
+    CHECK(indigo_media_claim(&c, "", &gen) == -1);
+    CHECK(indigo_media_claim(&c, NULL, &gen) == -1);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", NULL) == -1);
+    CHECK(indigo_media_ready(&c, "") == -1);
+    CHECK(!indigo_media_known(&c, ""));
+    CHECK(!indigo_media_known(&c, NULL));
+
+    /* One byte over what the cache stores is refused rather than truncated: a
+     * truncated key would never match the URL the layout asks for again. */
+    memset(long_url, 'b', sizeof long_url - 1);
+    long_url[sizeof long_url - 1] = '\0';
+    CHECK(indigo_media_claim(&c, long_url, &gen) == -1);
+    CHECK(indigo_media_ready(&c, long_url) == -1);
+}
+
+static void
+test_media_placeholder_colour(void)
+{
+    uint32_t a = indigo_media_placeholder_color("https://cdn.example/alice.jpg");
+    uint32_t b = indigo_media_placeholder_color("https://cdn.example/alice.jpg");
+    uint32_t other = indigo_media_placeholder_color("https://cdn.example/bob.jpg");
+
+    CHECK(a == b);
+    CHECK((a & 0xff) == 255);
+    /* Two accounts must be able to look different: a column of identical
+     * placeholders reads as one voice. */
+    CHECK(a != other);
+    /* And the ramp has to be wide enough for that to hold in general. A hue
+     * step with a binary choice inside each sector produces six colours, and
+     * two accounts collide on one often enough to defeat the point. */
+    {
+        uint32_t seen[64];
+        char url[64];
+        unsigned distinct = 0;
+
+        for (unsigned i = 0; i < 64; i++) {
+            unsigned duplicate = 0;
+
+            snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
+            seen[i] = indigo_media_placeholder_color(url);
+            for (unsigned k = 0; k < distinct; k++) {
+                duplicate += seen[k] == seen[i];
+            }
+            if (!duplicate) {
+                seen[distinct++] = seen[i];
+            }
+        }
+        /* Some collisions are expected -- 64 hashes into 360 hues collide by
+         * the birthday bound, and two accounts sharing a placeholder is
+         * harmless. What has to hold is that the ramp is a ramp: picking a
+         * binary position inside each 60-degree sector gives six colours for
+         * the whole of the wheel, and that is far too few to tell a column of
+         * accounts apart. */
+        CHECK(distinct >= 40);
+    }
+    /* Deterministic across processes, so a placeholder does not change colour
+     * between two frames of the same screen. */
+    CHECK(indigo_media_placeholder_color("") == indigo_media_placeholder_color(""));
+}
+
+static void
+test_layout_draws_avatars(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    const char *url = "https://cdn.example/img/avatar/plain/did:plc:one/avatar@jpeg";
+    unsigned top_images = 0;
+    unsigned bottom_images = 0;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    snprintf(app.timeline.posts[0].avatar, sizeof app.timeline.posts[0].avatar, "%s", url);
+    indigo_copy_utf8(app.timeline.posts[0].display_name,
+                     sizeof app.timeline.posts[0].display_name, "Ada");
+    app.timeline.count = 1;
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow && !bottom.overflow);
+    for (unsigned i = 0; i < top.count; i++) {
+        top_images += top.cmds[i].kind == INDIGO_CMD_IMAGE ? 1u : 0u;
+    }
+    for (unsigned i = 0; i < bottom.count; i++) {
+        bottom_images += bottom.cmds[i].kind == INDIGO_CMD_IMAGE ? 1u : 0u;
+    }
+    /* The selected post's avatar on the top screen, and the same avatar on the
+     * row for it on the bottom screen. Both name the same URL, so they share
+     * one entry per canvas. */
+    CHECK(top_images == 1);
+    CHECK(bottom_images == 1);
+    CHECK(top.image_count == 1);
+    CHECK(strcmp(top.images[0].url, url) == 0);
+    /* The placeholder is part of the command, so both backends draw the same
+     * thing before the pixels arrive. */
+    CHECK(top.cmds[0].kind != INDIGO_CMD_IMAGE || top.images[0].placeholder != 0);
+
+    /* With no avatar on the post, no image command is emitted at all: an
+     * account that has set no picture is not a missing picture. */
+    app.timeline.posts[0].avatar[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(top.image_count == 0);
+    CHECK(bottom.image_count == 0);
+
+    /* The profile and the people rows carry avatars too. */
+    indigo_copy_utf8(app.profile.avatar, sizeof app.profile.avatar, url);
+    app.profile.loaded = true;
+    indigo_copy_utf8(app.profile.display_name, sizeof app.profile.display_name, "Ada");
+    app.screen = INDIGO_SCREEN_PROFILE;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(top.image_count == 1);
+
+    app.screen = INDIGO_SCREEN_SEARCH;
+    app.search.kind = INDIGO_SEARCH_PEOPLE;
+    app.search.count = 1;
+    app.search.searched = true;
+    indigo_copy_utf8(app.search.results.actors[0].handle,
+                     sizeof app.search.results.actors[0].handle, "ada.test");
+    indigo_copy_utf8(app.search.results.actors[0].avatar,
+                     sizeof app.search.results.actors[0].avatar, url);
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(bottom.image_count == 1);
+}
+
 int
 main(void)
 {
@@ -2762,6 +3238,19 @@ main(void)
     test_time_rfc3339();
     test_text_stays_on_screen();
     test_settings_screen();
+    test_canvas_image_dedupes_by_url();
+    test_canvas_image_refuses_unusable_urls();
+    test_canvas_image_entry_cap();
+    test_media_claim_and_publish();
+    test_media_rejects_stale_result();
+    test_media_failed_url_is_not_refetched();
+    test_media_eviction_prefers_least_recently_used();
+    test_media_never_evicts_in_flight();
+    test_media_byte_budget();
+    test_media_claim_guards();
+    test_media_placeholder_colour();
+    test_layout_draws_avatars();
+    test_shapes_stay_on_screen();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;
