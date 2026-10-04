@@ -17,8 +17,8 @@ HOST_SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
 .PHONY: test warnings snapshots
 
 test: $(HOST_OUT)/tests
-	@# The suite runs 70-odd tests in one process and each holds a 370KB
-	@# indigo_app, so peak stack is around 11MB -- more than the 8MB a default
+	@# The suite runs 70-odd tests in one process and each holds a 565KB
+	@# indigo_app, so peak stack is around 17MB -- more than the 8MB a default
 	@# shell allows, which made the result depend on what invoked make rather
 	@# than on the code. Raised here, and ignored where the hard limit is lower.
 	@( ulimit -s 65536 2>/dev/null || true; $(HOST_OUT)/tests )

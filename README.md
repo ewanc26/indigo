@@ -2,7 +2,7 @@
 
 A native Bluesky client for the Nintendo 3DS.
 
-**Version 0.4.0**
+**Version 0.5.0**
 
 Indigo exists because apparently making a Wii U post to Bluesky was not enough.
 
@@ -19,15 +19,15 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**0.4.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.4.0)) adds browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- alongside post images, link cards and an alt-text setting on top of 0.3.0's image pipeline and avatars. Also in: timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
+**0.5.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.5.0)) adds a full-size image viewer, muted words, and paged search. An `Image` button appears in the header bar of the timeline, the thread and a post in the search results whenever the selected post has a picture on it, and ZR does the same on a New 3DS. The picture fills the top screen at the shape the server declared, its description is on the bottom screen where there is room for a sentence, and `B`, `ZR` or `Close` goes back to the screen it was opened from. The account's saved muted words and hide-reposts are honoured in the home timeline and custom feeds, fetched once per sign-in, with the same matching rules Cobalt uses. Search results now page in -- actor search, post search, a profile's posts, followers and following, lists, list members, mutes and blocks all grow more results as you scroll, up to sixty entries.
 
-Unreleased: a full-size image viewer, muted words, and paged search. An `Image` button appears in the header bar of the timeline, the thread and a post in the search results whenever the selected post has a picture on it, and ZR does the same on a New 3DS. The picture fills the top screen at the shape the server declared, its description is on the bottom screen where there is room for a sentence, and `B`, `ZR` or `Close` goes back to the screen it was opened from. The account's saved muted words and hide-reposts are honoured in the home timeline and custom feeds, fetched once per sign-in, with the same matching rules Cobalt uses. Search results now page in -- actor search, post search, a profile's posts, followers and following, lists, list members, mutes and blocks all grow more results as you scroll, up to sixty entries.
+On top of **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
 
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
 | Check | State |
 |---|---|
-| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host: 2592 checks, 0 failures, with AddressSanitizer and UBSan, and a warnings-as-errors sweep over every host-portable source. `make test` raises its own stack limit, because the suite peaks around 11MB and the default shell allows 8MB |
+| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host: 2949 checks, 0 failures, with AddressSanitizer and UBSan, and a warnings-as-errors sweep over every host-portable source. `make test` raises its own stack limit, because the suite peaks well past the default shell's 8MB |
 | TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
 | Sign-in to a custom PDS (eurosky.social), session save, resume on restart, sign-out | emulator-verified in Azahar: signed in, session saved, relaunch resumed it without credentials, Sign out deleted the session file and returned to the sign-in screen ([signed out](docs/screenshots/m3-emulator-signed-out.png)) |
 | On-screen keyboard (swkbd) entry | **not verified** in the emulator (credentials were supplied by the dev autofill file) |
