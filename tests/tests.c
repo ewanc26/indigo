@@ -2351,7 +2351,7 @@ test_search_flow(void)
     indigo_copy_utf8(actors[0].handle, sizeof actors[0].handle, "alice.example.com");
     indigo_copy_utf8(actors[0].display_name, sizeof actors[0].display_name, "Alice");
     indigo_copy_utf8(actors[1].handle, sizeof actors[1].handle, "alice2.example.com");
-    indigo_app_search_loaded(&app, actors, 2);
+    indigo_app_search_loaded(&app, actors, 2, "");
     CHECK(app.search.count == 2);
     CHECK(app.search.searched);
     CHECK(!app.search.loading);
@@ -2405,7 +2405,7 @@ test_search_query_resets_results(void)
     indigo_copy_utf8(actors[1].handle, sizeof actors[1].handle, "alice2.example.com");
     indigo_app_set_query(&app, "alice");
     indigo_app_take_request(&app, &f);
-    indigo_app_search_loaded(&app, actors, 2);
+    indigo_app_search_loaded(&app, actors, 2, "");
     CHECK(app.search.count == 2);
 
     indigo_app_set_query(&app, "bob");
@@ -2424,7 +2424,8 @@ test_search_empty_and_failure(void)
     app.screen = INDIGO_SCREEN_SEARCH;
     CHECK(!app.search.searched && app.search.status[0] == '\0');
 
-    indigo_app_search_loaded(&app, NULL, 0);
+    indigo_search_begin_page(&app.search, false);
+    indigo_app_search_loaded(&app, NULL, 0, "");
     CHECK(app.search.searched);
     CHECK(app.search.count == 0);
     CHECK(strcmp(app.search.status, "Nobody matched that.") == 0);
@@ -2452,8 +2453,49 @@ test_search_results_bounded(void)
     }
     indigo_app_set_query(&app, "p");
     indigo_app_take_request(&app, &f);
-    indigo_app_search_loaded(&app, many, sizeof many / sizeof many[0]);
+    indigo_app_search_loaded(&app, many, sizeof many / sizeof many[0], "");
     CHECK(app.search.count == INDIGO_SEARCH_MAX);
+}
+
+/* Search pages append until the cursor runs out, the list fills, or a page
+ * brings back nothing new. Each of those ends the paging cleanly. */
+static void
+test_search_paging(void)
+{
+    indigo_app app;
+    indigo_actor page[2];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    memset(page, 0, sizeof page);
+    snprintf(page[0].handle, sizeof page[0].handle, "one.example.com");
+    snprintf(page[1].handle, sizeof page[1].handle, "two.example.com");
+
+    /* First page arrives with a cursor: more are wanted, but only when the
+     * person scrolls near the end of what is held. */
+    indigo_search_begin_page(&app.search, false);
+    indigo_app_search_loaded(&app, page, 2, "cursor-1");
+    CHECK(app.search.count == 2);
+    CHECK(app.search.has_more);
+    /* Two rows on a three-row screen sit inside the prefetch window, so the
+     * next page is wanted straight away. */
+    CHECK(indigo_search_wants_page(&app.search));
+    app.search.selected = app.search.count - 1;
+    CHECK(indigo_search_wants_page(&app.search));
+
+    /* A second page appends rather than replacing. */
+    indigo_search_begin_page(&app.search, true);
+    indigo_app_search_loaded(&app, page, 2, "");
+    CHECK(app.search.count == 4);
+    CHECK(!app.search.has_more);
+    CHECK(!indigo_search_wants_page(&app.search));
+
+    /* An empty page on a non-empty list ends the paging even when the
+     * server still offers a cursor. */
+    indigo_search_begin_page(&app.search, true);
+    indigo_app_search_loaded(&app, NULL, 0, "cursor-2");
+    CHECK(app.search.count == 4);
+    CHECK(!app.search.has_more);
 }
 
 /* Following is a toggle the server can disagree with, so it is tested in both
@@ -2842,7 +2884,7 @@ test_people_lists(void)
     /* Switching kind must not leave the previous list under the new heading. */
     memset(a, 0, sizeof a);
     snprintf(a[0].handle, sizeof a[0].handle, "one.example");
-    indigo_app_search_loaded(&app, a, 1);
+    indigo_app_search_loaded(&app, a, 1, "");
     CHECK(app.search.count == 1);
     indigo_app_open_people(&app, INDIGO_SEARCH_FOLLOWING, app.profile.handle);
     CHECK(app.search.count == 0);
@@ -2905,7 +2947,7 @@ test_post_search(void)
     snprintf(p[0].display_name, sizeof p[0].display_name, "Rhiannon");
     snprintf(p[1].uri, sizeof p[1].uri, "at://did:plc:a/app.bsky.feed.post/2");
     snprintf(p[1].text, sizeof p[1].text, "Old stones and newer roads.");
-    indigo_app_post_search_loaded(&app, p, 2);
+    indigo_app_post_search_loaded(&app, p, 2, "");
     CHECK(app.search.count == 2);
     CHECK(app.search.searched);
     CHECK(indigo_search_selected_post(&app.search) != NULL);
@@ -2913,7 +2955,8 @@ test_post_search(void)
     CHECK(indigo_search_row_post(&app.search, 0, INDIGO_SEARCH_ROWS) != NULL);
 
     /* "No posts matched" is distinct from not having searched. */
-    indigo_app_post_search_loaded(&app, NULL, 0);
+    indigo_search_begin_page(&app.search, false);
+    indigo_app_post_search_loaded(&app, NULL, 0, "");
     CHECK(app.search.count == 0);
     CHECK(app.search.searched);
     CHECK(strcmp(app.search.status, "No posts matched that.") == 0);
@@ -2950,7 +2993,7 @@ test_author_posts(void)
     snprintf(p[0].uri, sizeof p[0].uri, "at://did:plc:a/app.bsky.feed.post/7");
     snprintf(p[0].text, sizeof p[0].text, "Rivers before roads.");
     snprintf(p[0].handle, sizeof p[0].handle, "rhi.example.social");
-    indigo_app_post_search_loaded(&app, p, 1);
+    indigo_app_post_search_loaded(&app, p, 1, "");
     CHECK(app.search.count == 1);
     CHECK(!app.search.loading);
     CHECK(strcmp(indigo_search_selected_post(&app.search)->text, "Rivers before roads.") == 0);
@@ -3048,7 +3091,7 @@ test_lists(void)
     snprintf(lists[1].name, sizeof lists[1].name, "Stones");
     snprintf(lists[1].uri, sizeof lists[1].uri,
              "at://did:plc:me/app.bsky.graph.list/oldstones");
-    indigo_app_lists_loaded(&app, lists, 2);
+    indigo_app_lists_loaded(&app, lists, 2, "");
     CHECK(app.search.count == 2);
     CHECK(!app.search.loading);
     CHECK(strcmp(indigo_search_selected_list(&app.search)->name, "Rivers") == 0);
@@ -3072,7 +3115,7 @@ test_lists(void)
     snprintf(members[0].handle, sizeof members[0].handle, "rhi.example.social");
     snprintf(members[0].display_name, sizeof members[0].display_name, "Rhiannon");
     snprintf(members[1].handle, sizeof members[1].handle, "rhibear.example.social");
-    indigo_app_search_loaded(&app, members, 2);
+    indigo_app_search_loaded(&app, members, 2, "");
     CHECK(app.search.count == 2);
     CHECK(!app.search.loading);
     CHECK(strcmp(indigo_search_selected(&app.search)->handle, "rhi.example.social") == 0);
@@ -3148,7 +3191,7 @@ test_feeds(void)
     snprintf(feeds[1].name, sizeof feeds[1].name, "Moon photos");
     snprintf(feeds[1].uri, sizeof feeds[1].uri,
              "at://did:plc:me/app.bsky.feed.generator/moon");
-    indigo_app_feeds_loaded(&app, feeds, 2);
+    indigo_app_feeds_loaded(&app, feeds, 2, "");
     CHECK(app.search.count == 2);
     CHECK(!app.search.loading);
     CHECK(strcmp(indigo_search_selected_list(&app.search)->name, "Quiet posters") == 0);
@@ -4198,6 +4241,7 @@ main(void)
     test_search_query_resets_results();
     test_search_empty_and_failure();
     test_search_results_bounded();
+    test_search_paging();
     test_no_duplicate_back_hints();
     test_follow_toggle();
     test_follow_failure_reverts();

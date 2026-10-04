@@ -129,21 +129,21 @@ bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *target_uri, const char *target_cid,
                                    const char *root_uri, const char *root_cid,
                                    int reply_gate);
-/* Find people by name or handle. Results are bounded to INDIGO_SEARCH_MAX;
- * there is no paging, because a 3DS list that cannot show page two is not a
- * list worth paging. */
-bool indigo_session_submit_search(const char *query);
+/* Find people by name or handle. One page at a time; `paging` asks for the
+ * next page of the last search rather than a fresh one, and the event's
+ * cursor carries the one after that (empty when there is no more). */
+bool indigo_session_submit_search(const char *query, bool paging);
 /* Post search. Results are indigo_post, so this has its own result array and
  * its own event rather than sharing the actor search's. */
-bool indigo_session_submit_post_search(const char *query);
+bool indigo_session_submit_post_search(const char *query, bool paging);
 /* One person's posts. Shares post search's result array and event, the way the
  * people lists share the actor search's. */
-bool indigo_session_submit_author_feed(const char *actor);
+bool indigo_session_submit_author_feed(const char *actor, bool paging);
 /* The signed-in account's curated lists, then one list's members. The members
  * reuse the actor search's result array and events, the way the people lists
  * do; the lists themselves have their own. */
-bool indigo_session_submit_lists(void);
-bool indigo_session_submit_list_members(const char *list_uri);
+bool indigo_session_submit_lists(bool paging);
+bool indigo_session_submit_list_members(const char *list_uri, bool paging);
 void indigo_session_post_search_results(const indigo_post **posts, unsigned *count);
 /* The account's curated lists. A list is a third result type, so it has its
  * own array and its own event rather than sharing the actor search's. */
@@ -156,13 +156,13 @@ bool indigo_session_submit_feeds(void);
 /* The accounts this one has muted or blocked. Both land in the actor results
  * the people lists already use, so they are read-only: undoing a mute or block
  * is done from that person's profile, which is where it was done. */
-bool indigo_session_submit_mutes(void);
-bool indigo_session_submit_blocks(void);
+bool indigo_session_submit_mutes(bool paging);
+bool indigo_session_submit_blocks(bool paging);
 bool indigo_session_submit_feed(const char *feed_uri, const char *cursor);
 void indigo_session_feeds_results(const indigo_list **feeds, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
  * array and its events, because the result type is the same. */
-bool indigo_session_submit_people(indigo_search_kind kind, const char *subject);
+bool indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging);
 /* Follow or unfollow `did`. `follow_uri` is required for an unfollow and
  * ignored for a follow, which creates the record and reports its URI back. */
 bool indigo_session_submit_follow(indigo_follow_action action, const char *did,

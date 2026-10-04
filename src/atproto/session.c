@@ -82,6 +82,9 @@ typedef struct {
     /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
+    /* True when this job asks for the next page of the last search rather
+     * than a fresh one, so the worker appends instead of resetting. */
+    bool paging;
 } job;
 
 static char s_path[256];
@@ -1030,6 +1033,7 @@ do_search(const job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_actor_list list;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1044,7 +1048,8 @@ do_search(const job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_search_actors_typed(s_agent, j->query, INDIGO_SEARCH_MAX, NULL, &list);
+    st = wf_agent_search_actors_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
+                                      cursor, &list);
     if (st != WF_OK) {
         ev.failure = classify(st);
         indigo_log_warn("search failed: wolfram status %d (%s)", (int) st,
@@ -1053,7 +1058,9 @@ do_search(const job *j)
         return;
     }
 
-    s_actor_count = 0;
+    if (!j->paging) {
+        s_actor_count = 0;
+    }
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
 
@@ -1061,9 +1068,10 @@ do_search(const job *j)
             s_actor_count++;
         }
     }
-    wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
     ev.page_count = s_actor_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_actor_list_free(&list);
     indigo_log_info("search '%s': %u", j->query, s_actor_count);
     publish_event(&ev);
 }
@@ -1077,6 +1085,7 @@ do_people(const job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_actor_list list;
     wf_status st = WF_ERR_INVALID_ARG;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1085,9 +1094,11 @@ do_people(const job *j)
     }
     memset(&list, 0, sizeof list);
     if (j->people_kind == INDIGO_SEARCH_FOLLOWERS) {
-        st = wf_agent_get_followers_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL, &list);
+        st = wf_agent_get_followers_typed(s_agent, j->actor, INDIGO_SEARCH_PAGE,
+                                           cursor, &list);
     } else {
-        st = wf_agent_get_follows_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL, &list);
+        st = wf_agent_get_follows_typed(s_agent, j->actor, INDIGO_SEARCH_PAGE,
+                                         cursor, &list);
     }
     if (st != WF_OK) {
         ev.failure = classify(st);
@@ -1097,7 +1108,9 @@ do_people(const job *j)
         return;
     }
 
-    s_actor_count = 0;
+    if (!j->paging) {
+        s_actor_count = 0;
+    }
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
 
@@ -1105,9 +1118,10 @@ do_people(const job *j)
             s_actor_count++;
         }
     }
-    wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
     ev.page_count = s_actor_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_actor_list_free(&list);
     indigo_log_info("people %d '%s': %u", (int) j->people_kind, j->actor, s_actor_count);
     publish_event(&ev);
 }
@@ -1119,6 +1133,7 @@ do_post_search(const job *j)
     wf_agent_post_list list;
     char *next = NULL;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1126,7 +1141,8 @@ do_post_search(const job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_search_posts_typed(s_agent, j->query, INDIGO_SEARCH_MAX, NULL, &list, &next);
+    st = wf_agent_search_posts_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
+                                      cursor, &list, &next);
     if (st != WF_OK) {
         ev.failure = classify(st);
         indigo_log_warn("post search failed: wolfram status %d (%s)", (int) st,
@@ -1135,19 +1151,19 @@ do_post_search(const job *j)
         return;
     }
 
-    s_post_count = 0;
+    if (!j->paging) {
+        s_post_count = 0;
+    }
     for (size_t i = 0; i < list.post_count && s_post_count < INDIGO_SEARCH_MAX; i++) {
         if (fill_post(&list.posts[i], &s_posts[s_post_count])) {
             s_post_count++;
         }
     }
-    /* Search results are bounded like actor search: a 3DS list that cannot show
-     * page two is not a list worth paging, so the cursor is dropped rather
-     * than kept for a page that will never be fetched. */
-    free(next);
-    wf_agent_post_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
     ev.page_count = s_post_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, next ? next : "");
+    free(next);
+    wf_agent_post_list_free(&list);
     indigo_log_info("post search '%s': %u", j->query, s_post_count);
     publish_event(&ev);
 }
@@ -1161,6 +1177,7 @@ do_author_feed(const job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_feed_list list;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1168,7 +1185,7 @@ do_author_feed(const job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_get_author_feed_typed(s_agent, j->actor, INDIGO_SEARCH_MAX, NULL,
+    st = wf_agent_get_author_feed_typed(s_agent, j->actor, INDIGO_SEARCH_PAGE, cursor,
                                         /* No filter: posts_with_replies would mix
                                          * replies into a person's own posts, and
                                          * replies_filter removes everything but
@@ -1182,15 +1199,18 @@ do_author_feed(const job *j)
         return;
     }
 
-    s_post_count = 0;
+    if (!j->paging) {
+        s_post_count = 0;
+    }
     for (size_t i = 0; i < list.item_count && s_post_count < INDIGO_SEARCH_MAX; i++) {
         if (to_post(&list.items[i], &s_posts[s_post_count])) {
             s_post_count++;
         }
     }
-    wf_agent_feed_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
     ev.page_count = s_post_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_feed_list_free(&list);
     indigo_log_info("author feed '%s': %u", j->actor, s_post_count);
     publish_event(&ev);
 }
@@ -1204,8 +1224,8 @@ do_lists(const job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_list_view_list list;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    (void) j;
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
         publish_event(&ev);
@@ -1222,7 +1242,7 @@ do_lists(const job *j)
             return;
         }
         memset(&list, 0, sizeof list);
-        st = wf_agent_get_lists_typed(s_agent, who, INDIGO_SEARCH_MAX, NULL, &list);
+        st = wf_agent_get_lists_typed(s_agent, who, INDIGO_SEARCH_PAGE, cursor, &list);
     }
     if (st != WF_OK) {
         ev.failure = classify(st);
@@ -1232,7 +1252,9 @@ do_lists(const job *j)
         return;
     }
 
-    s_list_count = 0;
+    if (!j->paging) {
+        s_list_count = 0;
+    }
     for (size_t i = 0; i < list.list_count && s_list_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_list_view *l = &list.lists[i];
         indigo_list *o = &s_lists[s_list_count];
@@ -1247,9 +1269,10 @@ do_lists(const job *j)
                          l->description ? l->description : "");
         s_list_count++;
     }
-    wf_agent_list_view_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_LISTS_PAGE;
     ev.page_count = s_list_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_list_view_list_free(&list);
     indigo_log_info("lists: %u", s_list_count);
     publish_event(&ev);
 }
@@ -1263,6 +1286,7 @@ do_list_members(const job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_list_item_list list;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1270,7 +1294,7 @@ do_list_members(const job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_get_list_typed(s_agent, j->list_uri, INDIGO_SEARCH_MAX, NULL, &list);
+    st = wf_agent_get_list_typed(s_agent, j->list_uri, INDIGO_SEARCH_PAGE, cursor, &list);
     if (st != WF_OK) {
         ev.failure = classify(st);
         indigo_log_warn("list members failed: wolfram status %d (%s)", (int) st,
@@ -1279,7 +1303,9 @@ do_list_members(const job *j)
         return;
     }
 
-    s_actor_count = 0;
+    if (!j->paging) {
+        s_actor_count = 0;
+    }
     for (size_t i = 0; i < list.item_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.items[i].subject;
 
@@ -1287,9 +1313,10 @@ do_list_members(const job *j)
             s_actor_count++;
         }
     }
-    wf_agent_list_item_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
     ev.page_count = s_actor_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_list_item_list_free(&list);
     indigo_log_info("list members '%s': %u", j->list_uri, s_actor_count);
     publish_event(&ev);
 }
@@ -1306,6 +1333,7 @@ do_moderation_list(const job *j)
     const bool blocks = j->kind == JOB_BLOCKS;
     wf_agent_actor_list list;
     wf_status st;
+    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
         ev.failure = INDIGO_FAIL_NOT_READY;
@@ -1314,9 +1342,9 @@ do_moderation_list(const job *j)
     }
     memset(&list, 0, sizeof list);
     if (blocks) {
-        st = wf_agent_get_blocks_typed(s_agent, INDIGO_SEARCH_MAX, NULL, &list);
+        st = wf_agent_get_blocks_typed(s_agent, INDIGO_SEARCH_PAGE, cursor, &list);
     } else {
-        st = wf_agent_get_mutes_typed(s_agent, INDIGO_SEARCH_MAX, NULL, &list);
+        st = wf_agent_get_mutes_typed(s_agent, INDIGO_SEARCH_PAGE, cursor, &list);
     }
     if (st != WF_OK) {
         ev.failure = classify(st);
@@ -1326,7 +1354,9 @@ do_moderation_list(const job *j)
         return;
     }
 
-    s_actor_count = 0;
+    if (!j->paging) {
+        s_actor_count = 0;
+    }
     for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.actors[i];
 
@@ -1334,9 +1364,10 @@ do_moderation_list(const job *j)
             s_actor_count++;
         }
     }
-    wf_agent_actor_list_free(&list);
     ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
     ev.page_count = s_actor_count;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+    wf_agent_actor_list_free(&list);
     indigo_log_info("%s accounts: %u", blocks ? "blocked" : "muted", s_actor_count);
     publish_event(&ev);
 }
@@ -2060,57 +2091,62 @@ indigo_session_profile(void)
 }
 
 bool
-indigo_session_submit_search(const char *query)
+indigo_session_submit_search(const char *query, bool paging)
 {
     job j = {.kind = JOB_SEARCH};
 
     if (!query) {
         return false;
     }
+    j.paging = paging;
     indigo_copy_utf8(j.query, sizeof j.query, query);
     return submit(&j);
 }
 
 bool
-indigo_session_submit_post_search(const char *query)
+indigo_session_submit_post_search(const char *query, bool paging)
 {
     job j = {.kind = JOB_POST_SEARCH};
 
     if (!query) {
         return false;
     }
+    j.paging = paging;
     indigo_copy_utf8(j.query, sizeof j.query, query);
     return submit(&j);
 }
 
 bool
-indigo_session_submit_author_feed(const char *actor)
+indigo_session_submit_author_feed(const char *actor, bool paging)
 {
     job j = {.kind = JOB_AUTHOR_FEED};
 
     if (!actor || !actor[0]) {
         return false;
     }
+    j.paging = paging;
     indigo_copy_utf8(j.actor, sizeof j.actor, actor);
     return submit(&j);
 }
 
 bool
-indigo_session_submit_lists(void)
+indigo_session_submit_lists(bool paging)
 {
     job j = {.kind = JOB_LISTS};
 
+    j.paging = paging;
     return submit(&j);
 }
 
 bool
-indigo_session_submit_list_members(const char *list_uri)
+indigo_session_submit_list_members(const char *list_uri, bool paging)
 {
     job j = {.kind = JOB_LIST_MEMBERS};
 
     if (!list_uri || !list_uri[0]) {
         return false;
     }
+    j.paging = paging;
     indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
     return submit(&j);
 }
@@ -2124,18 +2160,20 @@ indigo_session_submit_feeds(void)
 }
 
 bool
-indigo_session_submit_mutes(void)
+indigo_session_submit_mutes(bool paging)
 {
     job j = {.kind = JOB_MUTES};
 
+    j.paging = paging;
     return submit(&j);
 }
 
 bool
-indigo_session_submit_blocks(void)
+indigo_session_submit_blocks(bool paging)
 {
     job j = {.kind = JOB_BLOCKS};
 
+    j.paging = paging;
     return submit(&j);
 }
 
@@ -2189,13 +2227,14 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
 }
 
 bool
-indigo_session_submit_people(indigo_search_kind kind, const char *subject)
+indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging)
 {
     job j = {.kind = JOB_PEOPLE, .people_kind = kind};
 
     if (kind == INDIGO_SEARCH_PEOPLE || !subject || !subject[0]) {
         return false;
     }
+    j.paging = paging;
     indigo_copy_utf8(j.actor, sizeof j.actor, subject);
     return submit(&j);
 }
@@ -2446,9 +2485,10 @@ indigo_session_notifications(unsigned *count)
 }
 
 bool
-indigo_session_submit_search(const char *query)
+indigo_session_submit_search(const char *query, bool paging)
 {
     (void) query;
+    (void) paging;
     return false;
 }
 
@@ -2473,37 +2513,42 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
 }
 
 bool
-indigo_session_submit_people(indigo_search_kind kind, const char *subject)
+indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging)
 {
     (void) kind;
     (void) subject;
+    (void) paging;
     return false;
 }
 
 bool
-indigo_session_submit_post_search(const char *query)
+indigo_session_submit_post_search(const char *query, bool paging)
 {
     (void) query;
+    (void) paging;
     return false;
 }
 
 bool
-indigo_session_submit_author_feed(const char *actor)
+indigo_session_submit_author_feed(const char *actor, bool paging)
 {
     (void) actor;
+    (void) paging;
     return false;
 }
 
 bool
-indigo_session_submit_lists(void)
+indigo_session_submit_lists(bool paging)
 {
+    (void) paging;
     return false;
 }
 
 bool
-indigo_session_submit_list_members(const char *list_uri)
+indigo_session_submit_list_members(const char *list_uri, bool paging)
 {
     (void) list_uri;
+    (void) paging;
     return false;
 }
 
@@ -2514,14 +2559,16 @@ indigo_session_submit_feeds(void)
 }
 
 bool
-indigo_session_submit_mutes(void)
+indigo_session_submit_mutes(bool paging)
 {
+    (void) paging;
     return false;
 }
 
 bool
-indigo_session_submit_blocks(void)
+indigo_session_submit_blocks(bool paging)
 {
+    (void) paging;
     return false;
 }
 

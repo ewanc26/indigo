@@ -203,7 +203,7 @@ handle_requests(indigo_app *app)
         handle_edit_query(app);
         break;
     case INDIGO_REQUEST_SEARCH:
-        if (!indigo_session_submit_search(app->search.query)) {
+        if (!indigo_session_submit_search(app->search.query, app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -220,27 +220,31 @@ handle_requests(indigo_app *app)
         }
         break;
     case INDIGO_REQUEST_PEOPLE:
-        if (!indigo_session_submit_people(app->request_people, app->request_subject)) {
+        if (!indigo_session_submit_people(app->request_people, app->request_subject,
+                                          app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_POST_SEARCH:
-        if (!indigo_session_submit_post_search(app->search.query)) {
+        if (!indigo_session_submit_post_search(app->search.query,
+                                               app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_AUTHOR_FEED:
-        if (!indigo_session_submit_author_feed(app->request_actor)) {
+        if (!indigo_session_submit_author_feed(app->request_actor,
+                                               app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_LISTS:
-        if (!indigo_session_submit_lists()) {
+        if (!indigo_session_submit_lists(app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_LIST_MEMBERS:
-        if (!indigo_session_submit_list_members(app->request_list_uri)) {
+        if (!indigo_session_submit_list_members(app->request_list_uri,
+                                                app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -250,12 +254,12 @@ handle_requests(indigo_app *app)
         }
         break;
     case INDIGO_REQUEST_MUTES:
-        if (!indigo_session_submit_mutes()) {
+        if (!indigo_session_submit_mutes(app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_BLOCKS:
-        if (!indigo_session_submit_blocks()) {
+        if (!indigo_session_submit_blocks(app->search.cursor[0] != '\0')) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -369,7 +373,7 @@ handle_events(indigo_app *app)
             unsigned n;
             const indigo_actor *actors = indigo_session_search_results(&n);
 
-            indigo_app_search_loaded(app, actors, n);
+            indigo_app_search_loaded(app, actors, n, ev.cursor);
             break;
         }
         case INDIGO_SESSION_EVENT_SEARCH_FAILED:
@@ -380,7 +384,7 @@ handle_events(indigo_app *app)
             unsigned pn;
 
             indigo_session_post_search_results(&posts, &pn);
-            indigo_app_post_search_loaded(app, posts, pn);
+            indigo_app_post_search_loaded(app, posts, pn, ev.cursor);
             break;
         }
         case INDIGO_SESSION_EVENT_LISTS_PAGE: {
@@ -388,7 +392,7 @@ handle_events(indigo_app *app)
             unsigned ln;
 
             indigo_session_lists_results(&lists, &ln);
-            indigo_app_lists_loaded(app, lists, ln);
+            indigo_app_lists_loaded(app, lists, ln, ev.cursor);
             break;
         }
         case INDIGO_SESSION_EVENT_FEEDS_PAGE: {
@@ -396,7 +400,7 @@ handle_events(indigo_app *app)
             unsigned fn;
 
             indigo_session_feeds_results(&feeds, &fn);
-            indigo_app_feeds_loaded(app, feeds, fn);
+            indigo_app_feeds_loaded(app, feeds, fn, ev.cursor);
             break;
         }
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:

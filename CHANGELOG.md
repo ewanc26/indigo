@@ -7,6 +7,14 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Search results page in. Actor search, post search, a profile's posts,
+  followers and following, lists, list members, mutes and blocks all grow
+  more results as the cursor nears the end of what is held -- the same
+  prefetch rule the timeline uses, so scrolling does not pause at a page
+  boundary. Pages append rather than replace, a page that brings back
+  nothing ends the paging, and the list stops asking at sixty entries.
+  Saved feeds are the one exception: they come from the account's
+  preferences in a single fetch, so there is no second page to ask for.
 - Muted words and "hide reposts" are honoured in the home timeline and custom
   feeds. The account's saved preferences are fetched once per sign-in, and a
   post whose text or tags carry a muted word is dropped from the page before
