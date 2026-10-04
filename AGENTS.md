@@ -654,7 +654,7 @@ The intended progression is:
 - session persistence;
 - cache;
 - drafts;
-- media (the pipeline and avatars are in; post images and link cards are not);
+- media (the pipeline, avatars, post images and link cards are in; a full-size viewer is not);
 - accessibility;
 - performance;
 - distribution metadata.
@@ -729,10 +729,11 @@ The current repository has:
 - a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
 - an image pipeline (`src/media`): a fixed-size, byte-budgeted decoded-image cache (`media.c`, pure and host-testable) and a fetch/decode worker thread (`media_loader.c`) that uses Wolfram's token-less public GET and `wf_image_decode_rgba`, plus an `INDIGO_CMD_IMAGE` canvas command whose replay uploads power-of-two citro3d textures on the main thread and draws a per-URL tinted placeholder while a URL is not yet decoded;
 - avatars on every row that has a person in it — timeline and thread rows, the selected post's header, the profile header, the notification list and its detail, and every people row in search, list members, followers, following, mutes and blocks;
-- still no paging on the search results, and no post images, link cards or full-size image viewer. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
+- post images and link cards on the post detail surfaces: `indigo_post` carries the kind, the declared aspect ratio, the image count, the thumbnail URL, the alt text and a link's title and URI, and `ui/layout.c` draws either as itself in the band between the text and the counters. The detail screen spends three of a post's five lines of text on the embed, because the alternative -- a thumbnail beside the text -- costs 130px of width and nearly half the characters per line. One image is drawn of up to four and the count is stated; alt text is carried but shown by nothing, since it wants a settings toggle rather than a caption;
+- still no paging on the search results, no full-size image viewer, and no alt-text setting. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, the media pipeline and avatars are in, and what remains is session persistence polish, cache, drafts, post images and link cards, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, the media pipeline, avatars, post images and link cards are in, and what remains is session persistence polish, cache, drafts, a full-size image viewer, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.

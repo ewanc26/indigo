@@ -14,6 +14,7 @@
 #include "ui/wrap.h"
 #include "util/timefmt.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1776,6 +1777,267 @@ check_shapes_on_screen(const indigo_app *app, const indigo_input *in, unsigned s
     }
 }
 
+/* The image box of a post: what was drawn, where, and whether the box is the
+ * shape the server said it was. A 4:3 photo drawn square is as wrong as one
+ * drawn off the screen, and neither shows up in a text snapshot. */
+static const indigo_cmd *
+find_image(const indigo_canvas *c, const char *url)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind == INDIGO_CMD_IMAGE &&
+            strcmp(c->images[c->cmds[i].image_index].url, url) == 0) {
+            return &c->cmds[i];
+        }
+    }
+    return NULL;
+}
+
+/* Whether any text command on this canvas contains `needle`. */
+static bool
+text_has(const indigo_canvas *c, const char *needle)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        const indigo_cmd *cmd = &c->cmds[i];
+
+        if (cmd->kind != INDIGO_CMD_TEXT) {
+            continue;
+        }
+        if (strstr(c->text + cmd->text_offset, needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* How many lines of text the layout gave the post. The block is identified by
+ * its own geometry rather than by a marker: the post's text is the only text at
+ * the text column, at the post's scale, above the counters. A link card's title
+ * is at a different inset and a card's own band. */
+static unsigned
+post_text_lines(const indigo_canvas *c)
+{
+    unsigned n = 0;
+
+    for (unsigned i = 0; i < c->count; i++) {
+        const indigo_cmd *cmd = &c->cmds[i];
+
+        if (cmd->kind == INDIGO_CMD_TEXT && cmd->x == 18.0f && cmd->scale > 0.59f &&
+            cmd->scale < 0.61f && cmd->y >= 90.0f && cmd->y < 200.0f) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static void
+test_layout_draws_post_images(void)
+{
+    static const char *const thumb =
+        "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/a@jpeg";
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post *p;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    app.timeline.count = 1;
+    p = &app.timeline.posts[0];
+    indigo_copy_utf8(p->text, sizeof p->text,
+                     "Look at this. It is a photograph of a bridge, taken from "
+                     "the towpath, on a day when the light was doing something "
+                     "interesting to the water.");
+    indigo_copy_utf8(p->embed_note, sizeof p->embed_note, "[1 image]");
+    indigo_copy_utf8(p->embed_thumb, sizeof p->embed_thumb, thumb);
+    p->embed_kind = INDIGO_EMBED_IMAGE;
+    p->embed_w = 4;
+    p->embed_h = 3;
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow && !bottom.overflow);
+    {
+        const indigo_cmd *img = find_image(&top, thumb);
+
+        CHECK(img != NULL);
+        if (img) {
+            /* The declared shape, inside the band, and no taller than the band
+             * whatever the ratio says. */
+            CHECK(fabsf(img->w - 80.0f) < 0.51f && fabsf(img->h - 60.0f) < 0.51f);
+            CHECK(img->y >= 128.0f && img->y + img->h <= 194.0f);
+            CHECK(img->x >= 0.0f && img->x + img->w <= (float) top.width);
+            /* Centred in the band: equal space either side. */
+            CHECK(fabsf(img->x - 18.0f - ((364.0f - img->w) / 2.0f)) < 0.51f);
+            /* Requested at the size it is drawn at, so an avatar-sized decode
+             * is not what a full box costs. */
+            CHECK(fabsf((float) (img->w > img->h ? img->w : img->h) - 80.0f) < 0.51f);
+        }
+        /* The one-line note says less than the picture does, so a post whose
+         * embed is drawn does not also print it. */
+        CHECK(!text_has(&top, "[1 image]"));
+                /* An image costs the post three of its five lines of text. */
+        CHECK(post_text_lines(&top) == 2);
+    }
+
+    /* Portrait, square, and a wide panorama: each is fitted, none is stretched. */
+    static const struct {
+        unsigned w;
+        unsigned h;
+    } shapes[] = {{3, 4}, {1, 1}, {16, 9}, {9, 16}, {3, 1}, {1, 3}};
+    for (unsigned i = 0; i < sizeof shapes / sizeof shapes[0]; i++) {
+        const indigo_cmd *img;
+
+        p->embed_w = (unsigned char) shapes[i].w;
+        p->embed_h = (unsigned char) shapes[i].h;
+        indigo_layout_build(&app, &in, &top, &bottom);
+        img = find_image(&top, thumb);
+        CHECK(img != NULL);
+        if (!img) {
+            continue;
+        }
+        /* The drawn ratio is the declared one to within a pixel of rounding,
+         * and the box is inside the band whichever way it faces. */
+        CHECK(fabsf(img->w / img->h - (float) shapes[i].w / (float) shapes[i].h) <
+              0.06f);
+        CHECK(img->h <= 60.51f && img->w <= 364.51f);
+        CHECK(img->y >= 128.0f && img->y + img->h <= 194.0f);
+        CHECK(img->x >= 17.0f && img->x + img->w <= 383.0f);
+    }
+
+    /* No declared ratio: a square, which is the assumption that distorts least
+     * when the server says nothing at all. */
+    p->embed_w = 0;
+    p->embed_h = 0;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    {
+        const indigo_cmd *img = find_image(&top, thumb);
+
+        CHECK(img != NULL);
+        CHECK(img && fabsf(img->w - 60.0f) < 0.51f && fabsf(img->h - 60.0f) < 0.51f);
+    }
+
+    /* Four images, one drawn: the count is stated rather than implied. */
+    p->embed_w = 4;
+    p->embed_h = 3;
+    p->embed_count = 4;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "+3 more"));
+    p->embed_count = 1;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&top, "more"));
+
+    /* An image the view could not give a URL for is not drawn: the note says
+     * the post has an image, which is true, and the box would be a lie. The
+     * text then gets its lines back, because nothing was drawn in their place. */
+    p->embed_thumb[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(find_image(&top, thumb) == NULL);
+    CHECK(top.image_count == 0);
+    CHECK(text_has(&top, "[1 image]"));
+    {
+        unsigned full = post_text_lines(&top);
+
+        CHECK(full > 2);
+        CHECK(full <= 5);
+    }
+}
+
+static void
+test_layout_draws_link_cards(void)
+{
+    static const char *const card_thumb =
+        "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/card@jpeg";
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post *p;
+    unsigned rects;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    app.timeline.count = 1;
+    p = &app.timeline.posts[0];
+    indigo_copy_utf8(p->text, sizeof p->text, "Worth reading, and long enough that the "
+                                             "text wants more than the two lines an "
+                                             "embed leaves it.");
+    indigo_copy_utf8(p->embed_note, sizeof p->embed_note, "Link: A very long title");
+    indigo_copy_utf8(p->embed_title, sizeof p->embed_title,
+                     "The Bridges of the Tyne, one at a time");
+    indigo_copy_utf8(p->embed_uri, sizeof p->embed_uri,
+                     "https://example.com/bridges");
+    p->embed_kind = INDIGO_EMBED_LINK;
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow);
+    CHECK(text_has(&top, "Bridges of the Tyne"));
+    CHECK(text_has(&top, "example.com/bridges"));
+    CHECK(!text_has(&top, "[Link:"));
+    /* A card is a surface, so it is drawn as a rect where an image would be
+     * drawn as an image. */
+    rects = 0;
+    for (unsigned i = 0; i < top.count; i++) {
+        if (top.cmds[i].kind == INDIGO_CMD_RECT && top.cmds[i].y > 100.0f &&
+            top.cmds[i].w > 300.0f) {
+            rects++;
+        }
+    }
+    CHECK(rects == 1);
+    CHECK(top.image_count == 0);
+    CHECK(post_text_lines(&top) == 2);
+    /* The card's text and its URI both stay inside the card. */
+    for (unsigned i = 0; i < top.count; i++) {
+        const indigo_cmd *cmd = &top.cmds[i];
+
+        if (cmd->kind == INDIGO_CMD_TEXT && cmd->y > 120.0f && cmd->y < 195.0f) {
+            CHECK(cmd->x >= 18.0f);
+            CHECK(cmd->x + cmd->w <= 382.0f);
+        }
+    }
+
+    /* With a thumbnail the card shows it, and gives the title less width so
+     * the two cannot collide. */
+    unsigned title_w_with = 0;
+    for (unsigned i = 0; i < top.count; i++) {
+        if (top.cmds[i].kind == INDIGO_CMD_TEXT && strstr(top.text + top.cmds[i].text_offset,
+                                                          "Bridges")) {
+            title_w_with = (unsigned) (top.cmds[i].x + top.cmds[i].w);
+        }
+    }
+    indigo_copy_utf8(p->embed_thumb, sizeof p->embed_thumb, card_thumb);
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(find_image(&top, card_thumb) != NULL);
+    CHECK(text_has(&top, "Bridges"));
+    {
+        unsigned title_w_without = 0;
+
+        for (unsigned i = 0; i < top.count; i++) {
+            if (top.cmds[i].kind == INDIGO_CMD_TEXT &&
+                strstr(top.text + top.cmds[i].text_offset, "Bridges")) {
+                title_w_without = (unsigned) (top.cmds[i].x + top.cmds[i].w);
+            }
+        }
+        CHECK(title_w_without > 0 && title_w_with > 0);
+        /* The image is to the right of every line of title, and the title is
+         * to the left of it: they do not overlap. */
+        CHECK(title_w_without <= 322);
+    }
+
+    /* A link card with no title draws the URI as its title rather than an
+     * empty card. */
+    p->embed_thumb[0] = '\0';
+    p->embed_title[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "example.com/bridges"));
+
+    /* A card with no URI is not a card: it falls back to the note. */
+    p->embed_uri[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&top, "bridges"));
+    CHECK(text_has(&top, "Link: A very long title"));
+    CHECK(post_text_lines(&top) > 2);
+}
+
 static void
 test_shapes_stay_on_screen(void)
 {
@@ -3260,6 +3522,8 @@ main(void)
     test_media_placeholder_colour();
     test_layout_draws_avatars();
     test_shapes_stay_on_screen();
+    test_layout_draws_post_images();
+    test_layout_draws_link_cards();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

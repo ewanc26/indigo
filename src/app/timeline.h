@@ -16,6 +16,17 @@
 #define INDIGO_POST_CID_MAX 72
 #define INDIGO_POST_NAME_MAX 64
 #define INDIGO_POST_NOTE_MAX 96
+/* A CDN thumbnail URL: a cdn.bsky.app path with a DID and a blob key is around
+ * 90 characters, and the cache keys on this exact string, so it is stored at
+ * the width the cache keeps rather than truncated to fit. */
+#define INDIGO_EMBED_URL_MAX 160
+/* Alt text is a sentence, and a screen reader reads all of it. */
+#define INDIGO_EMBED_ALT_MAX 160
+/* A link card's title and the URI under it, both truncated on screen. */
+#define INDIGO_EMBED_TITLE_MAX 96
+/* A post carries at most four images. The count is clamped rather than trusted,
+ * so a view that says otherwise cannot overflow the byte that holds it. */
+#define INDIGO_EMBED_IMAGES_MAX 4
 /* Facet target: a did for a mention, a URI for a link, a bare tag. Long
  * targets are truncated; they are only ever shown, never fetched. */
 #define INDIGO_FACET_TARGET_MAX 96
@@ -28,6 +39,15 @@ typedef enum {
     INDIGO_FACET_MENTION,
     INDIGO_FACET_TAG,
 } indigo_facet_kind;
+
+/* What a post carries, for drawing rather than for the summary line. A kind of
+ * NONE with a non-empty embed_note is a quote or an attachment Indigo draws as
+ * text; IMAGE and LINK are drawn as themselves. */
+typedef enum {
+    INDIGO_EMBED_NONE = 0,
+    INDIGO_EMBED_IMAGE,
+    INDIGO_EMBED_LINK,
+} indigo_embed_kind;
 
 typedef struct {
     indigo_facet_kind kind;
@@ -51,8 +71,25 @@ typedef struct {
     unsigned facet_count;
     /* "Reposted by X" or empty. */
     char reposted_by[INDIGO_POST_NAME_MAX];
-    /* A one-line summary of an image, link or quote embed, or empty. */
+    /* A one-line summary of an image, link or quote embed, or empty. It is
+     * filled for every kind, because a list row has room for a line and not
+     * for the embed; the detail screen draws the embed itself and ignores it. */
     char embed_note[INDIGO_POST_NOTE_MAX];
+    /* The embed, when there is one to draw. The declared aspect ratio is the
+     * server's, 0 for either side when it declared none, and the box is drawn
+     * from it -- so a portrait photo and a landscape one both fit without
+     * decoding anything first. */
+    indigo_embed_kind embed_kind;
+    unsigned char embed_w;
+    unsigned char embed_h;
+    /* How many images the author attached. One is drawn; the rest are counted,
+     * because a post of four photos is a different thing from a post of one and
+     * the row says so. */
+    unsigned char embed_count;
+    char embed_thumb[INDIGO_EMBED_URL_MAX];
+    char embed_alt[INDIGO_EMBED_ALT_MAX];
+    char embed_title[INDIGO_EMBED_TITLE_MAX];
+    char embed_uri[INDIGO_POST_NAME_MAX];
     bool is_reply;
     /* Nesting in a thread view: 0 for ancestors, the post itself and the
      * timeline; replies are deeper. */

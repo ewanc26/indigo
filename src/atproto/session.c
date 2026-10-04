@@ -404,6 +404,61 @@ count_of(int v)
     return v > 0 ? (unsigned) v : 0;
 }
 
+/* The first image of an embed, or nothing. Wolfram keeps every image in the
+ * author's order including ones with no thumbnail, so the first drawable one is
+ * not always the first: a view that lost an image to a CDN error would
+ * otherwise leave the post with no picture at all. */
+static const wf_display_image *
+first_image(const wf_post_display *d)
+{
+    for (size_t i = 0; i < d->image_count; i++) {
+        if (d->images[i].thumb && d->images[i].thumb[0]) {
+            return &d->images[i];
+        }
+    }
+    return NULL;
+}
+
+/* Carry the embed onto the post, for the screens that draw it. The one-line
+ * note is filled either way, by embed_note(). */
+static void
+fill_embed(const wf_post_display *d, indigo_post *out)
+{
+    const wf_display_image *img;
+
+    out->embed_count =
+        d->image_count > INDIGO_EMBED_IMAGES_MAX ? INDIGO_EMBED_IMAGES_MAX
+                                                  : (unsigned char) d->image_count;
+    if ((img = first_image(d)) != NULL) {
+        out->embed_kind = INDIGO_EMBED_IMAGE;
+        indigo_copy_utf8(out->embed_thumb, sizeof out->embed_thumb, img->thumb);
+        indigo_copy_utf8(out->embed_alt, sizeof out->embed_alt,
+                         img->alt ? img->alt : "");
+        /* The declared ratio, halved until it fits a byte. Two octaves of
+         * precision is far more than a box this size can show. */
+        if (img->width > 0 && img->height > 0) {
+            unsigned w = (unsigned) img->width;
+            unsigned h = (unsigned) img->height;
+
+            while (w > 255 || h > 255) {
+                w /= 2;
+                h /= 2;
+            }
+            out->embed_w = (unsigned char) (w ? w : 1);
+            out->embed_h = (unsigned char) (h ? h : 1);
+        }
+        return;
+    }
+    if (d->embed_kind == WF_EMBED_EXTERNAL && d->external_uri) {
+        out->embed_kind = INDIGO_EMBED_LINK;
+        indigo_copy_utf8(out->embed_title, sizeof out->embed_title,
+                         d->external_title ? d->external_title : "");
+        indigo_copy_utf8(out->embed_uri, sizeof out->embed_uri, d->external_uri);
+        indigo_copy_utf8(out->embed_thumb, sizeof out->embed_thumb,
+                         d->external_thumb ? d->external_thumb : "");
+    }
+}
+
 /* False when the post cannot be shown at all (no URI). */
 static bool
 fill_post(const wf_agent_post_view *pv, indigo_post *out)
@@ -439,6 +494,7 @@ fill_post(const wf_agent_post_view *pv, indigo_post *out)
             embed_note(&d, note, sizeof note);
             indigo_copy_utf8(out->embed_note, sizeof out->embed_note, note);
         }
+        fill_embed(&d, out);
         for (size_t i = 0; i < d.facet_count && out->facet_count < INDIGO_POST_FACETS_MAX; i++) {
             const wf_display_facet *f = &d.facets[i];
 

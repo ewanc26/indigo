@@ -14,6 +14,9 @@
 #define COL_TEXT_SOFT INDIGO_RGBA(220, 224, 232, 255)
 #define COL_TEXT_DIM INDIGO_RGBA(160, 168, 184, 255)
 #define COL_PILL INDIGO_RGBA(44, 50, 66, 255)
+/* A link card is a surface, not a control: one step above the background, so
+ * it reads as a card the reader can look into rather than something to press. */
+#define COL_CARD INDIGO_RGBA(27, 31, 41, 255)
 #define COL_PILL_ACTIVE INDIGO_RGBA(74, 96, 180, 255)
 
 /* Timeline-style lists: three rows with 4px between, then a row of four
@@ -351,6 +354,26 @@ author_name(const indigo_post *p)
  * squeezing the two text lines; the header sizes are the top screen's. */
 #define ROW_AVATAR 32
 #define HEAD_AVATAR 24
+
+/* A post's embed -- an image, or a link card -- takes the space between the
+ * text and the counters, so the text drops to POST_TEXT_LINES_EMBED lines.
+ *
+ * The other way to do it is a thumbnail beside the text, and that is worse: it
+ * costs about 130px of width, which is nearly half the characters per line, so
+ * a post's worth of text would not fit in the space the thumbnail would have
+ * taken. Two lines of caption and a real box for the picture is the better
+ * trade on a screen this size. */
+#define POST_TEXT_LINES_EMBED 2
+#define POST_NOTE_Y 196
+#define POST_COUNTER_Y 214
+#define EMBED_X 18
+#define EMBED_Y 132
+#define EMBED_W 364
+#define EMBED_H 60
+/* A link card's text sits inside its own edge; the inset is the padding. */
+#define CARD_INSET 10
+/* The thumbnail inside a link card, and the space kept clear for it. */
+#define CARD_THUMB 52
 #define PROFILE_AVATAR 40
 
 /* A square image at `size` pixels, or a tinted placeholder while it loads.
@@ -369,15 +392,16 @@ draw_avatar(indigo_canvas *c, const char *url, float x, float y, float size)
     indigo_canvas_image(c, x, y, size, size, url, indigo_media_placeholder_color(url));
 }
 
-/* Draw `text` as wrapped lines, colouring facet ranges. */
+/* Draw `text` as wrapped lines, colouring facet ranges. `max_lines` is the
+ * budget the caller has: a post with an embed gives up three of its five. */
 static void
-draw_post_text(indigo_canvas *c, const indigo_post *p)
+draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines)
 {
     indigo_line lines[POST_TEXT_LINES];
     int truncated;
     unsigned units = (unsigned) ((INDIGO_TOP_WIDTH - 2 * POST_TEXT_X) /
                                  (INDIGO_CHAR_WIDTH * POST_TEXT_SCALE));
-    unsigned n = indigo_wrap(p->text, units, lines, POST_TEXT_LINES, &truncated);
+    unsigned n = indigo_wrap(p->text, units, lines, max_lines, &truncated);
 
     for (unsigned i = 0; i < n; i++) {
         const char *at = p->text + lines[i].start;
@@ -399,6 +423,123 @@ draw_post_text(indigo_canvas *c, const indigo_post *p)
             e = e > lines[i].start + len ? lines[i].start + len : e;
             indigo_canvas_span(c, s - lines[i].start, e - lines[i].start, COL_LINK);
         }
+    }
+}
+
+/* True when the post has an embed the screen draws as itself rather than as a
+ * line of text. A quote, a video and an attachment Indigo cannot draw all keep
+ * the one-line note instead. */
+static bool
+post_draws_embed(const indigo_post *p)
+{
+    if (p->embed_kind == INDIGO_EMBED_IMAGE) {
+        return p->embed_thumb[0] != '\0';
+    }
+    if (p->embed_kind == INDIGO_EMBED_LINK) {
+        return p->embed_uri[0] != '\0';
+    }
+    return false;
+}
+
+/* A box of the image's own shape inside the band, centred on it. The aspect
+ * ratio is the server's; when it declared none, a square is the assumption
+ * that distorts least, because the box drawn is stretched to whatever shape it
+ * is given. */
+static void
+draw_post_image(indigo_canvas *c, const indigo_post *p)
+{
+    float aw = p->embed_w > 0 && p->embed_h > 0 ? (float) p->embed_w : 1.0f;
+    float ah = p->embed_w > 0 && p->embed_h > 0 ? (float) p->embed_h : 1.0f;
+    /* Fit the declared shape inside the band on both axes. Scaling by the
+     * smaller of the two ratios is what keeps a 1:3 panorama from being 180px
+     * tall: the box is drawn stretched to whatever shape it is given, so a box
+     * outside the band is a box off the screen. */
+    float k = EMBED_W / aw;
+    float by_height = EMBED_H / ah;
+    float w;
+    float h;
+
+    if (by_height < k) {
+        k = by_height;
+    }
+    w = aw * k;
+    h = ah * k;
+    indigo_canvas_image(c, EMBED_X + (EMBED_W - w) / 2.0f, EMBED_Y, w, h,
+                        p->embed_thumb, indigo_media_placeholder_color(p->embed_thumb));
+    /* Bluesky allows four images and Indigo draws one, so a post of several says
+     * so rather than quietly showing one of them as if it were all of them. */
+    if (p->embed_count > 1) {
+        indigo_canvas_text(c, 330, EMBED_Y + EMBED_H - 12.0f, 0.55f, COL_TEXT_DIM,
+                           "+%u more", (unsigned) p->embed_count - 1u);
+    }
+}
+
+/* A link card: the title over the place it points at, with the link's own
+ * picture on the right when the card has one. Indigo cannot open a link yet, so
+ * this is something to read rather than something to press -- hence a surface
+ * colour rather than a control's. */
+static void
+draw_post_link(indigo_canvas *c, const indigo_post *p)
+{
+    float text_x = EMBED_X + (float) CARD_INSET;
+    float text_w = EMBED_W - 2.0f * (float) CARD_INSET;
+    const char *title = p->embed_title[0] ? p->embed_title : p->embed_uri;
+    indigo_line lines[2];
+    int truncated;
+    unsigned units;
+    unsigned n;
+    float y;
+
+    if (p->embed_thumb[0]) {
+        text_w -= (float) (CARD_THUMB + CARD_INSET);
+    }
+    indigo_canvas_rect(c, EMBED_X, EMBED_Y, EMBED_W, EMBED_H, COL_CARD);
+    units = (unsigned) (text_w / (INDIGO_CHAR_WIDTH * POST_TEXT_SCALE));
+    if (units == 0) {
+        units = 1;
+    }
+    n = indigo_wrap(title, units, lines, 2, &truncated);
+
+    for (unsigned i = 0; i < n; i++) {
+        indigo_canvas_text(c, text_x,
+                           EMBED_Y + (float) CARD_INSET +
+                               (float) POST_LINE_PITCH * (float) i,
+                           POST_TEXT_SCALE, COL_TEXT, "%.*s%s", (int) lines[i].len,
+                           title + lines[i].start,
+                           truncated && i + 1 == n ? "..." : "");
+    }
+    /* The title, when there was one, sits above the URI it belongs to. */
+    y = EMBED_Y + (float) CARD_INSET + (float) POST_LINE_PITCH * (float) n;
+    indigo_canvas_text(c, text_x, y, 0.55f, COL_TEXT_DIM, "%.38s", p->embed_uri);
+    if (p->embed_thumb[0]) {
+        indigo_canvas_image(c, EMBED_X + EMBED_W - (float) (CARD_INSET + CARD_THUMB),
+                            EMBED_Y + (float) (CARD_INSET - 4), CARD_THUMB, CARD_THUMB,
+                            p->embed_thumb,
+                            indigo_media_placeholder_color(p->embed_thumb));
+    }
+}
+
+/* The post's text and its embed, filling the space between the header and the
+ * counters. An embed that cannot be drawn keeps its one-line note -- a quote, a
+ * video, an attachment -- and an embed that can be drawn does not, because the
+ * note would say less than the picture does. */
+static void
+draw_post_body(indigo_canvas *c, const indigo_post *p)
+{
+    bool embed = post_draws_embed(p);
+
+    draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES);
+    if (embed) {
+        if (p->embed_kind == INDIGO_EMBED_IMAGE) {
+            draw_post_image(c, p);
+        } else {
+            draw_post_link(c, p);
+        }
+        return;
+    }
+    if (p->embed_note[0]) {
+        indigo_canvas_text(c, POST_TEXT_X, POST_NOTE_Y, 0.55f, COL_TEXT_DIM, "%s",
+                           p->embed_note);
     }
 }
 
@@ -469,18 +610,18 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
      * is no room to give the header a third line. */
     indigo_canvas_text(c, 44, 52, 0.75f, COL_TEXT, "%s", author_name(p));
     indigo_canvas_text(c, 44, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
-    draw_post_text(c, p);
+    draw_post_body(c, p);
 
-    if (p->embed_note[0]) {
-        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%s", p->embed_note);
-    }
-    indigo_canvas_text(c, 18, 214, 0.55f, COL_TEXT_DIM, "%u replies", p->reply_count);
-    indigo_canvas_text(c, 118, 214, 0.55f, p->repost_uri[0] ? COL_REPOSTED : COL_TEXT_DIM,
-                       "%u reposts", p->repost_count);
-    indigo_canvas_text(c, 218, 214, 0.55f, p->like_uri[0] ? COL_LIKED : COL_TEXT_DIM,
-                       "%u likes", p->like_count);
+    indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
+                       p->reply_count);
+    indigo_canvas_text(c, 118, POST_COUNTER_Y, 0.55f,
+                       p->repost_uri[0] ? COL_REPOSTED : COL_TEXT_DIM, "%u reposts",
+                       p->repost_count);
+    indigo_canvas_text(c, 218, POST_COUNTER_Y, 0.55f,
+                       p->like_uri[0] ? COL_LIKED : COL_TEXT_DIM, "%u likes",
+                       p->like_count);
     if (t->loading) {
-        indigo_canvas_text(c, 330, 214, 0.55f, COL_TEXT_DIM, "Loading...");
+        indigo_canvas_text(c, 330, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "Loading...");
     } else if (t->status[0]) {
         indigo_canvas_text(c, 190, 36, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
                            "%s", t->status);
@@ -657,14 +798,13 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
                            author_name(psel));
         indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", psel->handle);
-        draw_post_text(c, psel);
-        if (psel->embed_note[0]) {
-            indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", psel->embed_note);
-        }
-        indigo_canvas_text(c, 18, 214, 0.55f, COL_TEXT_DIM, "%u replies", psel->reply_count);
-        indigo_canvas_text(c, 118, 214, 0.55f, COL_TEXT_DIM, "%u reposts",
+        draw_post_body(c, psel);
+        indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
+                           psel->reply_count);
+        indigo_canvas_text(c, 118, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u reposts",
                            psel->repost_count);
-        indigo_canvas_text(c, 218, 214, 0.55f, COL_TEXT_DIM, "%u likes", psel->like_count);
+        indigo_canvas_text(c, 218, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u likes",
+                           psel->like_count);
         return;
     }
     indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s",
