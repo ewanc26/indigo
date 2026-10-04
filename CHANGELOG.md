@@ -7,6 +7,16 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- Muted words and "hide reposts" are honoured in the home timeline and custom
+  feeds. The account's saved preferences are fetched once per sign-in, and a
+  post whose text or tags carry a muted word is dropped from the page before
+  the app ever sees it. An expiry in the past is skipped rather than honoured,
+  a single alphanumeric word matches whole words only (muting "cat" does not
+  hide "category"), and a phrase matches as a substring. Hide-reposts applies
+  to the home timeline only, which is what the preference means. The rules are
+  the same ones Cobalt settled, so the two clients do not diverge on what a
+  person asked to stop seeing. A failed preferences fetch is not fatal: the
+  feed is shown unfiltered and the next page tries again.
 - A full-size image viewer. With a post that has a picture selected, the
   timeline, the thread and a post in the search results grow an `Image` button
   in the header bar, and ZR does the same on a New 3DS. The picture is drawn on

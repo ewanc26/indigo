@@ -2,6 +2,7 @@
 #include "app/signin.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
+#include "atproto/prefs.h"
 #include "media/media.h"
 #include "store/session_codec.h"
 #include "util/log.h"
@@ -2587,6 +2588,99 @@ test_time_rfc3339(void)
     CHECK(buf[0] == '\0');
     CHECK(!indigo_time_format_rfc3339(0, NULL, sizeof buf));
     CHECK(!indigo_time_format_rfc3339(0, buf, 0));
+
+    /* The parser is the formatter's inverse on the same pinned epochs, and
+     * refuses everything that is not the UTC form ATProto requires. */
+    long long t = 0;
+
+    CHECK(indigo_time_parse_rfc3339("2026-10-03T19:31:35Z", &t));
+    CHECK(t == 1791055895);
+    CHECK(indigo_time_parse_rfc3339("2024-02-29T00:00:00Z", &t));
+    CHECK(t == 1709164800);
+    CHECK(indigo_time_parse_rfc3339("1970-01-01T00:00:00Z", &t));
+    CHECK(t == 0);
+    /* Fractional seconds are present on most PDS output. */
+    CHECK(indigo_time_parse_rfc3339("2026-10-03T19:31:35.123Z", &t));
+    CHECK(t == 1791055895);
+
+    CHECK(!indigo_time_parse_rfc3339(NULL, &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03 19:31:35Z", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35+01:00", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35.123", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-13-03T19:31:35Z", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35Z ", &t));
+    CHECK(!indigo_time_parse_rfc3339("", &t));
+    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35Z", NULL));
+}
+
+/* Muted words and hide-reposts: the rules are the same ones Cobalt settled,
+ * so the checks pin the shared behaviour rather than restating it. */
+static void
+test_prefs(void)
+{
+    indigo_prefs p;
+
+    indigo_prefs_clear(&p);
+    CHECK(!indigo_prefs_text_is_muted(&p, "anything", NULL, 0));
+    CHECK(!indigo_prefs_add_word(&p, "", true, false));
+
+    /* A single alphanumeric word matches whole words only. */
+    CHECK(indigo_prefs_add_word(&p, "cat", true, false));
+    CHECK(indigo_prefs_text_is_muted(&p, "I like my Cat.", NULL, 0));
+    CHECK(indigo_prefs_text_is_muted(&p, "cat", NULL, 0));
+    CHECK(!indigo_prefs_text_is_muted(&p, "a category of things", NULL, 0));
+    CHECK(!indigo_prefs_text_is_muted(&p, "concatenate", NULL, 0));
+
+    /* A phrase matches as a substring. */
+    indigo_prefs_clear(&p);
+    CHECK(indigo_prefs_add_word(&p, "good morning", true, false));
+    CHECK(indigo_prefs_text_is_muted(&p, "oh, GOOD MORNING all", NULL, 0));
+    CHECK(!indigo_prefs_text_is_muted(&p, "good evening", NULL, 0));
+
+    /* A tag mute applies to the tag facets, not the text. */
+    indigo_prefs_clear(&p);
+    CHECK(indigo_prefs_add_word(&p, "#spoilers", false, true));
+    const char *tags[] = {"Spoilers"};
+
+    CHECK(indigo_prefs_text_is_muted(&p, "text", tags, 1));
+    CHECK(!indigo_prefs_text_is_muted(&p, "spoilers in text", NULL, 0));
+
+    /* A word with neither target is content-only, which is what the server
+     * means by the default. */
+    indigo_prefs_clear(&p);
+    CHECK(indigo_prefs_add_word(&p, "default", false, false));
+    CHECK(indigo_prefs_text_is_muted(&p, "the default case", NULL, 0));
+
+    /* Page filtering: reposts hidden on the home timeline only, muted words
+     * everywhere, posts before `from` untouched. */
+    indigo_post page[4];
+
+    memset(page, 0, sizeof page);
+    for (unsigned i = 0; i < 4; i++) {
+        snprintf(page[i].text, sizeof page[i].text, "post %u", i);
+    }
+    snprintf(page[1].text, sizeof page[1].text, "a BAN here");
+    snprintf(page[2].reposted_by, sizeof page[2].reposted_by, "someone");
+
+    indigo_prefs_clear(&p);
+    p.hide_reposts = true;
+    CHECK(indigo_prefs_add_word(&p, "ban", true, false));
+
+    CHECK(indigo_prefs_filter_page(&p, page, 4, 1, false) == 1);
+    CHECK(page[1].reposted_by[0] != '\0');
+    CHECK(strcmp(page[1].text, "post 2") == 0);
+    CHECK(strcmp(page[2].text, "post 3") == 0);
+
+    CHECK(indigo_prefs_filter_page(&p, page, 3, 0, true) == 1);
+    CHECK(strcmp(page[0].text, "post 0") == 0);
+    CHECK(strcmp(page[1].text, "post 3") == 0);
+
+    /* Guards: null prefs hides nothing, and `from` past the end removes
+     * nothing. */
+    CHECK(indigo_prefs_filter_page(NULL, page, 3, 0, true) == 0);
+    CHECK(indigo_prefs_filter_page(&p, page, 3, 3, true) == 0);
+    CHECK(!indigo_prefs_post_is_hidden(&p, NULL, true));
 }
 
 /* Mute is a flag and block is a record, so the two settle differently: block
@@ -4119,6 +4213,7 @@ main(void)
     test_lists();
     test_feeds();
     test_time_rfc3339();
+    test_prefs();
     test_text_stays_on_screen();
     test_settings_screen();
     test_canvas_image_dedupes_by_url();
