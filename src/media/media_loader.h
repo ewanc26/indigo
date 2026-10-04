@@ -25,10 +25,12 @@ void indigo_media_loader_stop(void);
 
 /* Asks for `url` to be fetched, claiming a cache slot for it as it goes. Cheap
  * and safe to call every frame for an image that is not there yet: a URL the
- * cache already knows in any state is dropped. Returns false when the loader is
- * not running or the queue is full, which is not an error -- the next frame
- * asks again. */
-bool indigo_media_loader_request(indigo_media_cache *c, const char *url);
+ * cache already knows in any state is dropped. `max_dim` is the longest decoded
+ * side the caller will draw it at, or 0 for the default. Returns false when the
+ * loader is not running or the queue is full, which is not an error -- the next
+ * frame asks again. */
+bool indigo_media_loader_request(indigo_media_cache *c, const char *url,
+                                 unsigned max_dim);
 
 /* Adopts everything the loader has finished into `c`. Main thread only, once
  * per frame. */

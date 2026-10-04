@@ -33,6 +33,9 @@ typedef struct {
     char url[INDIGO_MEDIA_URL_MAX];
     int slot;
     unsigned generation;
+    /* The longest side the requester will draw at, which is the only thing
+     * that decides how big a decode is worth doing. */
+    unsigned max_dim;
 } pending_fetch;
 
 typedef struct {
@@ -75,7 +78,7 @@ queued(const char *url)
 }
 
 static void
-load_one(const char *url, int slot, unsigned generation)
+load_one(const char *url, int slot, unsigned generation, unsigned max_dim)
 {
     wf_response resp = {0};
     wf_image_rgba img = {0};
@@ -92,7 +95,8 @@ load_one(const char *url, int slot, unsigned generation)
     if (wf_http_get_public(s_client, url, INDIGO_MEDIA_DOWNLOAD_MAX, &resp) != WF_OK) {
         indigo_log_warn("image fetch failed: %.80s", url);
         done.failed = true;
-    } else if (wf_image_decode_rgba(resp.body, resp.body_len, INDIGO_MEDIA_MAX_DIM,
+    } else if (wf_image_decode_rgba(resp.body, resp.body_len,
+                                    max_dim ? max_dim : INDIGO_MEDIA_MAX_DIM,
                                     &img) != WF_OK) {
         indigo_log_warn("image decode failed: %.80s", url);
         done.failed = true;
@@ -136,7 +140,7 @@ worker(void *unused)
         }
         LightLock_Unlock(&s_lock);
         if (have) {
-            load_one(job.url, job.slot, job.generation);
+            load_one(job.url, job.slot, job.generation, job.max_dim);
         }
     }
 }
@@ -207,7 +211,7 @@ indigo_media_loader_stop(void)
 }
 
 bool
-indigo_media_loader_request(indigo_media_cache *c, const char *url)
+indigo_media_loader_request(indigo_media_cache *c, const char *url, unsigned max_dim)
 {
     unsigned generation = 0;
     int slot;
@@ -218,7 +222,7 @@ indigo_media_loader_request(indigo_media_cache *c, const char *url)
     }
     /* The cache decides whether this URL needs fetching at all, so a repeated
      * request for a URL already loading, ready or failed costs one lookup. */
-    slot = indigo_media_claim(c, url, &generation);
+    slot = indigo_media_claim(c, url, max_dim, &generation);
     if (slot < 0) {
         return false;
     }
@@ -229,6 +233,7 @@ indigo_media_loader_request(indigo_media_cache *c, const char *url)
         snprintf(s_queue[at].url, sizeof s_queue[at].url, "%s", url);
         s_queue[at].slot = slot;
         s_queue[at].generation = generation;
+        s_queue[at].max_dim = max_dim;
         s_queue_count++;
         ok = true;
     }
@@ -286,10 +291,11 @@ indigo_media_loader_stop(void)
 }
 
 bool
-indigo_media_loader_request(indigo_media_cache *c, const char *url)
+indigo_media_loader_request(indigo_media_cache *c, const char *url, unsigned max_dim)
 {
     (void) c;
     (void) url;
+    (void) max_dim;
     return false;
 }
 

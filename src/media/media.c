@@ -108,7 +108,8 @@ indigo_media_ready(indigo_media_cache *c, const char *url)
 }
 
 int
-indigo_media_claim(indigo_media_cache *c, const char *url, unsigned *generation)
+indigo_media_claim(indigo_media_cache *c, const char *url, unsigned max_dim,
+                   unsigned *generation)
 {
     size_t len;
     int i;
@@ -137,6 +138,11 @@ indigo_media_claim(indigo_media_cache *c, const char *url, unsigned *generation)
     }
     slot_clear(&c->slots[i]);
     snprintf(c->slots[i].url, sizeof c->slots[i].url, "%s", url);
+    if (max_dim == 0) {
+        max_dim = INDIGO_MEDIA_MAX_DIM;
+    }
+    c->slots[i].max_dim = max_dim > INDIGO_MEDIA_THUMB_DIM ? INDIGO_MEDIA_THUMB_DIM
+                                                            : max_dim;
     c->slots[i].state = INDIGO_MEDIA_LOADING;
     c->slots[i].last_used = ++c->clock;
     c->generation++;
@@ -192,7 +198,7 @@ indigo_media_publish(indigo_media_cache *c, int slot, unsigned generation,
     if (s->state != INDIGO_MEDIA_LOADING || s->generation != generation) {
         return false; /* evicted and reused while the fetch was in flight */
     }
-    if (width > INDIGO_MEDIA_MAX_DIM || height > INDIGO_MEDIA_MAX_DIM) {
+    if (width > INDIGO_MEDIA_THUMB_DIM || height > INDIGO_MEDIA_THUMB_DIM) {
         return false; /* the decoder ignored its own cap */
     }
     if ((size_t)width * (size_t)height > (size_t)-1 / 4u) {

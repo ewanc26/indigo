@@ -39,16 +39,23 @@
  * stored than rejected, and a rejected avatar is a visibly missing face. */
 #define INDIGO_MEDIA_URL_MAX 128
 
-/* Longest decoded side. Avatars are drawn at 32-40px and this is deliberately
- * more than that, so the texture survives being scaled down on screen rather
- * than being decoded at the size it is drawn at and then blurred. */
+/* Longest decoded side for an avatar. Avatars are drawn at 24-40px and this is
+ * deliberately more than that, so the texture survives being scaled down on
+ * screen rather than being decoded at the size it is drawn at and then blurred.
+ * This is the default when a request does not ask for something else. */
 #define INDIGO_MEDIA_MAX_DIM 96
 
-/* Total decoded bytes across every slot. INDIGO_MEDIA_SLOTS at the dimension
- * cap above would be ~860KB, which the 3DS can hold but should not spend on
- * avatars; this budget is the real bound and it is what stops a screen full of
- * larger thumbnails from quietly growing. */
-#define INDIGO_MEDIA_BYTES_MAX (512u * 1024u)
+/* Longest decoded side for anything else -- a post's thumbnail, a link card --
+ * which is drawn far larger than an avatar. The gap is not a preference: an
+ * avatar decoded at 256 spends sixteen times the bytes for a picture 40px
+ * across, and a thumbnail decoded at 96 is a blur on a 400px-wide screen. */
+#define INDIGO_MEDIA_THUMB_DIM 256
+
+/* Total decoded bytes across every slot. At the caps above, INDIGO_MEDIA_SLOTS
+ * of thumbnails would be ~6MB, which the 3DS should not hold; this budget is
+ * the real bound, and it is what stops a screen of full-size images from
+ * quietly growing. It holds about five full-size thumbnails. */
+#define INDIGO_MEDIA_BYTES_MAX (1536u * 1024u)
 
 /* Cap on one downloaded body. A CDN thumbnail is tens of kilobytes; anything
  * past this is not a thumbnail, and the URL came from a server, so the fetch
@@ -72,6 +79,10 @@ typedef struct {
     /* Monotonic tick of the last lookup, for least-recently-used eviction. */
     unsigned last_used;
     char url[INDIGO_MEDIA_URL_MAX];
+    /* The longest side this slot was claimed for, or 0 for the default. Kept so
+     * that a later request cannot quietly re-decode an image at a size it has
+     * already been fetched for. */
+    unsigned max_dim;
     /* RGBA8, tightly packed, first row at the top. Owned by the slot. */
     uint8_t *pixels;
     unsigned width;
@@ -110,13 +121,20 @@ int indigo_media_ready(indigo_media_cache *c, const char *url);
 
 /* Claims a slot for `url` and returns its index, marking it LOADING. Returns -1
  * when the URL is empty, longer than the cache keeps, already known (loading,
- * ready or failed), or when claiming it would take the cache past
- * INDIGO_MEDIA_BYTES_MAX. A refusal is not an error: it is the cache declining
- * to hold more, and the caller is expected to carry on without an image.
+ * ready or failed), or when the cache has nothing evictable left. A refusal is
+ * not an error: it is the cache declining to hold more, and the caller is
+ * expected to carry on without an image.
+ *
+ * `max_dim` is the longest decoded side the caller wants, or 0 for
+ * INDIGO_MEDIA_MAX_DIM; it is capped at INDIGO_MEDIA_THUMB_DIM. First request
+ * wins: a URL already known is not re-decoded at a different size, because a
+ * second copy of the same image is worse than drawing the first at the wrong
+ * resolution.
  *
  * The returned generation must be passed back to indigo_media_publish() or
  * indigo_media_fail() for that slot. */
-int indigo_media_claim(indigo_media_cache *c, const char *url, unsigned *generation);
+int indigo_media_claim(indigo_media_cache *c, const char *url, unsigned max_dim,
+                       unsigned *generation);
 
 /* Adopts decoded pixels into a claimed slot. Takes ownership only when it
  * returns true: on false -- a stale generation, or pixels that do not fit the
