@@ -2848,7 +2848,7 @@ test_media_claim_and_publish(void)
     indigo_media_init(&c);
     CHECK(indigo_media_ready(&c, "https://cdn.example/a.jpg") == -1);
 
-    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen) >= 0);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", 0, &gen) >= 0);
     CHECK(gen != 0);
     CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
     CHECK(c.slots[0].generation == gen);
@@ -2857,7 +2857,7 @@ test_media_claim_and_publish(void)
      * the same image, which is what a per-frame request turns into without
      * this. It also hands back no generation at all, so a caller cannot
      * publish against a claim that never happened. */
-    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &spare) == -1);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", 0, &spare) == -1);
     CHECK(spare == 0);
 
     CHECK(indigo_media_publish(&c, 0, gen, fake_pixels(8, 8), 8, 8));
@@ -2886,7 +2886,7 @@ test_media_rejects_stale_result(void)
     uint8_t *pixels;
 
     indigo_media_init(&c);
-    slot = indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen);
+    slot = indigo_media_claim(&c, "https://cdn.example/a.jpg", 0, &gen);
     CHECK(slot >= 0);
 
     /* A result for the wrong generation is a fetch that finished after its
@@ -2903,9 +2903,11 @@ test_media_rejects_stale_result(void)
     free(pixels);
 
     /* A decoder that ignored its own cap must not be able to spend the
-     * budget: the size check is the last line, not the first. */
+     * budget: the size check is the last line, not the first. It is the
+     * thumbnail cap, not the avatar one -- a large image is legitimate, an
+     * enormous one is not. */
     pixels = fake_pixels(8, 8);
-    CHECK(!indigo_media_publish(&c, slot, gen, pixels, INDIGO_MEDIA_MAX_DIM + 1, 8));
+    CHECK(!indigo_media_publish(&c, slot, gen, pixels, INDIGO_MEDIA_THUMB_DIM + 1, 8));
     free(pixels);
 
     CHECK(indigo_media_publish(&c, slot, gen, fake_pixels(8, 8), 8, 8));
@@ -2917,8 +2919,10 @@ test_media_failed_url_is_not_refetched(void)
 {
     indigo_media_cache c;
     unsigned gen = 0;
-    int slot = indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen);
+    int slot;
 
+    indigo_media_init(&c);
+    slot = indigo_media_claim(&c, "https://cdn.example/gone.jpg", 0, &gen);
     CHECK(slot >= 0);
     indigo_media_fail(&c, slot, gen);
     CHECK(c.slots[slot].state == INDIGO_MEDIA_FAILED);
@@ -2927,14 +2931,14 @@ test_media_failed_url_is_not_refetched(void)
     /* Still known, so the loader does not ask again every frame for a URL
      * that just failed. Only a clear makes it eligible. */
     CHECK(indigo_media_known(&c, "https://cdn.example/gone.jpg"));
-    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen) == -1);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", 0, &gen) == -1);
     indigo_media_clear(&c);
-    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", &gen) >= 0);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/gone.jpg", 0, &gen) >= 0);
     indigo_media_clear(&c);
 
     /* A failure for a slot that is no longer in flight is ignored rather than
      * marking whatever took its place. */
-    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", &gen) >= 0);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", 0, &gen) >= 0);
     indigo_media_fail(&c, 0, gen + 99);
     CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
     indigo_media_clear(&c);
@@ -2954,7 +2958,7 @@ test_media_eviction_prefers_least_recently_used(void)
         char url[64];
 
         snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
-        CHECK(indigo_media_claim(&c, url, &gen) >= 0);
+        CHECK(indigo_media_claim(&c, url, 0, &gen) >= 0);
         CHECK(indigo_media_publish(&c, (int) i, gen, fake_pixels(8, 8), 8, 8));
     }
     for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
@@ -2963,7 +2967,7 @@ test_media_eviction_prefers_least_recently_used(void)
         snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
         CHECK(indigo_media_ready(&c, url) == (int) i);
     }
-    first = indigo_media_claim(&c, "https://cdn.example/new.jpg", &gen);
+    first = indigo_media_claim(&c, "https://cdn.example/new.jpg", 0, &gen);
     CHECK(first == 0);
     CHECK(c.evictions == 1);
     CHECK(c.slots[0].state == INDIGO_MEDIA_LOADING);
@@ -2986,12 +2990,12 @@ test_media_never_evicts_in_flight(void)
         char url[64];
 
         snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
-        CHECK(indigo_media_claim(&c, url, &gen) >= 0);
+        CHECK(indigo_media_claim(&c, url, 0, &gen) >= 0);
     }
     /* Every slot is fetching. Taking one would throw away a request already
      * paid for, so the claim is refused and the caller carries on without an
      * image. */
-    CHECK(indigo_media_claim(&c, "https://cdn.example/one-too-many.jpg", &gen) == -1);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/one-too-many.jpg", 0, &gen) == -1);
     indigo_media_clear(&c);
 }
 
@@ -3000,11 +3004,16 @@ test_media_byte_budget(void)
 {
     indigo_media_cache c;
     unsigned gens[INDIGO_MEDIA_SLOTS];
-    const unsigned dim = INDIGO_MEDIA_MAX_DIM;
+    const unsigned dim = INDIGO_MEDIA_THUMB_DIM;
     const unsigned per_image = dim * dim * 4u;
     unsigned at_cap = 0;
 
+    /* The test uses the decode cap a thumbnail asks for, because a budget that
+     * fits every slot at the avatar size would never be reached and would
+     * prove nothing. */
     CHECK(per_image * (INDIGO_MEDIA_BYTES_MAX / per_image + 1) > INDIGO_MEDIA_BYTES_MAX);
+    CHECK(INDIGO_MEDIA_THUMB_DIM * INDIGO_MEDIA_THUMB_DIM * 4u *
+              INDIGO_MEDIA_SLOTS > INDIGO_MEDIA_BYTES_MAX);
 
     indigo_media_init(&c);
     /* Claim every slot first, so eviction has to make room at publish time
@@ -3014,7 +3023,7 @@ test_media_byte_budget(void)
         char url[64];
 
         snprintf(url, sizeof url, "https://cdn.example/%u.jpg", i);
-        CHECK(indigo_media_claim(&c, url, &gens[i]) >= 0);
+        CHECK(indigo_media_claim(&c, url, 0, &gens[i]) >= 0);
     }
     for (unsigned i = 0; i < INDIGO_MEDIA_SLOTS; i++) {
         uint8_t *pixels = fake_pixels(dim, dim);
@@ -3051,9 +3060,9 @@ test_media_claim_guards(void)
     char long_url[INDIGO_MEDIA_URL_MAX + 8];
 
     indigo_media_init(&c);
-    CHECK(indigo_media_claim(&c, "", &gen) == -1);
-    CHECK(indigo_media_claim(&c, NULL, &gen) == -1);
-    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", NULL) == -1);
+    CHECK(indigo_media_claim(&c, "", 0, &gen) == -1);
+    CHECK(indigo_media_claim(&c, NULL, 0, &gen) == -1);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/a.jpg", 0, NULL) == -1);
     CHECK(indigo_media_ready(&c, "") == -1);
     CHECK(!indigo_media_known(&c, ""));
     CHECK(!indigo_media_known(&c, NULL));
@@ -3062,7 +3071,7 @@ test_media_claim_guards(void)
      * truncated key would never match the URL the layout asks for again. */
     memset(long_url, 'b', sizeof long_url - 1);
     long_url[sizeof long_url - 1] = '\0';
-    CHECK(indigo_media_claim(&c, long_url, &gen) == -1);
+    CHECK(indigo_media_claim(&c, long_url, 0, &gen) == -1);
     CHECK(indigo_media_ready(&c, long_url) == -1);
 }
 

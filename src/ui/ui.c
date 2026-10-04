@@ -163,7 +163,8 @@ draw_image(const indigo_cmd *cmd, const indigo_canvas_image_ref *img)
         /* Ask for it whether it is missing or in flight: the cache drops the
          * request when it already knows the URL, so this is one lookup rather
          * than a fetch storm. */
-        indigo_media_loader_request(&s_media, img->url);
+        indigo_media_loader_request(&s_media, img->url,
+                                    (unsigned) (cmd->w > cmd->h ? cmd->w : cmd->h));
         C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
         return;
     }
