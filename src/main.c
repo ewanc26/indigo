@@ -243,6 +243,16 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_MUTES:
+        if (!indigo_session_submit_mutes()) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BLOCKS:
+        if (!indigo_session_submit_blocks()) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_FEED:
         if (!indigo_session_submit_feed(app->request_feed_uri,
                                          app->timeline.cursor[0]

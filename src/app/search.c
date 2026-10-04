@@ -112,6 +112,10 @@ indigo_search_title(const indigo_search *s)
         return "Members";
     case INDIGO_SEARCH_FEEDS:
         return "Feeds";
+    case INDIGO_SEARCH_MUTED:
+        return "Muted";
+    case INDIGO_SEARCH_BLOCKED:
+        return "Blocked";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }

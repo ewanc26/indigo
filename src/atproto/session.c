@@ -18,6 +18,7 @@
 #include <wolfram/agent.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
+#include <wolfram/moderation_typed.h>
 #include <wolfram/post_display.h>
 #include <wolfram/thread_typed.h>
 
@@ -45,6 +46,8 @@ typedef enum {
     JOB_LIST_MEMBERS,
     JOB_FEEDS,
     JOB_FEED,
+    JOB_MUTES,
+    JOB_BLOCKS,
 } job_kind;
 
 typedef struct {
@@ -1014,6 +1017,60 @@ do_list_members(const job *j)
     publish_event(&ev);
 }
 
+/* The accounts this one has muted or blocked. Indigo could mute and block from
+ * a profile but had no way to see the result, so a mis-click was invisible
+ * until the person failed to appear somewhere else. Both endpoints return the
+ * same actor-list shape as every other list of people, so they fill the same
+ * rows and raise the same event; only the request differs. */
+static void
+do_moderation_list(const job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
+    const bool blocks = j->kind == JOB_BLOCKS;
+    wf_agent_actor_list list;
+    wf_status st;
+
+    if (!s_agent) {
+        ev.failure = INDIGO_FAIL_NOT_READY;
+        publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    if (blocks) {
+        st = wf_agent_get_blocks_typed(s_agent, INDIGO_SEARCH_MAX, NULL, &list);
+    } else {
+        st = wf_agent_get_mutes_typed(s_agent, INDIGO_SEARCH_MAX, NULL, &list);
+    }
+    if (st != WF_OK) {
+        ev.failure = classify(st);
+        indigo_log_warn("%s list failed: wolfram status %d (%s)", blocks ? "blocked" : "muted",
+                        (int) st, indigo_failure_tag(ev.failure));
+        publish_event(&ev);
+        return;
+    }
+
+    s_actor_count = 0;
+    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+        const wf_agent_profile_view *a = &list.actors[i];
+        indigo_actor *o = &s_actors[s_actor_count];
+
+        if (!a->handle || !a->handle[0]) {
+            continue;
+        }
+        memset(o, 0, sizeof *o);
+        indigo_copy_utf8(o->handle, sizeof o->handle, a->handle);
+        indigo_copy_utf8(o->display_name, sizeof o->display_name,
+                         a->display_name ? a->display_name : "");
+        indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
+        s_actor_count++;
+    }
+    wf_agent_actor_list_free(&list);
+    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+    ev.page_count = s_actor_count;
+    indigo_log_info("%s accounts: %u", blocks ? "blocked" : "muted", s_actor_count);
+    publish_event(&ev);
+}
+
 /* The account's saved feeds. getPreferences carries the saved feed URIs (V2
  * first, the V1 list as the older fallback); getFeedGenerators turns them
  * into names. The raw preferences JSON is read rather than the typed parse
@@ -1516,6 +1573,10 @@ worker(void *arg)
         case JOB_FEED:
             do_feed(&j);
             break;
+        case JOB_MUTES:
+        case JOB_BLOCKS:
+            do_moderation_list(&j);
+            break;
         case JOB_PUBLISH:
             do_publish(&j);
             break;
@@ -1754,6 +1815,22 @@ bool
 indigo_session_submit_feeds(void)
 {
     job j = {.kind = JOB_FEEDS};
+
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_mutes(void)
+{
+    job j = {.kind = JOB_MUTES};
+
+    return submit(&j);
+}
+
+bool
+indigo_session_submit_blocks(void)
+{
+    job j = {.kind = JOB_BLOCKS};
 
     return submit(&j);
 }
@@ -2107,6 +2184,18 @@ indigo_session_submit_list_members(const char *list_uri)
 
 bool
 indigo_session_submit_feeds(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_mutes(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_blocks(void)
 {
     return false;
 }

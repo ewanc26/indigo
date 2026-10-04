@@ -68,6 +68,8 @@ typedef enum {
     INDIGO_REQUEST_LIST_MEMBERS,
     INDIGO_REQUEST_FEEDS,
     INDIGO_REQUEST_FEED,
+    INDIGO_REQUEST_MUTES,
+    INDIGO_REQUEST_BLOCKS,
 } indigo_request_kind;
 
 typedef struct {
@@ -194,6 +196,11 @@ void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned
  * the timeline, so Back lands on the picker again. */
 void indigo_app_open_feeds(indigo_app *app);
 void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *name);
+/* The accounts this one has muted or blocked. Read-only lists on the search
+ * screen: they exist to make a mute or block visible, and undoing one is done
+ * from that person's profile, which is where it was made. */
+void indigo_app_open_mutes(indigo_app *app);
+void indigo_app_open_blocks(indigo_app *app);
 void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */

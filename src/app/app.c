@@ -692,6 +692,14 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         indigo_app_open_feeds(app);
         break;
+    case INDIGO_MENU_MUTED:
+        go_back(app);
+        indigo_app_open_mutes(app);
+        break;
+    case INDIGO_MENU_BLOCKED:
+        go_back(app);
+        indigo_app_open_blocks(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         go_back(app);
         open_profile(app, app->signin.account);
@@ -1179,6 +1187,28 @@ indigo_app_open_feeds(indigo_app *app)
     indigo_search_clear(&app->search);
     app->search.loading = true;
     app->request = INDIGO_REQUEST_FEEDS;
+}
+
+void
+indigo_app_open_mutes(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_MUTED;
+    indigo_search_clear(&app->search);
+    app->search.loading = true;
+    app->request = INDIGO_REQUEST_MUTES;
+}
+
+void
+indigo_app_open_blocks(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_BLOCKED;
+    indigo_search_clear(&app->search);
+    app->search.loading = true;
+    app->request = INDIGO_REQUEST_BLOCKS;
 }
 
 void

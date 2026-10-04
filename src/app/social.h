@@ -132,8 +132,10 @@ bool indigo_notifications_select(indigo_notifications *n, unsigned index, unsign
 const indigo_notification *indigo_notifications_selected(const indigo_notifications *n);
 
 /* The More menu. It is built from the post being read, so its facet targets
- * come first, then the app-wide actions. */
-#define INDIGO_MENU_MAX 14
+ * come first, then the app-wide actions. The cap has to hold every app-wide
+ * action plus a post's worth of facet targets, or add_item silently drops the
+ * last entries and "Close menu" with them. */
+#define INDIGO_MENU_MAX 16
 #define INDIGO_MENU_ROWS 5
 
 typedef enum {
@@ -143,6 +145,8 @@ typedef enum {
     INDIGO_MENU_FIND_POSTS,
     INDIGO_MENU_LISTS,
     INDIGO_MENU_FEEDS,
+    INDIGO_MENU_MUTED,
+    INDIGO_MENU_BLOCKED,
     INDIGO_MENU_MY_PROFILE,
     INDIGO_MENU_SIGN_OUT,
     INDIGO_MENU_OPEN_MENTION,
