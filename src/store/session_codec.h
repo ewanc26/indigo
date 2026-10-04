@@ -1,6 +1,8 @@
 #ifndef INDIGO_SESSION_CODEC_H
 #define INDIGO_SESSION_CODEC_H
 
+#include "store/store_status.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -15,15 +17,6 @@ typedef struct {
     char service[256];
     char session[INDIGO_SESSION_PAYLOAD_MAX];
 } indigo_saved_session;
-
-typedef enum {
-    INDIGO_CODEC_OK = 0,
-    INDIGO_CODEC_EMPTY,
-    INDIGO_CODEC_BAD_VERSION,
-    INDIGO_CODEC_CORRUPT,
-    INDIGO_CODEC_INCOMPLETE,
-    INDIGO_CODEC_TOO_BIG,
-} indigo_codec_status;
 
 /* Versioned "key=value" lines. Refuses values containing newlines. */
 indigo_codec_status indigo_session_encode(const indigo_saved_session *s,

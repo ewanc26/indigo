@@ -5,6 +5,8 @@
 #include "store/session_codec.h"
 #include "util/log.h"
 #include "store/session_store.h"
+#include "store/settings_codec.h"
+#include "store/settings_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
 #include "ui/layout.h"
@@ -701,6 +703,219 @@ test_session_store(void)
     }
     CHECK(indigo_session_store_load(path, &out) == INDIGO_STORE_UNREADABLE);
     CHECK(indigo_session_store_load(path, &out) == INDIGO_STORE_MISSING);
+    f = fopen(bad, "rb");
+    CHECK(f != NULL);
+    if (f) {
+        fclose(f);
+    }
+
+    snprintf(cmd, sizeof cmd, "rm -rf %s", dir);
+    CHECK(system(cmd) == 0);
+}
+
+static void
+test_settings_defaults_and_clamp(void)
+{
+    indigo_settings s;
+
+    indigo_settings_defaults(&s);
+    CHECK(s.theme == INDIGO_THEME_AUTO);
+    CHECK(s.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+    CHECK(!s.reduce_motion);
+    CHECK(!s.high_contrast);
+    CHECK(!s.large_targets);
+    CHECK(!s.diagnostics);
+    CHECK(s.default_feed[0] == '\0');
+
+    /* Nothing out of range may survive clamp, whoever filled the struct. */
+    s.theme = (indigo_theme) 99;
+    s.text_scale = (indigo_text_scale) 101;
+    memset(s.default_feed, 'a', sizeof s.default_feed);
+    indigo_settings_clamp(&s);
+    CHECK(s.theme == INDIGO_THEME_AUTO);
+    CHECK(s.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+    CHECK(s.default_feed[INDIGO_SETTINGS_FEED_MAX - 1] == '\0');
+}
+
+static void
+test_settings_codec(void)
+{
+    static indigo_settings in, out;
+    static char buf[INDIGO_SETTINGS_FILE_MAX];
+    size_t len = 0;
+
+    indigo_settings_defaults(&in);
+    in.theme = INDIGO_THEME_DARK;
+    in.text_scale = INDIGO_TEXT_SCALE_LARGE;
+    in.reduce_motion = true;
+    in.high_contrast = true;
+    in.large_targets = true;
+    in.diagnostics = true;
+    snprintf(in.default_feed, sizeof in.default_feed,
+             "at://did:plc:abc123/app.bsky.feed.generator/daily");
+
+    CHECK(indigo_settings_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_settings_decode(buf, len, &out) == INDIGO_CODEC_OK);
+    CHECK(out.theme == in.theme);
+    CHECK(out.text_scale == in.text_scale);
+    CHECK(out.reduce_motion == in.reduce_motion);
+    CHECK(out.high_contrast == in.high_contrast);
+    CHECK(out.large_targets == in.large_targets);
+    CHECK(out.diagnostics == in.diagnostics);
+    CHECK(strcmp(out.default_feed, in.default_feed) == 0);
+
+    /* Every truncation of a valid file is rejected, never half-loaded, and
+     * still leaves out usable at its defaults. */
+    for (size_t cut = 0; cut < len; cut++) {
+        indigo_codec_status st = indigo_settings_decode(buf, cut, &out);
+
+        CHECK(st != INDIGO_CODEC_OK);
+        CHECK(out.default_feed[INDIGO_SETTINGS_FEED_MAX - 1] == '\0');
+        CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+    }
+
+    CHECK(indigo_settings_decode("", 0, &out) == INDIGO_CODEC_EMPTY);
+    CHECK(indigo_settings_decode("garbage\n", 8, &out) == INDIGO_CODEC_CORRUPT);
+
+    /* Unknown keys are skipped so a file from a newer Indigo still loads. */
+    {
+        const char *noend = "indigo-settings 1\ntheme=1\n";
+        const char *ok = "indigo-settings 1\nfuture=1\ntheme=1\nend\n";
+
+        CHECK(indigo_settings_decode(noend, strlen(noend), &out) ==
+              INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_settings_decode(ok, strlen(ok), &out) == INDIGO_CODEC_OK);
+        CHECK(out.theme == INDIGO_THEME_LIGHT);
+    }
+
+    /* Keys the file omits take their defaults rather than failing the file. */
+    {
+        const char *partial = "indigo-settings 1\nlarge_targets=1\nend\n";
+
+        CHECK(indigo_settings_decode(partial, strlen(partial), &out) ==
+              INDIGO_CODEC_OK);
+        CHECK(out.large_targets);
+        CHECK(out.theme == INDIGO_THEME_AUTO);
+        CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+        CHECK(out.default_feed[0] == '\0');
+    }
+
+    /* One unusable value must not cost the user the rest of the file. */
+    {
+        const char *mixed = "indigo-settings 1\ntheme=9\ntext_scale=101\n"
+                            "high_contrast=yes\nlarge_targets=1\nend\n";
+
+        CHECK(indigo_settings_decode(mixed, strlen(mixed), &out) ==
+              INDIGO_CODEC_OK);
+        CHECK(out.theme == INDIGO_THEME_AUTO);              /* out of range */
+        CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);  /* in range, but
+                                                             * not a scale */
+        CHECK(!out.high_contrast);                          /* not a boolean */
+        CHECK(out.large_targets);                           /* the good one */
+    }
+
+    /* Signed, spaced and oversized numbers are all refused the same way. */
+    {
+        const char *junk = "indigo-settings 1\ntheme=+1\ntext_scale=9999\n"
+                           "reduce_motion=2\nend\n";
+
+        CHECK(indigo_settings_decode(junk, strlen(junk), &out) == INDIGO_CODEC_OK);
+        CHECK(out.theme == INDIGO_THEME_AUTO);
+        CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+        CHECK(!out.reduce_motion);
+    }
+
+    /* A file last edited on a CRLF machine still loads. */
+    {
+        const char *crlf = "indigo-settings 1\r\ntheme=2\r\nend\r\n";
+
+        CHECK(indigo_settings_decode(crlf, strlen(crlf), &out) == INDIGO_CODEC_OK);
+        CHECK(out.theme == INDIGO_THEME_DARK);
+    }
+
+    /* A feed longer than the field can hold is dropped, not truncated into
+     * something that would resolve to the wrong feed. */
+    {
+        char feed[201];
+        char big[INDIGO_SETTINGS_FILE_MAX];
+        char *tail;
+        int w;
+
+        memset(feed, 'x', 200);
+        feed[200] = '\0';
+        tail = strcpy(big, "indigo-settings 1\ndefault_feed=");
+        tail += strlen(tail);
+        w = snprintf(tail, sizeof big - (size_t) (tail - big), "%s\nend\n", feed);
+        CHECK(w > 0);
+        CHECK(indigo_settings_decode(big, (size_t) (tail - big) + (size_t) w,
+                                     &out) == INDIGO_CODEC_OK);
+        CHECK(out.default_feed[0] == '\0');
+    }
+
+    /* Values that could forge extra lines are refused on the way in. */
+    snprintf(in.default_feed, sizeof in.default_feed, "at://x\ntheme=2");
+    CHECK(indigo_settings_encode(&in, buf, sizeof buf, &len) ==
+          INDIGO_CODEC_CORRUPT);
+
+    indigo_settings_defaults(&in);
+    CHECK(indigo_settings_encode(&in, buf, 20, &len) == INDIGO_CODEC_TOO_BIG);
+
+    /* encode clamps, so a caller that skipped clamp cannot write a file this
+     * decoder would have to reject. */
+    in.theme = (indigo_theme) 42;
+    in.text_scale = (indigo_text_scale) 7;
+    CHECK(indigo_settings_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_settings_decode(buf, len, &out) == INDIGO_CODEC_OK);
+    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+}
+
+static void
+test_settings_store(void)
+{
+    static indigo_settings in, out;
+    char dir[64], path[256], bad[300], cmd[300];
+
+    snprintf(dir, sizeof dir, "build-host/settings-test");
+    snprintf(cmd, sizeof cmd, "rm -rf %s && mkdir -p %s", dir, dir);
+    CHECK(system(cmd) == 0);
+    snprintf(path, sizeof path, "%s/settings.dat", dir);
+    snprintf(bad, sizeof bad, "%s.bad", path);
+
+    /* A first run has no file, and that is not an error: the caller gets the
+     * defaults and carries on. */
+    CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
+    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.default_feed[0] == '\0');
+
+    indigo_settings_defaults(&in);
+    in.theme = INDIGO_THEME_DARK;
+    in.high_contrast = true;
+    snprintf(in.default_feed, sizeof in.default_feed, "at://did:plc:abc/x");
+
+    CHECK(indigo_settings_store_save(path, &in) == INDIGO_STORE_OK);
+    CHECK(indigo_settings_store_save(path, &in) == INDIGO_STORE_OK); /* overwrite */
+    CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_OK);
+    CHECK(out.theme == INDIGO_THEME_DARK);
+    CHECK(out.high_contrast);
+    CHECK(strcmp(out.default_feed, in.default_feed) == 0);
+
+    CHECK(indigo_settings_store_clear(path) == INDIGO_STORE_OK);
+    CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
+    CHECK(indigo_settings_store_clear(path) == INDIGO_STORE_OK); /* idempotent */
+
+    /* A damaged file is kept aside rather than destroyed, and the app still
+     * gets usable defaults instead of failing to boot. */
+    FILE *f = fopen(path, "wb");
+    CHECK(f != NULL);
+    if (f) {
+        fputs("not a settings file", f);
+        fclose(f);
+    }
+    CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_UNREADABLE);
+    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+    CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
     f = fopen(bad, "rb");
     CHECK(f != NULL);
     if (f) {
@@ -2240,6 +2455,9 @@ main(void)
     test_signin_targets_spaced();
     test_session_codec();
     test_session_store();
+    test_settings_defaults_and_clamp();
+    test_settings_codec();
+    test_settings_store();
     test_failures();
     test_log_file();
     test_autofill();

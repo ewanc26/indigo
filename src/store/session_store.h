@@ -2,13 +2,7 @@
 #define INDIGO_SESSION_STORE_H
 
 #include "store/session_codec.h"
-
-typedef enum {
-    INDIGO_STORE_OK = 0,
-    INDIGO_STORE_MISSING,
-    INDIGO_STORE_IO,
-    INDIGO_STORE_UNREADABLE, /* present but corrupt; moved aside, not deleted */
-} indigo_store_status;
+#include "store/store_status.h"
 
 /*
  * The session file holds a refresh token in plain text, like other 3DS

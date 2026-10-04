@@ -251,7 +251,7 @@ src/
 ├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
 ├── atproto/      Wolfram-backed integration; session.c runs login on a worker thread
-├── store/        session file codec and atomic store on sdmc
+├── store/        session and settings codecs, atomic stores on sdmc
 └── util/         logging (file + stderr) and small helpers
 
 romfs/            cacert.pem, curated by tools/make_cabundle.py
@@ -358,6 +358,33 @@ Version any format that is likely to survive an application update.
 Never silently discard a user's draft.
 
 Do not make cached data a prerequisite for booting.
+
+### Settings
+
+`store/settings_codec` and `store/settings_store` persist the non-secret
+preferences: theme, text scale, reduce-motion, high-contrast, large touch
+targets, the diagnostics switch, and the feed to open at startup.
+
+They differ from the session store in three deliberate ways:
+
+- an absent file is not a failure. `indigo_settings_store_load` leaves the
+  struct at `indigo_settings_defaults()` and returns `INDIGO_STORE_MISSING`, so a
+  first run needs no special case;
+- an unusable individual key falls back to its default instead of failing the
+  file, so one bad value cannot cost the user the rest of their settings;
+- a damaged file is moved aside to `.bad` and reported, but settings are never
+  worth failing a boot over, so the app carries on with the defaults.
+
+`indigo_settings_decode` parses into a local and commits to the caller's struct
+only once the `end` marker is seen. That is what makes "out is at its defaults on
+every non-OK return" true, and the truncation test in `tests/tests.c` is what
+holds it honest. `indigo_settings_encode` clamps before writing, so a caller that
+filled a struct by hand cannot produce a file the decoder would have to reject.
+
+Nothing reads or writes settings yet: there is no settings screen, and `main.c`
+does not load the file. Until something calls them the linker drops both objects
+under the `--gc-sections` in `3dsx.specs`, so a green cross-build proves the
+settings code compiles for ARM but not that it is reachable.
 
 ## 15. Offline behaviour
 
@@ -556,6 +583,13 @@ Watch for:
   and `tests/`, so a snapshot scenario that does not compile is caught by
   `make snapshots` alone;
 - believing the host targets cover `src/atproto/session.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, five times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`), and a missing `<wolfram/feed_gen_typed.h>` for `wf_feedgen_get_feed_generators_typed`. Run `make` for the console before calling a session change done;
+- trusting `make warnings` to match the cross-build's diagnostics. The host
+  sweep compiles at `-O2` but the `make test` binary is `-O1`, and the ARM
+  `CFLAGS` carry no `-Werror`, so a value-range warning such as
+  `-Wtype-limits` ("comparison is always false due to limited range of data
+  type") can stay invisible to `make test` and `make warnings` while still
+  printing during `make`. It arrived that way via `indigo_settings_clamp`
+  testing an all-non-negative enum against its own minimum;
 - C/C++ linker selection errors;
 - New 3DS-only controls becoming mandatory;
 - unbounded feed/image allocations;
@@ -682,10 +716,11 @@ The current repository has:
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
 - threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
+- a settings module with a versioned codec and an atomic store (`store/settings_codec`, `store/settings_store`), tested but not yet reachable from the app;
 - no avatars or media yet, and no paging on the search results. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
-Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. What remains is Phase 6 — persistence and polish (settings, session persistence, cache, drafts, media, accessibility, distribution metadata) — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
+Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings persistence is done, and what remains is session persistence polish, cache, drafts, media, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.
