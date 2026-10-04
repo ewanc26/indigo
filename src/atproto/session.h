@@ -55,6 +55,8 @@ typedef enum {
 
 /* Posts fetched per timeline request. */
 #define INDIGO_PAGE_SIZE 15
+#define INDIGO_OAUTH_URL_MAX 512
+#define INDIGO_OAUTH_CODE_MAX 64
 /* Posts kept from a thread: ancestors, the post, then replies in order. */
 #define INDIGO_THREAD_MAX 40
 
@@ -97,6 +99,9 @@ void indigo_session_stop(void);
 /* Each returns false if a job is already running. Strings are copied. */
 bool indigo_session_submit_login(const char *service, const char *identifier,
                                  const char *password);
+bool indigo_session_submit_oauth(const char *oauth_node, const char *handle);
+const char *indigo_session_pair_url(void);
+const char *indigo_session_pair_code(void);
 bool indigo_session_submit_resume(void);
 bool indigo_session_submit_logout(void);
 
