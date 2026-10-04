@@ -1,8 +1,13 @@
 #include "ui/ui.h"
 #include "gfx/canvas.h"
+#include "media/media.h"
+#include "media/media_loader.h"
 #include "ui/layout.h"
+#include "util/log.h"
 
 #include <citro2d.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static C3D_RenderTarget *s_top;
@@ -12,11 +17,164 @@ static C2D_TextBuf s_text_buf;
 static indigo_canvas s_top_canvas;
 static indigo_canvas s_bottom_canvas;
 
+/* The decoded-image cache and the GPU textures over it.
+ *
+ * A texture is never created off the frame loop and never destroyed anywhere
+ * else: uploads happen here, on the main thread, inside C3D_FrameBegin. The
+ * cache owns the pixels, this owns the GPU copy, and the two are tied together
+ * by the pixel pointer -- when a slot is evicted and reloaded the pointer
+ * changes, which is what tells a texture it is showing stale content.
+ *
+ * Eight is well short of the cache's slots: only images on screen are ever
+ * uploaded, and a screen shows five at most (three rows, one header, one
+ * profile). Each costs up to a 128x128 padded texture, so the cap is what
+ * keeps the texture pool under half a megabyte. */
+#define UI_TEX_MAX 8
+
+static indigo_media_cache s_media;
+
+typedef struct {
+    char url[INDIGO_CANVAS_IMAGE_URL_MAX];
+    const uint8_t *pixels;
+    unsigned width;
+    unsigned height;
+    C3D_Tex tex;
+    Tex3DS_SubTexture sub;
+} ui_tex;
+
+static ui_tex s_texs[UI_TEX_MAX];
+
 static u32
 to_c2d(uint32_t rgba)
 {
     return C2D_Color32((rgba >> 24) & 0xff, (rgba >> 16) & 0xff, (rgba >> 8) & 0xff,
                        rgba & 0xff);
+}
+
+static void
+tex_release(ui_tex *t)
+{
+    if (t->pixels) {
+        C3D_TexDelete(&t->tex);
+    }
+    memset(t, 0, sizeof *t);
+}
+
+/* Drops every texture whose cache slot is gone or has been replaced. Called
+ * once per frame, before drawing: a texture outliving its pixels would draw
+ * freed memory, and holding one for an image no longer on screen is exactly
+ * the sort of unbounded growth AGENTS.md §17 warns about. */
+static void
+tex_reconcile(void)
+{
+    for (unsigned i = 0; i < UI_TEX_MAX; i++) {
+        ui_tex *t = &s_texs[i];
+        int slot;
+
+        if (!t->pixels) {
+            continue;
+        }
+        slot = indigo_media_ready(&s_media, t->url);
+        if (slot < 0 || s_media.slots[slot].pixels != t->pixels) {
+            tex_release(t);
+        }
+    }
+}
+
+/* citro3d only allocates power-of-two textures between 8 and 1024, so a
+ * decoded image is copied into the top-left corner of one. Power-of-two also
+ * costs nothing here: the decoded cap is a power of two, and a non-square
+ * avatar or a letterboxed thumbnail is padded rather than stretched. */
+static unsigned
+pot_up(unsigned v)
+{
+    unsigned p = 8;
+
+    while (p < v && p < 1024u) {
+        p <<= 1;
+    }
+    return p;
+}
+
+static ui_tex *
+tex_for(unsigned slot)
+{
+    const indigo_media_slot *s = &s_media.slots[slot];
+    unsigned tex_w, tex_h;
+
+    for (unsigned i = 0; i < UI_TEX_MAX; i++) {
+        if (s_texs[i].pixels == s->pixels && s_texs[i].pixels) {
+            return &s_texs[i];
+        }
+    }
+    for (unsigned i = 0; i < UI_TEX_MAX; i++) {
+        if (s_texs[i].pixels) {
+            continue;
+        }
+        tex_w = pot_up(s->width);
+        tex_h = pot_up(s->height);
+        if (!C3D_TexInit(&s_texs[i].tex, (u16) tex_w, (u16) tex_h, GPU_RGBA8)) {
+            return NULL;
+        }
+        {
+            unsigned char *padded = calloc(tex_w * tex_h, 4);
+
+            if (!padded) {
+                C3D_TexDelete(&s_texs[i].tex);
+                return NULL;
+            }
+            for (unsigned y = 0; y < s->height; y++) {
+                memcpy(padded + (size_t) y * tex_w * 4u, s->pixels + (size_t) y * s->width * 4u,
+                       (size_t) s->width * 4u);
+            }
+            C3D_TexLoadImage(&s_texs[i].tex, padded, GPU_TEXFACE_2D, 0);
+            C3D_TexFlush(&s_texs[i].tex);
+            free(padded);
+        }
+        /* Bilinear: avatars are drawn well below their decoded size, and
+         * nearest-neighbour at that ratio is a shimmering mess. */
+        C3D_TexSetFilter(&s_texs[i].tex, GPU_LINEAR, GPU_LINEAR);
+        C3D_TexSetWrap(&s_texs[i].tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+        memcpy(s_texs[i].url, s->url, sizeof s_texs[i].url);
+        s_texs[i].pixels = s->pixels;
+        s_texs[i].width = s->width;
+        s_texs[i].height = s->height;
+        s_texs[i].sub = (Tex3DS_SubTexture) {
+            .width = (u16) s->width,
+            .height = (u16) s->height,
+            .left = 0.0f,
+            .top = 0.0f,
+            .right = (float) s->width / (float) tex_w,
+            .bottom = (float) s->height / (float) tex_h,
+        };
+        return &s_texs[i];
+    }
+    return NULL;
+}
+
+static void
+draw_image(const indigo_cmd *cmd, const indigo_canvas_image_ref *img)
+{
+    int slot = indigo_media_ready(&s_media, img->url);
+    ui_tex *t;
+    C2D_Image image;
+
+    if (slot < 0) {
+        /* Ask for it whether it is missing or in flight: the cache drops the
+         * request when it already knows the URL, so this is one lookup rather
+         * than a fetch storm. */
+        indigo_media_loader_request(&s_media, img->url);
+        C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
+        return;
+    }
+    t = tex_for((unsigned) slot);
+    if (!t) {
+        C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
+        return;
+    }
+    image = (C2D_Image) { .tex = &t->tex, .subtex = &t->sub };
+    C2D_DrawImageAt(image, cmd->x, cmd->y, 0.0f, NULL, cmd->w / (float) t->width,
+                    cmd->h / (float) t->height);
 }
 
 static void
@@ -29,6 +187,10 @@ replay(const indigo_canvas *canvas)
 
         if (cmd->kind == INDIGO_CMD_RECT) {
             C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
+            continue;
+        }
+        if (cmd->kind == INDIGO_CMD_IMAGE) {
+            draw_image(cmd, &canvas->images[cmd->image_index]);
             continue;
         }
 
@@ -82,13 +244,24 @@ indigo_ui_init(void)
         return false;
     }
 
+    indigo_media_init(&s_media);
+    /* Not fatal: without it every avatar stays a placeholder forever, which is
+     * ugly but not wrong, so the failure is reported rather than fatal. */
+    if (!indigo_media_loader_start()) {
+        indigo_log_warn("media loader unavailable; images will not load");
+    }
+
     return true;
 }
 
 void
 indigo_ui_draw(const indigo_app *app, const indigo_input *input)
 {
+    /* Before layout: a decode that finished this frame should be drawable
+     * this frame rather than one frame later. */
+    indigo_media_loader_drain(&s_media);
     indigo_layout_build(app, input, &s_top_canvas, &s_bottom_canvas);
+    tex_reconcile();
 
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -104,6 +277,12 @@ indigo_ui_draw(const indigo_app *app, const indigo_input *input)
 void
 indigo_ui_shutdown(void)
 {
+    for (unsigned i = 0; i < UI_TEX_MAX; i++) {
+        tex_release(&s_texs[i]);
+    }
+    indigo_media_loader_stop();
+    indigo_media_clear(&s_media);
+
     if (s_text_buf) {
         C2D_TextBufDelete(s_text_buf);
         s_text_buf = NULL;

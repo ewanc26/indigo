@@ -1,6 +1,10 @@
 #ifndef INDIGO_TIMELINE_H
 #define INDIGO_TIMELINE_H
 
+/* The avatar URL is stored at the width the image cache keys on, so the two
+ * cannot disagree about a truncated URL and miss a lookup forever. */
+#include "media/media.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -39,6 +43,9 @@ typedef struct {
     char cid[INDIGO_POST_CID_MAX];
     char handle[INDIGO_POST_NAME_MAX];
     char display_name[INDIGO_POST_NAME_MAX];
+    /* Avatar image URL, or empty. Fetched and decoded off the frame loop by
+     * src/media/; the layout only ever asks for it by URL. */
+    char avatar[INDIGO_MEDIA_URL_MAX];
     char text[INDIGO_POST_TEXT_MAX];
     indigo_post_facet facets[INDIGO_POST_FACETS_MAX];
     unsigned facet_count;

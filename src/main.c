@@ -453,15 +453,19 @@ main(void)
     gfxInitDefault();
     romfsInit();
 
+    /* Before the renderer: the media loader owns a Wolfram client, and
+     * Wolfram's 3DS platform layer initialises the socket service. */
+    indigo_atproto_init();
+
     if (!indigo_ui_init()) {
         indigo_log_error("could not initialise the 3DS renderer");
+        indigo_atproto_shutdown();
         romfsExit();
         gfxExit();
         indigo_log_shutdown();
         return 1;
     }
 
-    indigo_atproto_init();
     indigo_session_start(SESSION_PATH);
 
     indigo_input input;

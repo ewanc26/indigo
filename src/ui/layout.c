@@ -1,6 +1,7 @@
 #include "ui/layout.h"
 
 #include "app/signin.h"
+#include "media/media.h"
 #include "ui/wrap.h"
 
 #include <stdio.h>
@@ -341,6 +342,28 @@ author_name(const indigo_post *p)
     return p->display_name[0] ? p->display_name : p->handle;
 }
 
+/* Avatar sizes. The row size is what a 304x46 row can give up without
+ * squeezing the two text lines; the header sizes are the top screen's. */
+#define ROW_AVATAR 32
+#define HEAD_AVATAR 24
+#define PROFILE_AVATAR 40
+
+/* A square image at `size` pixels, or a tinted placeholder while it loads.
+ *
+ * The tint comes from the URL, so the same account is the same colour
+ * everywhere it appears and two accounts never look alike: a column of
+ * identical grey squares reads as one voice, which is the wrong thing for a
+ * timeline to say. It is the only colour on screen not drawn from the palette,
+ * and that is deliberate -- it has to be distinguishable per account. */
+static void
+draw_avatar(indigo_canvas *c, const char *url, float x, float y, float size)
+{
+    if (!url || !url[0]) {
+        return;
+    }
+    indigo_canvas_image(c, x, y, size, size, url, indigo_media_placeholder_color(url));
+}
+
 /* Draw `text` as wrapped lines, colouring facet ranges. */
 static void
 draw_post_text(indigo_canvas *c, const indigo_post *p)
@@ -435,8 +458,12 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
     } else if (p->is_reply) {
         indigo_canvas_text(c, 18, 36, 0.55f, COL_TEXT_DIM, "Reply");
     }
-    indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%s", author_name(p));
-    indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
+    draw_avatar(c, p->avatar, 12, 50, HEAD_AVATAR);
+    /* The name and handle sit beside the avatar rather than above the text:
+     * the text block is a fixed five lines starting at POST_TEXT_Y, and there
+     * is no room to give the header a third line. */
+    indigo_canvas_text(c, 44, 52, 0.75f, COL_TEXT, "%s", author_name(p));
+    indigo_canvas_text(c, 44, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
     draw_post_text(c, p);
 
     if (p->embed_note[0]) {
@@ -503,9 +530,12 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
         }
         return;
     }
-    indigo_canvas_text(c, 18, 44, 0.85f, COL_TEXT, "%.30s",
+    draw_avatar(c, p->avatar, 14, 38, PROFILE_AVATAR);
+    /* The display name is cut to 30 characters because a 40px avatar plus the
+     * longest name that still fits is narrower than the full 400px line. */
+    indigo_canvas_text(c, 64, 44, 0.85f, COL_TEXT, "%.26s",
                        p->display_name[0] ? p->display_name : p->handle);
-    indigo_canvas_text(c, 18, 72, 0.6f, COL_TEXT_DIM, "@%s%s", p->handle,
+    indigo_canvas_text(c, 64, 72, 0.6f, COL_TEXT_DIM, "@%s%s", p->handle,
                        p->following ? "   Following" : "");
     top_paragraph(c, 18, 98, 0.6f, COL_TEXT_SOFT, 4, p->bio);
     indigo_canvas_text(c, 18, 196, 0.6f, COL_TEXT, "%u posts", p->posts);
@@ -552,8 +582,9 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
         return;
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", n->selected + 1, n->count);
-    indigo_canvas_text(c, 18, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
-    indigo_canvas_text(c, 18, 74, 0.6f, COL_TEXT_DIM, "@%s", sel->handle);
+    draw_avatar(c, sel->avatar, 12, 46, HEAD_AVATAR);
+    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
+    indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "@%s", sel->handle);
     indigo_canvas_text(c, 18, 96, 0.65f, sel->unread ? COL_LINK : COL_TEXT_SOFT, "%s%s",
                        note_verb(sel->kind), sel->unread ? "  (new)" : "");
     if (sel->text[0]) {
@@ -834,20 +865,34 @@ back_button(indigo_canvas *c, indigo_action action, const char *label)
     indigo_canvas_text(c, r.x + 10, r.y + 7, 0.6f, COL_TEXT, "%s", label);
 }
 
+/* One list row: a pill, a title line, a body line and, when there is one, the
+ * author's avatar. The avatar is drawn into every kind of row rather than each
+ * screen doing its own, so a person looks the same in the timeline, in search
+ * results, in a list of followers and in notifications. */
 static void
-list_row(indigo_canvas *c, indigo_action a, bool selected, const char *title, const char *body)
+list_row(indigo_canvas *c, indigo_action a, bool selected, const char *title,
+         const char *body, const char *avatar)
 {
     indigo_rect r = indigo_layout_button_rect(a);
-    unsigned units = (unsigned) ((ROW_W - 20) / (INDIGO_CHAR_WIDTH * 0.55f));
+    float text_x = r.x + 10;
+    unsigned units;
     indigo_line line;
     int cut;
 
     indigo_canvas_rect(c, r.x, r.y, r.w, r.h, selected ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, r.x + 10, r.y + 3, 0.6f, COL_TEXT, "%s", title);
+    if (avatar && avatar[0]) {
+        draw_avatar(c, avatar, r.x + 7, r.y + 7, ROW_AVATAR);
+        text_x = r.x + 7 + ROW_AVATAR + 8;
+    }
+    /* The wrap width follows the text's left edge, so an indented row is
+     * truncated as tightly as an unindented one rather than running under the
+     * row's right edge. */
+    units = (unsigned) ((r.x + ROW_W - 10 - text_x) / (INDIGO_CHAR_WIDTH * 0.55f));
+    indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", title);
     if (indigo_wrap(body, units, &line, 1, &cut) == 0) {
         line = (indigo_line) {0, 0};
     }
-    indigo_canvas_text(c, r.x + 10, r.y + 24, 0.55f, COL_TEXT_SOFT, "%.*s%s", (int) line.len,
+    indigo_canvas_text(c, text_x, r.y + 24, 0.55f, COL_TEXT_SOFT, "%.*s%s", (int) line.len,
                        body + line.start, cut ? "..." : "");
 }
 
@@ -881,7 +926,7 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
                                                  : p->reposted_by[0] ? "RT  " : "",
                  author_name(p));
         list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == t->selected, title,
-                 p->text);
+                 p->text, p->avatar);
     }
 
     action_pill(c, INDIGO_ACTION_LIKE, sel && sel->like_uri[0], sel && sel->like_pending,
@@ -982,7 +1027,7 @@ build_bottom_notifications(const indigo_app *app, indigo_canvas *c)
         snprintf(title, sizeof title, "%s%.30s", it->unread ? "* " : "",
                  it->name[0] ? it->name : it->handle);
         list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == n->selected, title,
-                 it->text[0] ? it->text : note_verb(it->kind));
+                 it->text[0] ? it->text : note_verb(it->kind), it->avatar);
     }
     action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE, "A Open");
     action_pill(c, INDIGO_ACTION_REFRESH, n->loading, false, COL_PILL_ACTIVE, "Reload");
@@ -1098,7 +1143,7 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
              * handle: it is the one line that says what the list is for. */
             snprintf(title, sizeof title, "%.30s", l->name);
             list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
-                     l->description[0] ? l->description : "No description");
+                     l->description[0] ? l->description : "No description", NULL);
             continue;
         }
         if (indigo_search_is_posts(s)) {
@@ -1112,7 +1157,7 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
             snprintf(title, sizeof title, "%.30s",
                      p->display_name[0] ? p->display_name : p->handle);
             list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
-                     p->text);
+                     p->text, p->avatar);
             continue;
         }
         {
@@ -1124,7 +1169,7 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
             snprintf(title, sizeof title, "%.30s",
                      it->display_name[0] ? it->display_name : it->handle);
             list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == s->selected, title,
-                     it->handle);
+                     it->handle, it->avatar);
         }
     }
     /* Only one pill: typing is the header box, and a second "A Type" pill at

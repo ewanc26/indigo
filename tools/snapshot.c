@@ -59,6 +59,25 @@ blend(image *img, int x, int y, uint32_t rgba, float coverage)
     }
 }
 
+/* An image command on the host has no decoded pixels to show, so it draws its
+ * placeholder: exactly what the 3DS backend draws for an image that has not
+ * arrived. That is the point of the placeholder being stored on the command --
+ * the two backends cannot disagree about what an unloaded image looks like. */
+static void
+draw_image(image *img, const indigo_cmd *cmd)
+{
+    int x0 = (int) lroundf(cmd->x);
+    int y0 = (int) lroundf(cmd->y);
+    int x1 = (int) lroundf(cmd->x + cmd->w);
+    int y1 = (int) lroundf(cmd->y + cmd->h);
+
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            blend(img, x, y, cmd->color, 1.0f);
+        }
+    }
+}
+
 static void
 draw_rect(image *img, const indigo_cmd *cmd)
 {
@@ -155,6 +174,8 @@ render(const indigo_canvas *canvas)
 
         if (cmd->kind == INDIGO_CMD_RECT) {
             draw_rect(&img, cmd);
+        } else if (cmd->kind == INDIGO_CMD_IMAGE) {
+            draw_image(&img, cmd);
         } else {
             draw_text(&img, canvas, cmd);
         }
@@ -347,6 +368,12 @@ add_post(indigo_timeline *t, const char *name, const char *handle, const char *t
     snprintf(p.cid, sizeof p.cid, "bafy%u", t->count);
     indigo_copy_utf8(p.display_name, sizeof p.display_name, name);
     indigo_copy_utf8(p.handle, sizeof p.handle, handle);
+    /* An avatar URL per author, so the snapshots show what the row looks like
+     * with a face pending. The host has no pixels, so what appears is the
+     * placeholder -- which is the point: it is what a reader sees on a cold
+     * cache, and it is the only chance to see it without a 3DS. */
+    snprintf(p.avatar, sizeof p.avatar,
+             "https://cdn.bsky.app/img/avatar/plain/did:plc:fake/%s@jpeg", handle);
     indigo_copy_utf8(p.text, sizeof p.text, text);
     indigo_copy_utf8(p.reposted_by, sizeof p.reposted_by, reposter);
     p.like_count = likes;
@@ -427,6 +454,8 @@ fill_social(indigo_app *app, const scenario *s)
                          "Walker, reader, occasional poet. Rivers before roads, always. "
                          "Writing about the Welsh borders and old stones.");
         indigo_copy_utf8(p->did, sizeof p->did, "did:plc:rhiannon7wvx2m4qz6kbyt");
+        indigo_copy_utf8(p->avatar, sizeof p->avatar,
+                         "https://cdn.bsky.app/img/avatar/plain/did:plc:rhiannon/avatar@jpeg");
         if (s->timeline == 1) {
             /* Not following: the button offers the action. */
             p->following = false;
