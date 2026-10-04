@@ -2683,6 +2683,15 @@ test_settings_screen(void)
     CHECK(app.settings.theme == INDIGO_THEME_LIGHT);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
 
+    /* Test large_targets touch target expansion: touch 2px outside normal rect. */
+    app.settings.large_targets = true;
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x - 2);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 0);
+
     /* Exit settings back with B button. */
     in = (indigo_input) {0};
     in.back = true;

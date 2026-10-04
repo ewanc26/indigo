@@ -92,7 +92,7 @@ update_signin(indigo_app *app, const indigo_input *input)
         }
     }
     if (input->touch_pressed) {
-        switch (indigo_layout_hit(app->screen, input->touch_x, input->touch_y)) {
+        switch (indigo_layout_hit_app(app, input->touch_x, input->touch_y)) {
         case INDIGO_ACTION_FIELD_SERVICE:
             request_edit(app, INDIGO_FIELD_SERVICE);
             break;
@@ -409,7 +409,7 @@ update_home(indigo_app *app, const indigo_input *input)
         refresh_timeline(app);
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         switch (a) {
         case INDIGO_ACTION_ROW0:
@@ -472,7 +472,7 @@ update_thread(indigo_app *app, const indigo_input *input)
         open_profile(app, sel->handle);
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         switch (a) {
         case INDIGO_ACTION_ROW0:
@@ -529,7 +529,7 @@ update_profile(indigo_app *app, const indigo_input *input)
         indigo_app_toggle_block(app);
     }
     if (input->touch_pressed) {
-        switch (indigo_layout_hit(app->screen, input->touch_x, input->touch_y)) {
+        switch (indigo_layout_hit_app(app, input->touch_x, input->touch_y)) {
         case INDIGO_ACTION_FOLLOW:
             indigo_app_toggle_follow(app);
             break;
@@ -609,7 +609,7 @@ update_notifications(indigo_app *app, const indigo_input *input)
         app->request = INDIGO_REQUEST_NOTIFICATIONS;
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         switch (a) {
         case INDIGO_ACTION_ROW0:
@@ -735,7 +735,7 @@ update_menu(indigo_app *app, const indigo_input *input)
         return;
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         if (a == INDIGO_ACTION_BACK) {
             go_back(app);
@@ -823,7 +823,7 @@ update_search(indigo_app *app, const indigo_input *input)
         open_search_selection(app);
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         switch (a) {
         case INDIGO_ACTION_ROW0:
@@ -886,7 +886,7 @@ update_compose(indigo_app *app, const indigo_input *input)
         send_compose(app);
     }
     if (input->touch_pressed) {
-        switch (indigo_layout_hit(app->screen, input->touch_x, input->touch_y)) {
+        switch (indigo_layout_hit_app(app, input->touch_x, input->touch_y)) {
         case INDIGO_ACTION_EDIT:
             if (app->request == INDIGO_REQUEST_NONE) {
                 app->request = INDIGO_REQUEST_EDIT_DRAFT;
@@ -974,7 +974,7 @@ update_settings(indigo_app *app, const indigo_input *input)
         return;
     }
     if (input->touch_pressed) {
-        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
         if (a == INDIGO_ACTION_BACK) {
             go_back(app);
             return;
