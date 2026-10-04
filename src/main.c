@@ -4,6 +4,7 @@
 #include "atproto/session.h"
 #include "input/input.h"
 #include "input/textinput.h"
+#include "store/settings_store.h"
 #include "ui/ui.h"
 #include "util/log.h"
 
@@ -15,6 +16,7 @@
 #define DATA_DIR "sdmc:/3ds/indigo"
 #define LOG_PATH DATA_DIR "/indigo.log"
 #define SESSION_PATH DATA_DIR "/session.dat"
+#define SETTINGS_PATH DATA_DIR "/settings.dat"
 #define AUTOFILL_PATH DATA_DIR "/autofill.txt"
 #define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
 
@@ -421,7 +423,17 @@ main(void)
     indigo_log_init();
     mkdir("sdmc:/3ds", 0777);
     mkdir(DATA_DIR, 0777);
-    if (!indigo_log_open_file(LOG_PATH)) {
+
+    /* Before the log file is opened, because the diagnostics setting decides
+     * whether one is. An absent file is the normal first-run case and leaves
+     * the defaults in place, so it needs no branch of its own. */
+    static indigo_settings settings;
+
+    if (indigo_settings_store_load(SETTINGS_PATH, &settings) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("settings file was unreadable; continuing with defaults");
+    }
+    if (settings.diagnostics && !indigo_log_open_file(LOG_PATH)) {
         indigo_log_warn("no log file; continuing with stderr only");
     }
 
@@ -444,6 +456,7 @@ main(void)
 
     static indigo_app app; /* about 90KB: keep it off the stack */
     indigo_app_init(&app);
+    indigo_app_set_settings(&app, &settings);
     app.wolfram_linked = indigo_atproto_available();
 
     if (indigo_session_has_saved() && indigo_session_submit_resume()) {

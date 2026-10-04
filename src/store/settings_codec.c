@@ -18,7 +18,10 @@ indigo_settings_defaults(indigo_settings *out)
     out->reduce_motion = false;
     out->high_contrast = false;
     out->large_targets = false;
-    out->diagnostics = false;
+    /* On by default, matching the behaviour from before settings existed. A
+     * log that stops being written because a new file appeared would be a
+     * regression nobody asked for. */
+    out->diagnostics = true;
 }
 
 void

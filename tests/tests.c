@@ -724,7 +724,7 @@ test_settings_defaults_and_clamp(void)
     CHECK(!s.reduce_motion);
     CHECK(!s.high_contrast);
     CHECK(!s.large_targets);
-    CHECK(!s.diagnostics);
+    CHECK(s.diagnostics); /* on unless asked otherwise, as it was before */
     CHECK(s.default_feed[0] == '\0');
 
     /* Nothing out of range may survive clamp, whoever filled the struct. */
@@ -924,6 +924,52 @@ test_settings_store(void)
 
     snprintf(cmd, sizeof cmd, "rm -rf %s", dir);
     CHECK(system(cmd) == 0);
+}
+
+static void
+test_settings_reach_the_app(void)
+{
+    static indigo_app app;
+    indigo_settings s;
+    indigo_field f;
+
+    /* init() zeroes the struct, and a zeroed text_scale is not a scale. */
+    indigo_app_init(&app);
+    CHECK(app.settings.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+    CHECK(app.settings.diagnostics);
+
+    indigo_settings_defaults(&s);
+    s.text_scale = INDIGO_TEXT_SCALE_LARGE;
+    s.high_contrast = true;
+    s.default_feed[0] = '\0';
+    indigo_app_set_settings(&app, &s);
+    CHECK(app.settings.text_scale == INDIGO_TEXT_SCALE_LARGE);
+    CHECK(app.settings.high_contrast);
+
+    /* An out-of-range value from a caller is clamped on the way in, the same
+     * as one read off disk. */
+    s.text_scale = (indigo_text_scale) 101;
+    indigo_app_set_settings(&app, &s);
+    CHECK(app.settings.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+
+    /* No default feed means the plain Following timeline, as before. */
+    indigo_app_sign_in_succeeded(&app, "me.example");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    CHECK(app.feed_uri[0] == '\0');
+
+    /* A default feed is what Home opens on. It must not push a history entry,
+     * or B from Home would go back to sign-in. */
+    indigo_app_init(&app);
+    indigo_settings_defaults(&s);
+    snprintf(s.default_feed, sizeof s.default_feed,
+             "at://did:plc:abc/app.bsky.feed.generator/daily");
+    indigo_app_set_settings(&app, &s);
+    indigo_app_sign_in_succeeded(&app, "me.example");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_FEED);
+    CHECK(strcmp(app.feed_uri, s.default_feed) == 0);
+    CHECK(strcmp(app.request_feed_uri, s.default_feed) == 0);
+    CHECK(app.feed_name[0] != '\0');
+    CHECK(app.history_count == 0);
 }
 
 static void
@@ -2458,6 +2504,7 @@ main(void)
     test_settings_defaults_and_clamp();
     test_settings_codec();
     test_settings_store();
+    test_settings_reach_the_app();
     test_failures();
     test_log_file();
     test_autofill();
