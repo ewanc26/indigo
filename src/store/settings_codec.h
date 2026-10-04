@@ -36,6 +36,10 @@ typedef struct {
     bool reduce_motion;
     bool high_contrast;
     bool large_targets;
+    /* Show a post image's alt text under the picture. Off by default: alt text
+     * is written for a screen reader, and most people looking at a photograph do
+     * not want to read its description as well. */
+    bool alt_text;
     bool diagnostics;
     /* AT URI or handle of the feed to open at startup. Empty means the
      * default home timeline. */

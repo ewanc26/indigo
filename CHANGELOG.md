@@ -16,9 +16,11 @@ publishes the section matching the version you pass it.
 - Link cards. A post with an `external` embed draws a surface with the link's
   title, its URI and the site's own picture when it has one. Indigo cannot open
   a link yet, so the card is something to read rather than something to press.
-- Alt text is carried on every image post and drawn by nothing yet. It is
-  written for a screen reader, so it wants a settings toggle rather than a
-  caption under every picture; that is issue #9.
+- An `Image alt text` setting, off by default, that draws a post image's alt
+  text under the picture. Alt text is written for a screen reader, so this is a
+  choice rather than a caption under every photograph. The description takes the
+  lines it needs out of the bottom of the band and the picture is fitted into
+  what is left.
 
 ### Notes
 - A post's image and link card are drawn on the detail surfaces -- the home and

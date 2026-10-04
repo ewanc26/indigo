@@ -935,9 +935,12 @@ toggle_setting_row(indigo_app *app, unsigned row)
         s->large_targets = !s->large_targets;
         break;
     case 5:
-        s->diagnostics = !s->diagnostics;
+        s->alt_text = !s->alt_text;
         break;
     case 6:
+        s->diagnostics = !s->diagnostics;
+        break;
+    case 7:
         if (s->default_feed[0]) {
             s->default_feed[0] = '\0';
         } else if (app->feed_uri[0]) {
@@ -961,7 +964,7 @@ update_settings(indigo_app *app, const indigo_input *input)
         }
     }
     if (input->down) {
-        if (app->settings_selected < 6) {
+        if (app->settings_selected < 7) {
             app->settings_selected++;
         }
     }
@@ -979,7 +982,7 @@ update_settings(indigo_app *app, const indigo_input *input)
             go_back(app);
             return;
         }
-        if (a >= INDIGO_ACTION_SETTINGS_ROW0 && a <= INDIGO_ACTION_SETTINGS_ROW6) {
+        if (a >= INDIGO_ACTION_SETTINGS_ROW0 && a <= INDIGO_ACTION_SETTINGS_ROW7) {
             unsigned row = (unsigned) (a - INDIGO_ACTION_SETTINGS_ROW0);
             app->settings_selected = row;
             toggle_setting_row(app, row);

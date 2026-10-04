@@ -363,7 +363,8 @@ Do not make cached data a prerequisite for booting.
 
 `store/settings_codec` and `store/settings_store` persist the non-secret
 preferences: theme, text scale, reduce-motion, high-contrast, large touch
-targets, the diagnostics switch, and the feed to open at startup.
+targets, image alt text, the diagnostics switch, and the feed to open at
+startup.
 
 They differ from the session store in three deliberate ways:
 
@@ -726,11 +727,11 @@ The current repository has:
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
 - threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
-- a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
+- a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, image alt text, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
 - an image pipeline (`src/media`): a fixed-size, byte-budgeted decoded-image cache (`media.c`, pure and host-testable) and a fetch/decode worker thread (`media_loader.c`) that uses Wolfram's token-less public GET and `wf_image_decode_rgba`, plus an `INDIGO_CMD_IMAGE` canvas command whose replay uploads power-of-two citro3d textures on the main thread and draws a per-URL tinted placeholder while a URL is not yet decoded;
 - avatars on every row that has a person in it — timeline and thread rows, the selected post's header, the profile header, the notification list and its detail, and every people row in search, list members, followers, following, mutes and blocks;
-- post images and link cards on the post detail surfaces: `indigo_post` carries the kind, the declared aspect ratio, the image count, the thumbnail URL, the alt text and a link's title and URI, and `ui/layout.c` draws either as itself in the band between the text and the counters. The detail screen spends three of a post's five lines of text on the embed, because the alternative -- a thumbnail beside the text -- costs 130px of width and nearly half the characters per line. One image is drawn of up to four and the count is stated; alt text is carried but shown by nothing, since it wants a settings toggle rather than a caption;
-- still no paging on the search results, no full-size image viewer, and no alt-text setting. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
+- post images and link cards on the post detail surfaces: `indigo_post` carries the kind, the declared aspect ratio, the image count, the thumbnail URL, the alt text and a link's title and URI, and `ui/layout.c` draws either as itself in the band between the text and the counters. The detail screen spends three of a post's five lines of text on the embed, because the alternative -- a thumbnail beside the text -- costs 130px of width and nearly half the characters per line. One image is drawn of up to four and the count is stated; a post image's alt text is drawn when the `alt_text` setting is on, at the small dim scale, taking as many lines as it needs out of the bottom of the band and the picture being fitted into what is left;
+- still no paging on the search results and no full-size image viewer. Post search keeps its own result array as well as the union, so both stay valid until the next result arrives.
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 

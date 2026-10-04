@@ -53,6 +53,7 @@ typedef enum {
     INDIGO_ACTION_SETTINGS_ROW4,
     INDIGO_ACTION_SETTINGS_ROW5,
     INDIGO_ACTION_SETTINGS_ROW6,
+    INDIGO_ACTION_SETTINGS_ROW7,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

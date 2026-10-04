@@ -82,12 +82,19 @@ static const indigo_rect s_pinned_button = {164, 166, 142, 34};
  * spacing test below pins that the button rows leave room for it. */
 #define PROFILE_STATUS_Y 206
 
-/* Settings rows: seven options on bottom screen. */
+/* Settings rows: eight options on the bottom screen.
+ *
+ * Eight rows of the original 24px with a 27px step reach 257 on a 240-tall
+ * screen, so the rows gave up 2px of height and the first row moved up to clear
+ * the Back button by the same margin it always had. The 3px gap is unchanged,
+ * because the gap is what decides whether a thumb can land on the wrong row.
+ * Making the screen scrollable is the answer that compromises none of this, and
+ * it is the answer to reach at a ninth row rather than an eighth. */
 #define SETTINGS_ROW_X 14
 #define SETTINGS_ROW_W 292
-#define SETTINGS_ROW_H 24
-#define SETTINGS_ROW_Y0 44
-#define SETTINGS_ROW_STEP 27
+#define SETTINGS_ROW_H 22
+#define SETTINGS_ROW_Y0 41
+#define SETTINGS_ROW_STEP 25
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
@@ -104,6 +111,7 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_SETTINGS_ROW3:
     case INDIGO_ACTION_SETTINGS_ROW4:
     case INDIGO_ACTION_SETTINGS_ROW5:
+    case INDIGO_ACTION_SETTINGS_ROW7:
     case INDIGO_ACTION_SETTINGS_ROW6:
         return (indigo_rect) {SETTINGS_ROW_X,
                               SETTINGS_ROW_Y0 + SETTINGS_ROW_STEP * (float) (action - INDIGO_ACTION_SETTINGS_ROW0),
@@ -257,7 +265,8 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_SETTINGS_ROW0, INDIGO_ACTION_SETTINGS_ROW1,
         INDIGO_ACTION_SETTINGS_ROW2, INDIGO_ACTION_SETTINGS_ROW3,
         INDIGO_ACTION_SETTINGS_ROW4, INDIGO_ACTION_SETTINGS_ROW5,
-        INDIGO_ACTION_SETTINGS_ROW6, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_SETTINGS_ROW6, INDIGO_ACTION_SETTINGS_ROW7,
+        INDIGO_ACTION_BACK};
     const indigo_action *list = signin_actions;
     unsigned count = 0;
 
@@ -370,6 +379,10 @@ author_name(const indigo_post *p)
 #define EMBED_Y 132
 #define EMBED_W 364
 #define EMBED_H 60
+/* Alt text: the scale it is drawn at, and the picture height kept when it has
+ * taken lines out of the band. A 4:3 photo at the floor is still 40x30. */
+#define ALT_SCALE 0.55f
+#define EMBED_H_MIN 30.0f
 /* A link card's text sits inside its own edge; the inset is the padding. */
 #define CARD_INSET 10
 /* The thumbnail inside a link card, and the space kept clear for it. */
@@ -441,12 +454,12 @@ post_draws_embed(const indigo_post *p)
     return false;
 }
 
-/* A box of the image's own shape inside the band, centred on it. The aspect
- * ratio is the server's; when it declared none, a square is the assumption
- * that distorts least, because the box drawn is stretched to whatever shape it
- * is given. */
+/* A box of the image's own shape inside `band_h` of the band, centred on it.
+ * The aspect ratio is the server's; when it declared none, a square is the
+ * assumption that distorts least, because the box drawn is stretched to
+ * whatever shape it is given. */
 static void
-draw_post_image(indigo_canvas *c, const indigo_post *p)
+draw_post_image(indigo_canvas *c, const indigo_post *p, float band_h)
 {
     float aw = p->embed_w > 0 && p->embed_h > 0 ? (float) p->embed_w : 1.0f;
     float ah = p->embed_w > 0 && p->embed_h > 0 ? (float) p->embed_h : 1.0f;
@@ -455,7 +468,7 @@ draw_post_image(indigo_canvas *c, const indigo_post *p)
      * tall: the box is drawn stretched to whatever shape it is given, so a box
      * outside the band is a box off the screen. */
     float k = EMBED_W / aw;
-    float by_height = EMBED_H / ah;
+    float by_height = band_h / ah;
     float w;
     float h;
 
@@ -469,9 +482,39 @@ draw_post_image(indigo_canvas *c, const indigo_post *p)
     /* Bluesky allows four images and Indigo draws one, so a post of several says
      * so rather than quietly showing one of them as if it were all of them. */
     if (p->embed_count > 1) {
-        indigo_canvas_text(c, 330, EMBED_Y + EMBED_H - 12.0f, 0.55f, COL_TEXT_DIM,
+        /* On the band's own bottom edge, so it moves up with the picture when
+         * alt text has taken lines out of it. */
+        indigo_canvas_text(c, 330, EMBED_Y + band_h - 8.0f, ALT_SCALE, COL_TEXT_DIM,
                            "+%u more", (unsigned) p->embed_count - 1u);
     }
+}
+
+/* Alt text under a picture, when the setting is on and the author wrote any.
+ *
+ * It takes what it needs rather than a fixed share: one sentence costs one line,
+ * a long description costs the two that fit, and the picture is fitted into
+ * whatever is left of the band. A setting that made every photograph a quarter
+ * of the screen smaller would not be worth turning on.
+ *
+ * Alt text is drawn in the dim colour and at the small scale deliberately. It
+ * is reference, not caption: the post's own text is the thing being read, and
+ * an accessibility option that competes with it is not one. */
+static float
+draw_post_alt(indigo_canvas *c, const char *alt)
+{
+    static const float pitch = 13.0f;
+    indigo_line lines[2];
+    int truncated;
+    unsigned units = (unsigned) (EMBED_W / (INDIGO_CHAR_WIDTH * ALT_SCALE));
+    unsigned n = indigo_wrap(alt, units, lines, 2, &truncated);
+
+    for (unsigned i = 0; i < n; i++) {
+        indigo_canvas_text(c, EMBED_X,
+                           EMBED_Y + EMBED_H - (float) (n - i) * pitch, ALT_SCALE,
+                           COL_TEXT_DIM, "%.*s%s", (int) lines[i].len,
+                           alt + lines[i].start, truncated && i + 1 == n ? "..." : "");
+    }
+    return (float) n * pitch;
 }
 
 /* A link card: the title over the place it points at, with the link's own
@@ -524,17 +567,28 @@ draw_post_link(indigo_canvas *c, const indigo_post *p)
  * video, an attachment -- and an embed that can be drawn does not, because the
  * note would say less than the picture does. */
 static void
-draw_post_body(indigo_canvas *c, const indigo_post *p)
+draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_alt)
 {
     bool embed = post_draws_embed(p);
+    float band_h = EMBED_H;
 
     draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES);
     if (embed) {
-        if (p->embed_kind == INDIGO_EMBED_IMAGE) {
-            draw_post_image(c, p);
-        } else {
+        if (p->embed_kind != INDIGO_EMBED_IMAGE) {
             draw_post_link(c, p);
+            return;
         }
+        if (show_alt && p->embed_alt[0]) {
+            /* The alt text sits at the bottom of the band, so the picture is
+             * fitted into what is above it. */
+            float used = draw_post_alt(c, p->embed_alt);
+
+            band_h = EMBED_H - used - 4.0f;
+            if (band_h < EMBED_H_MIN) {
+                band_h = EMBED_H_MIN;
+            }
+        }
+        draw_post_image(c, p, band_h);
         return;
     }
     if (p->embed_note[0]) {
@@ -610,7 +664,7 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
      * is no room to give the header a third line. */
     indigo_canvas_text(c, 44, 52, 0.75f, COL_TEXT, "%s", author_name(p));
     indigo_canvas_text(c, 44, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
-    draw_post_body(c, p);
+    draw_post_body(c, p, app->settings.alt_text);
 
     indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                        p->reply_count);
@@ -798,7 +852,7 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
                            author_name(psel));
         indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", psel->handle);
-        draw_post_body(c, psel);
+        draw_post_body(c, psel, app->settings.alt_text);
         indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                            psel->reply_count);
         indigo_canvas_text(c, 118, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u reposts",
@@ -1339,12 +1393,12 @@ build_bottom_settings(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 14, 10, 0.9f, COL_TEXT, "Settings");
     back_button(c, INDIGO_ACTION_BACK, "Back");
 
-    static const char *labels[7] = {
+    static const char *labels[8] = {
         "Theme", "Text scale", "Reduce motion", "High contrast",
-        "Large targets", "Diagnostics log", "Startup feed"
+        "Large targets", "Image alt text", "Diagnostics log", "Startup feed"
     };
 
-    for (unsigned i = 0; i < 7; i++) {
+    for (unsigned i = 0; i < 8; i++) {
         indigo_action act = (indigo_action) (INDIGO_ACTION_SETTINGS_ROW0 + i);
         indigo_rect r = indigo_layout_button_rect(act);
         bool active = (app->settings_selected == i);
@@ -1369,9 +1423,12 @@ build_bottom_settings(const indigo_app *app, indigo_canvas *c)
             snprintf(val, sizeof val, "%s", s->large_targets ? "On" : "Off");
             break;
         case 5:
-            snprintf(val, sizeof val, "%s", s->diagnostics ? "On" : "Off");
+            snprintf(val, sizeof val, "%s", s->alt_text ? "On" : "Off");
             break;
         case 6:
+            snprintf(val, sizeof val, "%s", s->diagnostics ? "On" : "Off");
+            break;
+        case 7:
             if (s->default_feed[0]) {
                 snprintf(val, sizeof val, "Custom feed");
             } else if (app->feed_uri[0]) {
