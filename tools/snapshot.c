@@ -386,6 +386,15 @@ add_post(indigo_timeline *t, const char *name, const char *handle, const char *t
         add_facet(&p, INDIGO_FACET_LINK, "https://github.com/ewanc26/indigo",
                   "https://github.com/ewanc26/indigo");
         indigo_copy_utf8(p.embed_note, sizeof p.embed_note, "Link card: Wolfram on GitHub");
+        p.embed_kind = INDIGO_EMBED_LINK;
+        indigo_copy_utf8(p.embed_title, sizeof p.embed_title,
+                         "Wolfram, a C AT Protocol SDK, and the Indigo client built on it");
+        indigo_copy_utf8(p.embed_uri, sizeof p.embed_uri,
+                         "https://github.com/ewanc26/wolfram");
+        /* A link card with a picture in it is the ordinary case: the site put
+         * an og:image on the page, and Bluesky passes it through. */
+        snprintf(p.embed_thumb, sizeof p.embed_thumb,
+                 "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:fake/card@jpeg");
     }
     indigo_timeline_append(t, &p);
 }
@@ -427,6 +436,31 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
              "Short one.", "", 3, false, false);
     add_post(t, "Dev Log", "devlog.example", "Fifth post, to prove scrolling keeps the selection visible.",
              "", 0, false, false);
+    {
+        /* The embeds the detail screen draws. Their thumbnails are placeholders
+         * here for the same reason the avatars' are: the host has no pixels, and
+         * the placeholder is what a reader sees on a cold cache anyway. */
+        indigo_post *photo = &t->posts[1];
+        indigo_post *gallery = &t->posts[2];
+
+        photo->embed_kind = INDIGO_EMBED_IMAGE;
+        indigo_copy_utf8(photo->embed_note, sizeof photo->embed_note, "[1 image]");
+        indigo_copy_utf8(photo->embed_alt, sizeof photo->embed_alt,
+                         "The river at dawn, frost on the railings.");
+        snprintf(photo->embed_thumb, sizeof photo->embed_thumb,
+                 "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:fake/river@jpeg");
+        photo->embed_w = 3; /* portrait: the box has to be tall, not wide */
+        photo->embed_h = 4;
+
+        /* Four images, one drawn: the count is what tells the reader that. */
+        gallery->embed_kind = INDIGO_EMBED_IMAGE;
+        gallery->embed_count = 4;
+        indigo_copy_utf8(gallery->embed_note, sizeof gallery->embed_note, "[4 images]");
+        snprintf(gallery->embed_thumb, sizeof gallery->embed_thumb,
+                 "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:fake/wiiu@jpeg");
+        gallery->embed_w = 16;
+        gallery->embed_h = 9;
+    }
     indigo_timeline_finish_fetch(t, "cursor");
     indigo_timeline_select(t, select, INDIGO_TIMELINE_ROWS);
 }

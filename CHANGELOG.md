@@ -6,6 +6,30 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Added
+- Post images. A post with an `images` embed draws its first picture in a box
+  of the shape the server declared, and the post's text gives up three of its
+  five lines to make room for it. One image of up to four is drawn and the count
+  is stated on screen, because a post of four photographs is a different thing
+  from a post of one. The box is fitted on both axes, so a 1:3 panorama and a
+  portrait both stay inside the band.
+- Link cards. A post with an `external` embed draws a surface with the link's
+  title, its URI and the site's own picture when it has one. Indigo cannot open
+  a link yet, so the card is something to read rather than something to press.
+- Alt text is carried on every image post and drawn by nothing yet. It is
+  written for a screen reader, so it wants a settings toggle rather than a
+  caption under every picture; that is issue #9.
+
+### Notes
+- A post's image and link card are drawn on the detail surfaces -- the home and
+  thread post, and a post in the search results. List rows are unchanged: a row
+  is two lines of text and a face, and there is no honest way to fit a
+  thumbnail into one.
+- The image cache's decode cap is now per request rather than one 96px cap for
+  everything, and its byte budget is 1.5MB so that a handful of full-size
+  thumbnails fit. An avatar still decodes at 96px; a thumbnail asks for what it
+  is drawn at.
+
 ## [0.3.0] - 2026-10-04
 
 ### Added
