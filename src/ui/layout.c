@@ -162,16 +162,70 @@ indigo_layout_button_rect(indigo_action action)
     return (indigo_rect) {0, 0, 0, 0};
 }
 
-static bool
-inside(indigo_rect r, int x, int y)
+typedef struct {
+    uint32_t bg_top;
+    uint32_t bg_bottom;
+    uint32_t bar;
+    uint32_t text;
+    uint32_t text_soft;
+    uint32_t text_dim;
+    uint32_t pill;
+    uint32_t pill_active;
+} indigo_palette;
+
+static indigo_palette
+indigo_layout_palette(const indigo_settings *s)
 {
-    return (float) x >= r.x && (float) x < r.x + r.w && (float) y >= r.y &&
-           (float) y < r.y + r.h;
+    if (s && s->high_contrast) {
+        return (indigo_palette) {
+            .bg_top = INDIGO_RGBA(0, 0, 0, 255),
+            .bg_bottom = INDIGO_RGBA(0, 0, 0, 255),
+            .bar = INDIGO_RGBA(40, 44, 56, 255),
+            .text = INDIGO_RGBA(255, 255, 255, 255),
+            .text_soft = INDIGO_RGBA(245, 245, 250, 255),
+            .text_dim = INDIGO_RGBA(210, 215, 230, 255),
+            .pill = INDIGO_RGBA(30, 35, 50, 255),
+            .pill_active = INDIGO_RGBA(90, 120, 255, 255),
+        };
+    }
+    if (s && s->theme == INDIGO_THEME_LIGHT) {
+        return (indigo_palette) {
+            .bg_top = INDIGO_RGBA(240, 242, 248, 255),
+            .bg_bottom = INDIGO_RGBA(230, 234, 242, 255),
+            .bar = INDIGO_RGBA(210, 216, 230, 255),
+            .text = INDIGO_RGBA(15, 20, 30, 255),
+            .text_soft = INDIGO_RGBA(45, 55, 75, 255),
+            .text_dim = INDIGO_RGBA(90, 100, 120, 255),
+            .pill = INDIGO_RGBA(195, 205, 225, 255),
+            .pill_active = INDIGO_RGBA(60, 90, 210, 255),
+        };
+    }
+    return (indigo_palette) {
+        .bg_top = COL_BG_TOP,
+        .bg_bottom = COL_BG_BOTTOM,
+        .bar = COL_BAR,
+        .text = COL_TEXT,
+        .text_soft = COL_TEXT_SOFT,
+        .text_dim = COL_TEXT_DIM,
+        .pill = COL_PILL,
+        .pill_active = COL_PILL_ACTIVE,
+    };
+}
+
+static bool
+inside(indigo_rect r, int x, int y, bool large_targets)
+{
+    float margin = large_targets ? 4.0f : 0.0f;
+
+    return (float) x >= r.x - margin && (float) x < r.x + r.w + margin &&
+           (float) y >= r.y - margin && (float) y < r.y + r.h + margin;
 }
 
 indigo_action
-indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
+indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
 {
+    indigo_screen screen = app ? app->screen : INDIGO_SCREEN_SIGNIN;
+    bool large_targets = app ? app->settings.large_targets : false;
     static const indigo_action signin_actions[] = {
         INDIGO_ACTION_FIELD_SERVICE, INDIGO_ACTION_FIELD_HANDLE,
         INDIGO_ACTION_FIELD_PASSWORD, INDIGO_ACTION_SIGN_IN};
@@ -193,8 +247,6 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
     static const indigo_action compose_actions[] = {
         INDIGO_ACTION_EDIT, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
-    /* AUTHOR is the same pill rect as REFRESH and means the same thing here:
-     * open the selected person's profile. */
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
         INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
@@ -238,11 +290,19 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     }
 #undef USE
     for (unsigned i = 0; i < count; i++) {
-        if (inside(indigo_layout_button_rect(list[i]), touch_x, touch_y)) {
+        if (inside(indigo_layout_button_rect(list[i]), touch_x, touch_y, large_targets)) {
             return list[i];
         }
     }
     return INDIGO_ACTION_NONE;
+}
+
+indigo_action
+indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
+{
+    indigo_app dummy = {.screen = screen};
+
+    return indigo_layout_hit_app(&dummy, touch_x, touch_y);
 }
 
 #define COL_ERROR INDIGO_RGBA(255, 138, 128, 255)
@@ -675,11 +735,13 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
 static void
 build_top(const indigo_app *app, indigo_canvas *c)
 {
+    indigo_palette pal = indigo_layout_palette(&app->settings);
+
     indigo_canvas_init(c, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT);
-    indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, COL_BG_TOP);
+    indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, pal.bg_top);
 
     if (app->screen == INDIGO_SCREEN_HOME || app->screen == INDIGO_SCREEN_THREAD) {
-        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, COL_BAR);
+        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, pal.bar);
         build_top_post(app, c);
         return;
     }
@@ -1140,9 +1202,11 @@ static void
 build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
 {
     (void) input;
+    indigo_palette pal = indigo_layout_palette(&app->settings);
+
     indigo_canvas_init(c, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT);
-    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT, COL_BG_BOTTOM);
-    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, 42, COL_BAR);
+    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT, pal.bg_bottom);
+    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, 42, pal.bar);
     switch (app->screen) {
     case INDIGO_SCREEN_SIGNIN:
         build_bottom_signin(app, c);

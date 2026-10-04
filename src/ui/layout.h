@@ -66,6 +66,7 @@ typedef struct {
 /* Touch targets on the bottom screen, shared by drawing and hit testing. */
 indigo_rect indigo_layout_button_rect(indigo_action action);
 indigo_action indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y);
+indigo_action indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y);
 
 /* Pure layout: fills both display lists, touches no platform API. */
 void indigo_layout_build(const indigo_app *app, const indigo_input *input,
