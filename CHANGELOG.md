@@ -45,6 +45,10 @@ publishes the section matching the version you pass it.
   the gap is what decides whether a thumb lands on the wrong row.
 - `indigo_layout_hit()` no longer builds a 370KB `indigo_app` on the stack to
   read one enum out of it.
+- The release is tagged before it is built, so the `.3dsx` names its own release
+  in `INDIGO_BUILD_COMMIT` rather than the previous tag plus a commit count.
+  Releases before this one shipped an artifact that reported the tag they were
+  about to become's predecessor.
 
 ## [0.3.0] - 2026-10-04
 
