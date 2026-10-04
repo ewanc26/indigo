@@ -223,10 +223,9 @@ inside(indigo_rect r, int x, int y, bool large_targets)
 }
 
 indigo_action
-indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
+indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x,
+                           int touch_y)
 {
-    indigo_screen screen = app ? app->screen : INDIGO_SCREEN_SIGNIN;
-    bool large_targets = app ? app->settings.large_targets : false;
     static const indigo_action signin_actions[] = {
         INDIGO_ACTION_FIELD_SERVICE, INDIGO_ACTION_FIELD_HANDLE,
         INDIGO_ACTION_FIELD_PASSWORD, INDIGO_ACTION_SIGN_IN};
@@ -299,11 +298,17 @@ indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
 }
 
 indigo_action
+indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
+{
+    return indigo_layout_hit_settings(app ? app->screen : INDIGO_SCREEN_SIGNIN,
+                                      app ? app->settings.large_targets : false,
+                                      touch_x, touch_y);
+}
+
+indigo_action
 indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
 {
-    indigo_app dummy = {.screen = screen};
-
-    return indigo_layout_hit_app(&dummy, touch_x, touch_y);
+    return indigo_layout_hit_settings(screen, false, touch_x, touch_y);
 }
 
 #define COL_ERROR INDIGO_RGBA(255, 138, 128, 255)
