@@ -734,16 +734,18 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 9);
+    CHECK(app.menu.count == 11);
     CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
-    CHECK(app.menu.items[7].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[6].label, "My profile") == 0);
+    CHECK(app.menu.items[6].kind == INDIGO_MENU_MUTED);
+    CHECK(app.menu.items[7].kind == INDIGO_MENU_BLOCKED);
+    CHECK(app.menu.items[9].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[8].label, "My profile") == 0);
 
-    /* Sign out is the eighth item, so it sits below the window until the
+    /* Sign out is the tenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 7; i++) {
+    for (unsigned i = 0; i < 9; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1469,8 +1471,8 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the eight app actions. */
-    CHECK(menu.count == 12);
+    /* Three facet targets first, then the eleven app actions. */
+    CHECK(menu.count == 14);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1479,7 +1481,7 @@ test_facet_menu(void)
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[11].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[13].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1497,7 +1499,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 12);
+    CHECK(app.menu.count == 14);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1518,7 +1520,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 9);
+    CHECK(menu.count == 11);
     CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
@@ -1526,12 +1528,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 9);
+    CHECK(menu.count == 11);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 9);
-    CHECK(strcmp(menu.items[6].label, "Your profile") == 0);
+    CHECK(menu.count == 11);
+    CHECK(strcmp(menu.items[8].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -1557,7 +1559,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets plus the six app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 6);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 8);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 

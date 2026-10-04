@@ -35,7 +35,7 @@ typedef struct {
     char uri[INDIGO_POST_URI_MAX];
 } indigo_list;
 
-/* One screen serves eight lists. The people lists share the indigo_actor row,
+/* One screen serves ten lists. The people lists share the indigo_actor row,
  * the post lists the indigo_post row, and curated lists their own. */
 typedef enum {
     INDIGO_SEARCH_PEOPLE = 0,
@@ -46,6 +46,8 @@ typedef enum {
     INDIGO_SEARCH_LISTS,
     INDIGO_SEARCH_LIST_MEMBERS,
     INDIGO_SEARCH_FEEDS,
+    INDIGO_SEARCH_MUTED,
+    INDIGO_SEARCH_BLOCKED,
 } indigo_search_kind;
 
 typedef struct {

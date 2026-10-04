@@ -148,6 +148,11 @@ void indigo_session_lists_results(const indigo_list **lists, unsigned *count);
  * their own array and event; the feed posts reuse the timeline's, because
  * getFeed returns the same shape getTimeline does. */
 bool indigo_session_submit_feeds(void);
+/* The accounts this one has muted or blocked. Both land in the actor results
+ * the people lists already use, so they are read-only: undoing a mute or block
+ * is done from that person's profile, which is where it was done. */
+bool indigo_session_submit_mutes(void);
+bool indigo_session_submit_blocks(void);
 bool indigo_session_submit_feed(const char *feed_uri, const char *cursor);
 void indigo_session_feeds_results(const indigo_list **feeds, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
