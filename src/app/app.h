@@ -184,7 +184,8 @@ void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification 
 void indigo_app_notifications_failed(indigo_app *app, const char *message);
 /* The search query came back from the keyboard. */
 void indigo_app_set_query(indigo_app *app, const char *text);
-void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count);
+void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,
+                               const char *next_cursor);
 void indigo_app_search_failed(indigo_app *app, const char *message);
 /* Open the people list for a subject's followers or following. Switching kind
  * drops the previous results rather than showing one list under the other's
@@ -196,7 +197,8 @@ void indigo_app_open_author_posts(indigo_app *app, const char *actor);
  * the search screen; the members list reuses the actor rows. */
 void indigo_app_open_lists(indigo_app *app);
 void indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name);
-void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count);
+void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count,
+                             const char *next_cursor);
 /* The account's saved feeds, then one feed's posts on the home screen. The
  * picker reuses the search screen with the list rows; the feed itself reuses
  * the timeline, so Back lands on the picker again. */
@@ -208,10 +210,12 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
 void indigo_app_open_settings(indigo_app *app);
-void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count);
+void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count,
+                             const char *next_cursor);
 /* Post search results, which are posts rather than people. Kept separate from
  * the actor-loaded path because indigo_actor is the wrong type for them. */
-void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count);
+void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
+                                   const char *next_cursor);
 /* Follow/unfollow. The toggle flips `following` at once and reverts it if the
  * job fails, so the button responds to the press rather than to the network. */
 void indigo_app_toggle_follow(indigo_app *app);

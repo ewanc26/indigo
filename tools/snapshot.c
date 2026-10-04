@@ -578,7 +578,7 @@ fill_social(indigo_app *app, const scenario *s)
                 snprintf(fs[1].description, sizeof fs[1].description, "Custom feed");
                 snprintf(fs[1].uri, sizeof fs[1].uri,
                          "at://did:plc:me/app.bsky.feed.generator/moon");
-                indigo_app_feeds_loaded(app, fs, 2);
+                indigo_app_feeds_loaded(app, fs, 2, "");
             }
             return;
         }
@@ -600,7 +600,7 @@ fill_social(indigo_app *app, const scenario *s)
                          "Megaliths, and the arguments about them.");
                 snprintf(ls[1].uri, sizeof ls[1].uri,
                          "at://did:plc:me/app.bsky.graph.list/oldstones");
-                indigo_app_lists_loaded(app, ls, 2);
+                indigo_app_lists_loaded(app, ls, 2, "");
             } else {
                 indigo_actor a[2];
 
@@ -613,7 +613,7 @@ fill_social(indigo_app *app, const scenario *s)
                 snprintf(a[1].handle, sizeof a[1].handle, "rhibear.example.social");
                 snprintf(a[1].display_name, sizeof a[1].display_name, "Rhiannon Bear");
                 snprintf(a[1].did, sizeof a[1].did, "did:plc:bear4kq8vz2n7xwm3");
-                indigo_app_search_loaded(app, a, 2);
+                indigo_app_search_loaded(app, a, 2, "");
             }
             return;
         }
@@ -642,7 +642,7 @@ fill_social(indigo_app *app, const scenario *s)
             ps[1].is_reply = true;
             ps[1].reply_count = 4;
             ps[1].like_count = 61;
-            indigo_app_post_search_loaded(app, ps, 2);
+            indigo_app_post_search_loaded(app, ps, 2, "");
             return;
         }
         if (s->timeline == 6 || s->timeline == 7) {
@@ -674,7 +674,7 @@ fill_social(indigo_app *app, const scenario *s)
                 ps[1].repost_count = 7;
                 ps[1].like_count = 88;
             }
-            indigo_app_post_search_loaded(app, ps, s->timeline == 6 ? 2u : 0u);
+            indigo_app_post_search_loaded(app, ps, s->timeline == 6 ? 2u : 0u, "");
             return;
         }
         if (s->timeline == 4 || s->timeline == 5) {
@@ -689,7 +689,7 @@ fill_social(indigo_app *app, const scenario *s)
             indigo_copy_utf8(a[1].handle, sizeof a[1].handle, "rhidraws.example");
             indigo_copy_utf8(a[1].display_name, sizeof a[1].display_name, "Rhi Draws");
             indigo_copy_utf8(a[1].did, sizeof a[1].did, "did:plc:draws9mqx4v2k7b");
-            indigo_app_search_loaded(app, a, 2);
+            indigo_app_search_loaded(app, a, 2, "");
             return;
         }
         indigo_copy_utf8(q->query, sizeof q->query, "rhi");
@@ -704,13 +704,13 @@ fill_social(indigo_app *app, const scenario *s)
             indigo_copy_utf8(a[2].handle, sizeof a[2].handle, "rhidraws.example");
             indigo_copy_utf8(a[2].display_name, sizeof a[2].display_name, "Rhi Draws");
             indigo_copy_utf8(a[2].did, sizeof a[2].did, "did:plc:draws9mqx4v2k7b");
-            indigo_app_search_loaded(app, a, 3);
+            indigo_app_search_loaded(app, a, 3, "");
             if (s->select < 3) {
                 q->selected = s->select;
             }
         } else if (s->timeline == 2) {
             /* Searched, and nobody matched: not the same screen as untried. */
-            indigo_app_search_loaded(app, NULL, 0);
+            indigo_app_search_loaded(app, NULL, 0, "");
         } else if (s->timeline == 3) {
             indigo_app_search_failed(app, "Could not reach the server.");
         }

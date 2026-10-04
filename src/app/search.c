@@ -20,8 +20,61 @@ indigo_search_clear(indigo_search *s)
     s->scroll = 0;
     s->loading = false;
     s->searched = false;
+    s->cursor[0] = '\0';
+    s->has_more = false;
     s->status[0] = '\0';
     s->status_is_error = false;
+}
+
+bool
+indigo_search_wants_page(const indigo_search *s)
+{
+    if (s->loading || !s->has_more || s->cursor[0] == '\0') {
+        return false;
+    }
+    /* Full is full: another page would append nothing while holding a cursor
+     * that reads as "more available" on a list that cannot grow. */
+    if (s->count >= INDIGO_SEARCH_MAX) {
+        return false;
+    }
+    return s->selected + INDIGO_SEARCH_ROWS + 1 >= s->count;
+}
+
+void
+indigo_search_begin_page(indigo_search *s, bool append)
+{
+    if (!append) {
+        indigo_search_clear(s);
+    }
+    s->loading = true;
+    s->status[0] = '\0';
+    s->status_is_error = false;
+}
+
+void
+indigo_search_finish_page(indigo_search *s, unsigned added,
+                          const char *next_cursor)
+{
+    s->loading = false;
+    s->searched = true;
+    /* A page that appended nothing is the end, even when the server still
+     * offers a cursor: paging further would append nothing forever. */
+    const bool empty_page = added == 0 && s->count > 0;
+
+    if (empty_page) {
+        s->cursor[0] = '\0';
+    } else {
+        indigo_copy_utf8(s->cursor, sizeof s->cursor, next_cursor ? next_cursor : "");
+    }
+    s->has_more = s->cursor[0] != '\0';
+}
+
+void
+indigo_search_fail_page(indigo_search *s, const char *message)
+{
+    s->loading = false;
+    indigo_copy_utf8(s->status, sizeof s->status, message ? message : "");
+    s->status_is_error = true;
 }
 
 bool

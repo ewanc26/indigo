@@ -344,8 +344,7 @@ submit_search(indigo_app *app)
     if (!indigo_search_can_submit(s) || app->request != INDIGO_REQUEST_NONE) {
         return;
     }
-    s->loading = true;
-    s->status[0] = '\0';
+    indigo_search_begin_page(s, false);
     /* One screen searches two things; the kind decides which request the
      * session receives. */
     app->request = indigo_search_is_posts(s) ? INDIGO_REQUEST_POST_SEARCH : INDIGO_REQUEST_SEARCH;
@@ -918,6 +917,49 @@ update_search(indigo_app *app, const indigo_input *input)
             break;
         }
     }
+    /* The same prefetch rule as the timeline: near the end of what is held,
+     * ask for the next page before the person reaches the bottom. */
+    if (app->request == INDIGO_REQUEST_NONE && indigo_search_wants_page(s)) {
+        indigo_request_kind request = INDIGO_REQUEST_NONE;
+
+        switch (s->kind) {
+        case INDIGO_SEARCH_PEOPLE:
+            request = INDIGO_REQUEST_SEARCH;
+            break;
+        case INDIGO_SEARCH_POSTS:
+            request = INDIGO_REQUEST_POST_SEARCH;
+            break;
+        case INDIGO_SEARCH_AUTHOR:
+            request = INDIGO_REQUEST_AUTHOR_FEED;
+            break;
+        case INDIGO_SEARCH_FOLLOWERS:
+        case INDIGO_SEARCH_FOLLOWING:
+            request = INDIGO_REQUEST_PEOPLE;
+            app->request_people = s->kind;
+            break;
+        case INDIGO_SEARCH_LISTS:
+            request = INDIGO_REQUEST_LISTS;
+            break;
+        case INDIGO_SEARCH_LIST_MEMBERS:
+            request = INDIGO_REQUEST_LIST_MEMBERS;
+            break;
+        case INDIGO_SEARCH_MUTED:
+            request = INDIGO_REQUEST_MUTES;
+            break;
+        case INDIGO_SEARCH_BLOCKED:
+            request = INDIGO_REQUEST_BLOCKS;
+            break;
+        case INDIGO_SEARCH_FEEDS:
+        default:
+            /* Saved feeds come from preferences in one shot; there is no
+             * second page to ask for. */
+            break;
+        }
+        if (request != INDIGO_REQUEST_NONE) {
+            indigo_search_begin_page(s, true);
+            app->request = request;
+        }
+    }
 }
 
 /* The Y button and the pill under the draft do the same job, and which job
@@ -1294,15 +1336,15 @@ indigo_app_set_query(indigo_app *app, const char *text)
 }
 
 void
-indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count)
+indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,
+                         const char *next_cursor)
 {
     indigo_search *s = &app->search;
 
-    indigo_search_clear(s);
-    for (unsigned i = 0; actors && i < count && i < INDIGO_SEARCH_MAX; i++) {
+    for (unsigned i = 0; actors && i < count && s->count < INDIGO_SEARCH_MAX; i++) {
         s->results.actors[s->count++] = actors[i];
     }
-    s->searched = true;
+    indigo_search_finish_page(s, count, next_cursor);
     if (s->count == 0) {
         indigo_copy_utf8(s->status, sizeof s->status, "Nobody matched that.");
     }
@@ -1311,9 +1353,7 @@ indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned c
 void
 indigo_app_search_failed(indigo_app *app, const char *message)
 {
-    app->search.loading = false;
-    indigo_copy_utf8(app->search.status, sizeof app->search.status, message);
-    app->search.status_is_error = true;
+    indigo_search_fail_page(&app->search, message);
 }
 
 void
@@ -1324,9 +1364,8 @@ indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *sub
     }
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = kind;
-    indigo_search_clear(&app->search);
+    indigo_search_begin_page(&app->search, false);
     indigo_copy_utf8(app->search.subject, sizeof app->search.subject, subject);
-    app->search.loading = true;
     app->request_people = kind;
     indigo_copy_utf8(app->request_subject, sizeof app->request_subject, subject);
     app->request = INDIGO_REQUEST_PEOPLE;
@@ -1340,9 +1379,8 @@ indigo_app_open_author_posts(indigo_app *app, const char *actor)
     }
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = INDIGO_SEARCH_AUTHOR;
-    indigo_search_clear(&app->search);
+    indigo_search_begin_page(&app->search, false);
     indigo_copy_utf8(app->search.subject, sizeof app->search.subject, actor);
-    app->search.loading = true;
     indigo_copy_utf8(app->request_actor, sizeof app->request_actor, actor);
     app->request = INDIGO_REQUEST_AUTHOR_FEED;
 }
@@ -1353,8 +1391,11 @@ indigo_app_open_lists(indigo_app *app)
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = INDIGO_SEARCH_LISTS;
-    indigo_search_clear(&app->search);
-    app->search.loading = true;
+    /* A fresh fetch replaces the held lists too: they were the members'
+     * Back target, and a new fetch makes them stale. */
+    indigo_search_begin_page(&app->search, false);
+    memset(app->search.held_lists, 0, sizeof app->search.held_lists);
+    app->search.held_count = 0;
     app->request = INDIGO_REQUEST_LISTS;
 }
 
@@ -1364,8 +1405,7 @@ indigo_app_open_feeds(indigo_app *app)
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = INDIGO_SEARCH_FEEDS;
-    indigo_search_clear(&app->search);
-    app->search.loading = true;
+    indigo_search_begin_page(&app->search, false);
     app->request = INDIGO_REQUEST_FEEDS;
 }
 
@@ -1375,8 +1415,7 @@ indigo_app_open_mutes(indigo_app *app)
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = INDIGO_SEARCH_MUTED;
-    indigo_search_clear(&app->search);
-    app->search.loading = true;
+    indigo_search_begin_page(&app->search, false);
     app->request = INDIGO_REQUEST_MUTES;
 }
 
@@ -1386,8 +1425,7 @@ indigo_app_open_blocks(indigo_app *app)
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     app->search.kind = INDIGO_SEARCH_BLOCKED;
-    indigo_search_clear(&app->search);
-    app->search.loading = true;
+    indigo_search_begin_page(&app->search, false);
     app->request = INDIGO_REQUEST_BLOCKS;
 }
 
@@ -1412,23 +1450,19 @@ indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *name)
 }
 
 void
-indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count)
+indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count,
+                        const char *next_cursor)
 {
     indigo_search *s = &app->search;
 
     if (s->kind != INDIGO_SEARCH_FEEDS) {
         return;
     }
-    memset(s->results.lists, 0, sizeof s->results.lists);
-    s->count = 0;
-    s->selected = 0;
-    s->scroll = 0;
-    s->loading = false;
-    s->searched = true;
-    for (unsigned i = 0; i < count && i < INDIGO_SEARCH_MAX; i++) {
+    for (unsigned i = 0; i < count && s->count < INDIGO_SEARCH_MAX; i++) {
         s->results.lists[i] = feeds[i];
         s->count++;
     }
+    indigo_search_finish_page(s, count, next_cursor);
     if (s->count == 0) {
         indigo_copy_utf8(s->status, sizeof s->status, "No saved feeds.");
         s->status_is_error = false;
@@ -1453,33 +1487,26 @@ indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *
     push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     s->kind = INDIGO_SEARCH_LIST_MEMBERS;
-    indigo_search_clear(s);
+    indigo_search_begin_page(s, false);
     indigo_copy_utf8(s->subject, sizeof s->subject, name && name[0] ? name : "Members");
-    s->loading = true;
     indigo_copy_utf8(app->request_list_uri, sizeof app->request_list_uri, list_uri);
     app->request = INDIGO_REQUEST_LIST_MEMBERS;
 }
 
 void
-indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count)
+indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count,
+                        const char *next_cursor)
 {
     indigo_search *s = &app->search;
 
     if (s->kind != INDIGO_SEARCH_LISTS) {
         return;
     }
-    memset(s->results.lists, 0, sizeof s->results.lists);
-    s->count = 0;
-    s->selected = 0;
-    s->scroll = 0;
-    s->loading = false;
-    s->searched = true;
-    memset(s->held_lists, 0, sizeof s->held_lists);
-    s->held_count = 0;
-    for (unsigned i = 0; i < count && i < INDIGO_SEARCH_MAX; i++) {
+    for (unsigned i = 0; i < count && s->count < INDIGO_SEARCH_MAX; i++) {
         s->results.lists[i] = lists[i];
         s->count++;
     }
+    indigo_search_finish_page(s, count, next_cursor);
     if (s->count == 0) {
         indigo_copy_utf8(s->status, sizeof s->status, "No lists yet.");
         s->status_is_error = false;
@@ -1487,15 +1514,15 @@ indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned coun
 }
 
 void
-indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count)
+indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
+                               const char *next_cursor)
 {
     indigo_search *s = &app->search;
 
-    indigo_search_clear(s);
     for (unsigned i = 0; i < count && s->count < INDIGO_SEARCH_MAX; i++) {
         s->results.posts[s->count++] = posts[i];
     }
-    s->searched = true;
+    indigo_search_finish_page(s, count, next_cursor);
     if (s->count == 0) {
         indigo_copy_utf8(s->status, sizeof s->status, "No posts matched that.");
     }

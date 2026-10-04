@@ -5,10 +5,13 @@
 
 #include <stdbool.h>
 
-/* Actor search is a prompt plus a bounded result list. The bound is
- * deliberate: searchActors is paged and an unbounded result set is exactly
- * the allocation mistake the 3DS cannot afford (see AGENTS.md §17). */
-#define INDIGO_SEARCH_MAX 20
+/* The session fetches a page of results at a time, the same size as every
+ * other paged list the worker returns. */
+#define INDIGO_SEARCH_PAGE 20
+/* Results the app holds across pages. Bounded on purpose: an unbounded
+ * result set is exactly the allocation mistake the 3DS cannot afford (see
+ * AGENTS.md §17). The timeline holds the same number. */
+#define INDIGO_SEARCH_MAX 60
 #define INDIGO_SEARCH_QUERY_MAX 64
 /* Results visible at once on the bottom screen. Same three-row window as the
  * timeline: a 3DS list taller than that stops being scannable. */
@@ -73,6 +76,9 @@ typedef struct {
     unsigned selected;
     unsigned scroll;
     bool loading;
+    /* The cursor for the next page, empty when there is no more. */
+    char cursor[INDIGO_CURSOR_MAX];
+    bool has_more;
     /* Distinguishes "no search yet" from "searched and found nobody", which
      * otherwise read the same on screen. */
     bool searched;
@@ -98,6 +104,13 @@ const indigo_list *indigo_search_selected_list(const indigo_search *s);
 const indigo_list *indigo_search_row_list(const indigo_search *s, unsigned row, unsigned rows);
 /* A search needs something to search for and must not already be running. */
 bool indigo_search_can_submit(const indigo_search *s);
+/* A next page is worth starting: not already running, a cursor in hand, and
+ * the person near the end of what is held. */
+bool indigo_search_wants_page(const indigo_search *s);
+/* Start/finish a page fetch. The fetch replaces the list; a page appends. */
+void indigo_search_begin_page(indigo_search *s, bool append);
+void indigo_search_finish_page(indigo_search *s, unsigned added, const char *next_cursor);
+void indigo_search_fail_page(indigo_search *s, const char *message);
 /* The screen title for this list, and whether the header box takes typing. */
 const char *indigo_search_title(const indigo_search *s);
 bool indigo_search_is_typed(const indigo_search *s);
