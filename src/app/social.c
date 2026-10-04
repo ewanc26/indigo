@@ -79,6 +79,55 @@ indigo_compose_toggle(indigo_compose *c)
     c->mode = c->mode == INDIGO_COMPOSE_REPLY ? INDIGO_COMPOSE_QUOTE : INDIGO_COMPOSE_REPLY;
 }
 
+bool
+indigo_compose_can_gate(const indigo_compose *c)
+{
+    /* A top-level post is the only mode with no target, and it is the only one
+     * a threadgate can usefully hang off. This asks which control the compose
+     * screen is showing, not whether it may be moved right now. */
+    return c->mode == INDIGO_COMPOSE_POST && !c->has_target;
+}
+
+void
+indigo_compose_gate_cycle(indigo_compose *c)
+{
+    /* Frozen mid-send, as the reply/quote switch is, so the pill does not
+     * change under the thumb that just hit Post. */
+    if (!indigo_compose_can_gate(c) || c->sending) {
+        return;
+    }
+    c->reply_gate =
+        (indigo_reply_gate) (((int) c->reply_gate + 1) % (int) INDIGO_REPLY_GATE_COUNT);
+}
+
+const char *
+indigo_compose_gate_label(const indigo_compose *c)
+{
+    switch (c->reply_gate) {
+    case INDIGO_REPLY_GATE_FOLLOWED_MENTIONED:
+        return "People you follow and mention";
+    case INDIGO_REPLY_GATE_NOBODY:
+        return "Nobody";
+    case INDIGO_REPLY_GATE_EVERYONE:
+    default:
+        return "Everyone";
+    }
+}
+
+const char *
+indigo_compose_gate_short(const indigo_compose *c)
+{
+    switch (c->reply_gate) {
+    case INDIGO_REPLY_GATE_FOLLOWED_MENTIONED:
+        return "Follows + mentions";
+    case INDIGO_REPLY_GATE_NOBODY:
+        return "Nobody";
+    case INDIGO_REPLY_GATE_EVERYONE:
+    default:
+        return "Everyone";
+    }
+}
+
 static void
 add_item(indigo_menu *m, indigo_menu_kind kind, const char *label, const char *payload)
 {

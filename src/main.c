@@ -106,7 +106,7 @@ start_publish(indigo_app *app)
 
     if (!indigo_session_submit_publish(c->mode, c->text, c->has_target ? c->target.uri : "",
                                        c->has_target ? c->target.cid : "", c->root_uri,
-                                       c->root_cid)) {
+                                       c->root_cid, (int) c->reply_gate)) {
         indigo_app_publish_failed(app, "Could not start posting.");
     }
 }

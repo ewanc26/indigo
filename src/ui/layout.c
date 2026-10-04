@@ -605,6 +605,12 @@ build_top_compose(const indigo_app *app, indigo_canvas *c)
     }
     indigo_canvas_text(c, 18, 214, 0.55f, utf8_length(d->text) > 300 ? COL_ERROR : COL_TEXT_DIM,
                        "%u / 300", utf8_length(d->text));
+    /* The pill on the bottom screen is the control; this is the reading of it,
+     * where there is room to spell the rule out. */
+    if (indigo_compose_can_gate(d)) {
+        indigo_canvas_text(c, 18, 188, 0.6f, COL_TEXT_DIM, "Replies: %s",
+                           indigo_compose_gate_label(d));
+    }
     if (d->status[0]) {
         indigo_canvas_text(c, 120, 214, 0.55f, d->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
                            "%.50s", d->status);
@@ -916,11 +922,20 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, e.x + 10, e.y + 30, 0.7f, COL_TEXT_DIM, "Tap to write");
     }
 
-    indigo_canvas_rect(c, t.x, t.y, t.w, t.h, can_toggle ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, t.x + 14, t.y + 9, 0.6f, can_toggle ? COL_TEXT : COL_TEXT_DIM, "%s",
-                       !d->has_target                        ? "Plain post"
-                       : d->mode == INDIGO_COMPOSE_QUOTE ? "Quoting - Y switch to reply"
+    /* With no target there is no reply/quote to switch, so the pill carries the
+     * reply gate instead and Y cycles that. No "Replies:" prefix here: the top
+     * screen already names it, and the longest wording has to fit this width. */
+    if (indigo_compose_can_gate(d)) {
+        indigo_canvas_rect(c, t.x, t.y, t.w, t.h, COL_PILL_ACTIVE);
+        indigo_canvas_text(c, t.x + 14, t.y + 9, 0.6f, COL_TEXT, "%s - Y switch",
+                           indigo_compose_gate_short(d));
+    } else {
+        indigo_canvas_rect(c, t.x, t.y, t.w, t.h, can_toggle ? COL_PILL_ACTIVE : COL_PILL);
+        indigo_canvas_text(c, t.x + 14, t.y + 9, 0.6f, can_toggle ? COL_TEXT : COL_TEXT_DIM, "%s",
+                           !d->has_target                        ? "Plain post"
+                           : d->mode == INDIGO_COMPOSE_QUOTE ? "Quoting - Y switch to reply"
                                                               : "Replying - Y switch to quote");
+    }
 
     indigo_canvas_rect(c, s.x, s.y, s.w, s.h, indigo_compose_ready(d) ? COL_PILL_ACTIVE : COL_PILL);
     indigo_canvas_text(c, s.x + 110, s.y + 9, 0.7f,

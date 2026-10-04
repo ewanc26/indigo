@@ -837,6 +837,21 @@ update_search(indigo_app *app, const indigo_input *input)
     }
 }
 
+/* The Y button and the pill under the draft do the same job, and which job
+ * depends on the mode. A top-level post has no reply/quote to switch between,
+ * so there its second button picks the reply gate instead. */
+static void
+compose_second_button(indigo_app *app)
+{
+    indigo_compose *c = &app->compose;
+
+    if (indigo_compose_can_gate(c)) {
+        indigo_compose_gate_cycle(c);
+    } else {
+        indigo_compose_toggle(c);
+    }
+}
+
 static void
 update_compose(indigo_app *app, const indigo_input *input)
 {
@@ -853,7 +868,7 @@ update_compose(indigo_app *app, const indigo_input *input)
         app->request = INDIGO_REQUEST_EDIT_DRAFT;
     }
     if (input->like) {
-        indigo_compose_toggle(c);
+        compose_second_button(app);
     }
     if (input->repost) {
         send_compose(app);
@@ -866,7 +881,7 @@ update_compose(indigo_app *app, const indigo_input *input)
             }
             break;
         case INDIGO_ACTION_TOGGLE:
-            indigo_compose_toggle(c);
+            compose_second_button(app);
             break;
         case INDIGO_ACTION_SEND:
             send_compose(app);

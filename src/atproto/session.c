@@ -58,6 +58,9 @@ typedef struct {
     char post_cid[INDIGO_POST_CID_MAX];
     char undo_uri[INDIGO_POST_URI_MAX];
     indigo_compose_mode mode;
+    /* Reply controls for a new top-level post; matches indigo_reply_gate.
+     * Ignored for a reply or a quote. */
+    int reply_gate;
     char text[INDIGO_DRAFT_MAX];
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
@@ -1397,6 +1400,41 @@ do_publish(const job *j)
             snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
         }
         indigo_log_info("published (mode %d)", (int) j->mode);
+        /* Reply gate, new top-level posts only: a threadgate attaches to the
+         * post it names, and gating a reply separately from its thread is not
+         * something the official client offers either. Gate 0 writes nothing,
+         * since no threadgate at all already means everyone may reply.
+         *
+         * A failure here does not roll the post back. It exists, ungated,
+         * which is the safer outcome than dropping something the user can see
+         * themselves have posted. */
+        if (j->mode == INDIGO_COMPOSE_POST && j->reply_gate > 0 && res.uri && res.uri[0]) {
+            /* Indexed by reply_gate: 1 allows follows and mentions, 2 is an
+             * empty rule set, so nobody may reply. */
+            static const char *const allow[] = {
+                NULL,
+                "[{\"$type\":\"app.bsky.feed.threadgate#followingRule\"},"
+                "{\"$type\":\"app.bsky.feed.threadgate#mentionRule\"}]",
+                "[]",
+            };
+            const int gate = j->reply_gate;
+
+            if (gate < (int) (sizeof allow / sizeof allow[0])) {
+                wf_agent_post_result gated = {0};
+                wf_status gst =
+                    wf_agent_create_threadgate(s_agent, res.uri, allow[gate], NULL, 0, &gated);
+
+                if (gst != WF_OK) {
+                    indigo_log_warn("reply gate failed (wolfram status %d) for %s", (int) gst,
+                                    res.uri);
+                } else {
+                    indigo_log_info("reply gate set on %s", res.uri);
+                }
+                wf_agent_post_result_free(&gated);
+            } else {
+                indigo_log_warn("reply gate %d out of range, posted ungated", gate);
+            }
+        }
     } else {
         ev.failure = classify(st);
         indigo_log_warn("publish failed: wolfram status %d (%s)", (int) st,
@@ -1638,9 +1676,9 @@ indigo_session_submit_notifications(void)
 bool
 indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                               const char *target_uri, const char *target_cid,
-                              const char *root_uri, const char *root_cid)
+                              const char *root_uri, const char *root_cid, int reply_gate)
 {
-    job j = {.kind = JOB_PUBLISH, .mode = mode};
+    job j = {.kind = JOB_PUBLISH, .mode = mode, .reply_gate = reply_gate};
 
     snprintf(j.text, sizeof j.text, "%s", text);
     snprintf(j.post_uri, sizeof j.post_uri, "%s", target_uri ? target_uri : "");
@@ -1980,7 +2018,7 @@ indigo_session_submit_notifications(void)
 bool
 indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                               const char *target_uri, const char *target_cid,
-                              const char *root_uri, const char *root_cid)
+                              const char *root_uri, const char *root_cid, int reply_gate)
 {
     (void) mode;
     (void) text;
@@ -1988,6 +2026,7 @@ indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
     (void) target_cid;
     (void) root_uri;
     (void) root_cid;
+    (void) reply_gate;
     return false;
 }
 

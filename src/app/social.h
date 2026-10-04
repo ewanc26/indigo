@@ -100,10 +100,22 @@ typedef enum {
     INDIGO_COMPOSE_QUOTE,
 } indigo_compose_mode;
 
+/* Who may reply to a new top-level post. Not offered on replies: Bluesky
+ * scopes a threadgate to the post it is attached to, and gating a reply's own
+ * replies apart from the rest of the thread is confusing enough that the
+ * official client does not offer it either. */
+typedef enum {
+    INDIGO_REPLY_GATE_EVERYONE = 0,
+    INDIGO_REPLY_GATE_FOLLOWED_MENTIONED,
+    INDIGO_REPLY_GATE_NOBODY,
+    INDIGO_REPLY_GATE_COUNT,
+} indigo_reply_gate;
+
 /* A post being written. Reply and quote both refer to `target`; a reply also
  * needs the thread root so it lands in the right conversation. */
 typedef struct {
     indigo_compose_mode mode;
+    indigo_reply_gate reply_gate;
     char text[INDIGO_DRAFT_MAX];
     indigo_post target;
     char root_uri[INDIGO_POST_URI_MAX];
@@ -165,5 +177,14 @@ bool indigo_compose_ready(const indigo_compose *c);
 /* Quote is only offered when there is a post to quote. */
 bool indigo_compose_can_toggle(const indigo_compose *c);
 void indigo_compose_toggle(indigo_compose *c);
+/* A reply gate is only offered on a new top-level post. This says which
+ * control compose is showing; indigo_compose_gate_cycle is what declines to
+ * move it mid-send. */
+bool indigo_compose_can_gate(const indigo_compose *c);
+void indigo_compose_gate_cycle(indigo_compose *c);
+/* Spelled out for the top screen, e.g. "People you follow and mention". */
+const char *indigo_compose_gate_label(const indigo_compose *c);
+/* Compressed to fit the compose pill, e.g. "Follows + mentions". */
+const char *indigo_compose_gate_short(const indigo_compose *c);
 
 #endif
