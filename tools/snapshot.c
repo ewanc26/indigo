@@ -415,6 +415,13 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
         indigo_timeline_fail_fetch(t, "Could not reach the network.");
         return;
     }
+    if (kind == 13) {
+        /* Posts and a failure at the same time, which is the state the header
+         * bar's status text and the viewer button have to share. */
+        fill_timeline(t, 1, select);
+        indigo_timeline_fail_fetch(t, "Could not reach the network.");
+        return;
+    }
     add_post(t, "Ewan Croft", "ewancroft.uk",
              "@rhi.example.social thanks for the bug reports. Read more at "
              "https://github.com/ewanc26/indigo and tag it #indigo3ds. The 3DS is "
@@ -477,8 +484,22 @@ fill_social(indigo_app *app, const scenario *s)
                          "at://did:plc:me/app.bsky.feed.generator/quiet");
         indigo_copy_utf8(app->feed_name, sizeof app->feed_name, "Quiet posters");
     }
-    if (s->screen == INDIGO_SCREEN_THREAD) {
-        fill_timeline(&app->thread, 1, s->select);
+    if (s->screen == INDIGO_SCREEN_IMAGE) {
+        /* The viewer is a thread screen's selected post seen large, so it is
+         * filled as that screen and then opened the way the button opens it --
+         * the snapshot is of the state a person reaches, not of a struct
+         * assembled to look right. The screen is put back afterwards because
+         * opening it is only possible *from* a screen that has a post
+         * selected, which is the whole rule for when the button is there. */
+        indigo_screen was = app->screen;
+
+        app->screen = INDIGO_SCREEN_THREAD;
+        fill_timeline(&app->thread, s->timeline, s->select);
+        app->thread_focus = 1;
+        indigo_app_open_image(app);
+        app->screen = was;
+    } else if (s->screen == INDIGO_SCREEN_THREAD) {
+        fill_timeline(&app->thread, s->timeline, s->select);
         app->thread_focus = 1;
     } else if (s->screen == INDIGO_SCREEN_PROFILE) {
         indigo_profile *p = &app->profile;
@@ -752,6 +773,18 @@ main(int argc, char **argv)
          * with a picture and its description, and the settings row itself. */
         {"timeline-alt", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, true},
         {"settings-alt", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 5, true},
+        /* The viewer, on the two posts the fill puts images on: the portrait
+         * photo, which is the one with a description, and the 16:9 gallery of
+         * four, which is the one whose picture fills the width. The second is
+         * also the case where the description setting matters, so it is drawn
+         * both ways. */
+        {"image", INDIGO_SCREEN_IMAGE, false, 0, 0, 1, 1, false},
+        {"image-alt", INDIGO_SCREEN_IMAGE, false, 0, 0, 1, 1, true},
+        {"image-gallery", INDIGO_SCREEN_IMAGE, false, 0, 0, 1, 2, true},
+        /* A post with a picture selected and a failed fetch: the status text
+         * has nowhere on the bottom screen to go, so this is what it looks
+         * like when it moves to the top. */
+        {"thread-image-error", INDIGO_SCREEN_THREAD, false, 0, 0, 13, 1, false},
     };
 
     if (argc != 2) {
@@ -780,6 +813,13 @@ main(int argc, char **argv)
         input.touch_y = s->touch_y;
 
         indigo_layout_build(&app, &input, &top_canvas, &bottom_canvas);
+
+        /* A viewer scenario that drew no picture would save a picture of the
+         * empty state, which looks like a working snapshot and is not one. */
+        if (s->screen == INDIGO_SCREEN_IMAGE && top_canvas.image_count == 0) {
+            fprintf(stderr, "scenario %s: the viewer drew no picture\n", s->name);
+            return 1;
+        }
 
         image top = render(&top_canvas);
         image bottom = render(&bottom_canvas);

@@ -90,6 +90,36 @@ indigo_media_known(const indigo_media_cache *c, const char *url)
 }
 
 int
+indigo_media_slot_of(const indigo_media_cache *c, const char *url)
+{
+    if (!c || !url || url[0] == '\0') {
+        return -1;
+    }
+    return find(c, url);
+}
+
+void
+indigo_media_forget(indigo_media_cache *c, const char *url)
+{
+    int i;
+
+    if (!c || !url || url[0] == '\0') {
+        return;
+    }
+    i = find(c, url);
+    if (i < 0) {
+        return;
+    }
+    if (c->slots[i].bytes) {
+        c->bytes -= c->slots[i].bytes;
+    }
+    if (c->slots[i].state == INDIGO_MEDIA_READY) {
+        c->evictions++;
+    }
+    slot_clear(&c->slots[i]);
+}
+
+int
 indigo_media_ready(indigo_media_cache *c, const char *url)
 {
     int i;

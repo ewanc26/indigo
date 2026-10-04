@@ -25,11 +25,23 @@ static indigo_canvas s_bottom_canvas;
  * by the pixel pointer -- when a slot is evicted and reloaded the pointer
  * changes, which is what tells a texture it is showing stale content.
  *
- * Eight is well short of the cache's slots: only images on screen are ever
- * uploaded, and a screen shows five at most (three rows, one header, one
- * profile). Each costs up to a 128x128 padded texture, so the cap is what
- * keeps the texture pool under half a megabyte. */
-#define UI_TEX_MAX 8
+ * Only images on screen are ever uploaded, and the widest screen shows six (a
+ * post's author and picture, three rows, and a profile). The viewer needs one
+ * more on top of the screen it covers, because it does not replace it -- the
+ * screen behind it stays in the cache and its textures stay uploaded until
+ * something evicts them -- so the count has to leave room for one large
+ * texture beside a screen's worth of small ones.
+ *
+ * The byte bound is the one that matters. A texture is power-of-two padded, so
+ * an avatar costs a 128x128 and a full-size photograph a 512x512: a pool of
+ * eight full-size textures would be 32MB of VRAM, which the console does not
+ * have, while the same pool of eight avatars is half a megabyte. Both bounds
+ * are sized so the viewer always fits beside the screen it covers -- four
+ * avatars and a thumbnail are about 400KB, and the viewer is at most 1MB -- and
+ * so that a screen which somehow asked for more than that draws placeholders
+ * instead of failing to allocate. */
+#define UI_TEX_MAX 12
+#define UI_TEX_BYTES_MAX (2u * 1024u * 1024u)
 
 static indigo_media_cache s_media;
 
@@ -38,11 +50,49 @@ typedef struct {
     const uint8_t *pixels;
     unsigned width;
     unsigned height;
+    /* The padded size, which is what the texture costs; the pixel width and
+     * height are the sub-texture inside it. */
+    unsigned tex_w;
+    unsigned tex_h;
     C3D_Tex tex;
     Tex3DS_SubTexture sub;
 } ui_tex;
 
 static ui_tex s_texs[UI_TEX_MAX];
+static unsigned s_tex_bytes;
+
+/* The URL the viewer last asked the cache to re-decode, so a picture is only
+ * dropped once per visit rather than every frame. Held at the width a post
+ * stores its embed URL rather than the width the canvas draws it, so the
+ * comparison cannot truncate a long CDN path into looking like another one. */
+static char s_viewer_url[INDIGO_EMBED_URL_MAX];
+
+/* The viewer draws the picture at the top screen's width, where the detail band
+ * drew it inside 364x60. The cache decodes a URL once, at the first size asked
+ * for, so a portrait photograph the band showed 60px tall would still be 60px
+ * here -- four times too small for the screen, and a blur is not a picture.
+ * Dropping the slot makes the next claim decode it at the size this screen
+ * draws, and the screen that wanted the smaller copy is not on screen while the
+ * viewer is. */
+static void
+viewer_prepare(const indigo_app *app)
+{
+    unsigned want = INDIGO_TOP_WIDTH;
+    int slot;
+
+    if (app->screen != INDIGO_SCREEN_IMAGE || !app->image.url[0]) {
+        return;
+    }
+    if (strcmp(s_viewer_url, app->image.url) == 0) {
+        return;
+    }
+    snprintf(s_viewer_url, sizeof s_viewer_url, "%s", app->image.url);
+    slot = indigo_media_slot_of(&s_media, app->image.url);
+    if (slot >= 0 && s_media.slots[slot].max_dim >= want) {
+        return;
+    }
+    indigo_media_forget(&s_media, app->image.url);
+}
 
 static u32
 to_c2d(uint32_t rgba)
@@ -55,6 +105,7 @@ static void
 tex_release(ui_tex *t)
 {
     if (t->pixels) {
+        s_tex_bytes -= t->tex_w * t->tex_h * 4u;
         C3D_TexDelete(&t->tex);
     }
     memset(t, 0, sizeof *t);
@@ -113,6 +164,12 @@ tex_for(unsigned slot)
         }
         tex_w = pot_up(s->width);
         tex_h = pot_up(s->height);
+        /* The byte bound, refused before the allocation rather than after it:
+         * a pool that grew until citro3d said no would leave the textures it
+         * could not replace deleted out from under the frame. */
+        if (s_tex_bytes + tex_w * tex_h * 4u > UI_TEX_BYTES_MAX) {
+            return NULL;
+        }
         if (!C3D_TexInit(&s_texs[i].tex, (u16) tex_w, (u16) tex_h, GPU_RGBA8)) {
             return NULL;
         }
@@ -139,6 +196,9 @@ tex_for(unsigned slot)
         s_texs[i].pixels = s->pixels;
         s_texs[i].width = s->width;
         s_texs[i].height = s->height;
+        s_texs[i].tex_w = tex_w;
+        s_texs[i].tex_h = tex_h;
+        s_tex_bytes += tex_w * tex_h * 4u;
         s_texs[i].sub = (Tex3DS_SubTexture) {
             .width = (u16) s->width,
             .height = (u16) s->height,
@@ -261,6 +321,7 @@ indigo_ui_draw(const indigo_app *app, const indigo_input *input)
     /* Before layout: a decode that finished this frame should be drawable
      * this frame rather than one frame later. */
     indigo_media_loader_drain(&s_media);
+    viewer_prepare(app);
     indigo_layout_build(app, input, &s_top_canvas, &s_bottom_canvas);
     tex_reconcile();
 

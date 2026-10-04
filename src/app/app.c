@@ -273,6 +273,55 @@ open_menu(indigo_app *app)
                       app->signin.account);
 }
 
+/* The post whose image the viewer would open, from whichever screen is asking.
+ * Three screens draw a post's picture; the other eight have nothing to open, so
+ * they never ask. */
+const indigo_post *
+indigo_app_image_source(const indigo_app *app)
+{
+    if (app->screen == INDIGO_SCREEN_SEARCH) {
+        return indigo_search_is_posts(&app->search)
+                   ? indigo_search_selected_post(&app->search)
+                   : NULL;
+    }
+    if (app->screen == INDIGO_SCREEN_THREAD) {
+        return indigo_timeline_selected(&app->thread);
+    }
+    if (app->screen == INDIGO_SCREEN_HOME) {
+        return indigo_timeline_selected(&app->timeline);
+    }
+    return NULL;
+}
+
+bool
+indigo_app_open_image(indigo_app *app)
+{
+    const indigo_post *p = indigo_app_image_source(app);
+
+    if (!indigo_post_has_image(p)) {
+        return false;
+    }
+    /* Copied, not pointed at: the list this post is in keeps paging and can
+     * reuse its slot, and a viewer that changed pictures under the reader
+     * would be worse than no viewer. */
+    indigo_copy_utf8(app->image.url, sizeof app->image.url, p->embed_thumb);
+    indigo_copy_utf8(app->image.alt, sizeof app->image.alt, p->embed_alt);
+    app->image.aspect_w = p->embed_w;
+    app->image.aspect_h = p->embed_h;
+    app->image.count = p->embed_count;
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_IMAGE;
+    return true;
+}
+
+void
+indigo_app_close_image(indigo_app *app)
+{
+    if (app->screen == INDIGO_SCREEN_IMAGE) {
+        go_back(app);
+    }
+}
+
 /* Search keeps its query and results across visits: retyping a name to reach
  * the same list again would be the wrong trade on a system keyboard. */
 static void
@@ -407,6 +456,11 @@ update_home(indigo_app *app, const indigo_input *input)
     if (input->refresh) {
         refresh_timeline(app);
     }
+    /* ZR as well as the button: every button here is on the touchscreen, but a
+     * New 3DS has two hands on the shell and no touchscreen in the right one. */
+    if (input->zr && indigo_app_open_image(app)) {
+        return;
+    }
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
@@ -422,6 +476,9 @@ update_home(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_REPOST:
             toggle_repost(app);
+            break;
+        case INDIGO_ACTION_IMAGE:
+            indigo_app_open_image(app);
             break;
         case INDIGO_ACTION_OPEN:
             if (sel) {
@@ -470,6 +527,9 @@ update_thread(indigo_app *app, const indigo_input *input)
     if (input->refresh && sel) {
         open_profile(app, sel->handle);
     }
+    if (input->zr && indigo_app_open_image(app)) {
+        return;
+    }
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
@@ -485,6 +545,9 @@ update_thread(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_REPOST:
             toggle_repost(app);
+            break;
+        case INDIGO_ACTION_IMAGE:
+            indigo_app_open_image(app);
             break;
         case INDIGO_ACTION_REPLY:
             if (sel) {
@@ -821,6 +884,9 @@ update_search(indigo_app *app, const indigo_input *input)
     if (input->refresh) {
         open_search_selection(app);
     }
+    if (input->zr && indigo_app_open_image(app)) {
+        return;
+    }
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
@@ -838,6 +904,12 @@ update_search(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_AUTHOR:
             open_search_selection(app);
+            break;
+        case INDIGO_ACTION_IMAGE:
+            /* Only a post result has an image, and opening one from an actor
+             * row is a no-op, so a tap that lands on a button which is not
+             * drawn does nothing rather than opening the wrong thing. */
+            indigo_app_open_image(app);
             break;
         case INDIGO_ACTION_BACK:
             go_back(app);
@@ -989,6 +1061,22 @@ update_settings(indigo_app *app, const indigo_input *input)
     }
 }
 
+/* The viewer has no state of its own to change: B and the Close button both
+ * leave, and nothing on either screen can be pressed. ZR is the shortcut for
+ * the same thing, because it is the shortcut that opened it. */
+static void
+update_image(indigo_app *app, const indigo_input *input)
+{
+    if (input->back || input->zr) {
+        indigo_app_close_image(app);
+        return;
+    }
+    if (input->touch_pressed &&
+        indigo_layout_hit_app(app, input->touch_x, input->touch_y) == INDIGO_ACTION_BACK) {
+        indigo_app_close_image(app);
+    }
+}
+
 void
 indigo_app_update(indigo_app *app, const indigo_input *input)
 {
@@ -1020,6 +1108,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_SEARCH:
         update_search(app, input);
+        break;
+    case INDIGO_SCREEN_IMAGE:
+        update_image(app, input);
         break;
     case INDIGO_SCREEN_SETTINGS:
         update_settings(app, input);

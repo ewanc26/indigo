@@ -128,6 +128,33 @@ typedef struct {
     bool status_is_error;
 } indigo_compose;
 
+/* The full-size image viewer. It is a copy rather than a pointer into a post,
+ * because the post it came from can be paged away underneath it -- the thread
+ * list reloads, the timeline keeps fetching -- and a viewer pointing at a
+ * recycled post would change pictures while someone is looking at one. */
+typedef struct {
+    /* The CDN thumbnail URL, which is what the post carries. Bluesky serves
+     * that at up to 640px, so on a 400px screen it is the image at its own
+     * resolution rather than an enlargement; the original blob is only in the
+     * view record's fullsize variant, which Indigo does not ask for. */
+    char url[INDIGO_EMBED_URL_MAX];
+    char alt[INDIGO_EMBED_ALT_MAX];
+    /* The server's declared aspect ratio, 0/0 when it declared none. Drawn
+     * from rather than measured, so the box is right before anything is
+     * decoded and no layout depends on a fetch having finished. */
+    unsigned aspect_w;
+    unsigned aspect_h;
+    /* How many images the author attached. One is shown, because one is what
+     * the post carries; the count is what says so rather than implying this is
+     * all of them. */
+    unsigned count;
+} indigo_image;
+
+/* True when the post has an image the viewer can open. A link card, a quote, a
+ * video and a post with no embed all cannot, which is why this is a question
+ * about the post rather than a flag the viewer keeps. */
+bool indigo_post_has_image(const indigo_post *p);
+
 void indigo_notifications_clear(indigo_notifications *n);
 bool indigo_notifications_move(indigo_notifications *n, int delta, unsigned rows);
 bool indigo_notifications_select(indigo_notifications *n, unsigned index, unsigned rows);
