@@ -140,9 +140,15 @@ handle_requests(indigo_app *app)
         handle_edit(app, f);
         break;
     case INDIGO_REQUEST_SIGN_IN:
-        if (indigo_session_submit_login(app->signin.service, app->signin.handle,
-                                        app->signin.password)) {
-            indigo_app_begin_sign_in(app, "Signing in...");
+        if (app->signin.password[0]) {
+            if (indigo_session_submit_login(app->signin.service, app->signin.handle,
+                                            app->signin.password)) {
+                indigo_app_begin_sign_in(app, "Signing in...");
+            }
+        } else {
+            if (indigo_session_submit_oauth(app->signin.service, app->signin.handle)) {
+                indigo_app_begin_sign_in(app, "Open the pairing link on another device...");
+            }
         }
         break;
     case INDIGO_REQUEST_SIGN_OUT:
