@@ -260,6 +260,9 @@ handle_requests(indigo_app *app)
             indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_SAVE_SETTINGS:
+        indigo_settings_store_save(SETTINGS_PATH, &app->settings);
+        break;
     case INDIGO_REQUEST_NONE:
         break;
     }

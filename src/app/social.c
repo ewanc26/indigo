@@ -201,6 +201,7 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_BLOCKED, "Blocked accounts", "");
     add_item(m, INDIGO_MENU_MY_PROFILE,
              account && account[0] ? "My profile" : "Your profile", "");
+    add_item(m, INDIGO_MENU_SETTINGS, "Settings", "");
     add_item(m, INDIGO_MENU_SIGN_OUT, "Sign out", "");
     add_item(m, INDIGO_MENU_CLOSE, "Close menu", "");
 }

@@ -704,6 +704,10 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         open_profile(app, app->signin.account);
         break;
+    case INDIGO_MENU_SETTINGS:
+        go_back(app);
+        indigo_app_open_settings(app);
+        break;
     case INDIGO_MENU_SIGN_OUT:
         app->request = INDIGO_REQUEST_SIGN_OUT;
         break;
@@ -903,6 +907,86 @@ update_compose(indigo_app *app, const indigo_input *input)
     }
 }
 
+static void
+toggle_setting_row(indigo_app *app, unsigned row)
+{
+    indigo_settings *s = &app->settings;
+
+    switch (row) {
+    case 0:
+        s->theme = (indigo_theme) (((int) s->theme + 1) % 3);
+        break;
+    case 1:
+        if (s->text_scale == INDIGO_TEXT_SCALE_SMALL) {
+            s->text_scale = INDIGO_TEXT_SCALE_NORMAL;
+        } else if (s->text_scale == INDIGO_TEXT_SCALE_NORMAL) {
+            s->text_scale = INDIGO_TEXT_SCALE_LARGE;
+        } else {
+            s->text_scale = INDIGO_TEXT_SCALE_SMALL;
+        }
+        break;
+    case 2:
+        s->reduce_motion = !s->reduce_motion;
+        break;
+    case 3:
+        s->high_contrast = !s->high_contrast;
+        break;
+    case 4:
+        s->large_targets = !s->large_targets;
+        break;
+    case 5:
+        s->diagnostics = !s->diagnostics;
+        break;
+    case 6:
+        if (s->default_feed[0]) {
+            s->default_feed[0] = '\0';
+        } else if (app->feed_uri[0]) {
+            indigo_copy_utf8(s->default_feed, sizeof s->default_feed, app->feed_uri);
+        }
+        break;
+    default:
+        return;
+    }
+
+    indigo_settings_clamp(s);
+    app->request = INDIGO_REQUEST_SAVE_SETTINGS;
+}
+
+static void
+update_settings(indigo_app *app, const indigo_input *input)
+{
+    if (input->up) {
+        if (app->settings_selected > 0) {
+            app->settings_selected--;
+        }
+    }
+    if (input->down) {
+        if (app->settings_selected < 6) {
+            app->settings_selected++;
+        }
+    }
+    if (input->back) {
+        go_back(app);
+        return;
+    }
+    if (input->confirm) {
+        toggle_setting_row(app, app->settings_selected);
+        return;
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit(app->screen, input->touch_x, input->touch_y);
+        if (a == INDIGO_ACTION_BACK) {
+            go_back(app);
+            return;
+        }
+        if (a >= INDIGO_ACTION_SETTINGS_ROW0 && a <= INDIGO_ACTION_SETTINGS_ROW6) {
+            unsigned row = (unsigned) (a - INDIGO_ACTION_SETTINGS_ROW0);
+            app->settings_selected = row;
+            toggle_setting_row(app, row);
+        }
+    }
+}
+
 void
 indigo_app_update(indigo_app *app, const indigo_input *input)
 {
@@ -934,6 +1018,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_SEARCH:
         update_search(app, input);
+        break;
+    case INDIGO_SCREEN_SETTINGS:
+        update_settings(app, input);
         break;
     }
 }
@@ -1518,4 +1605,12 @@ indigo_app_publish_failed(indigo_app *app, const char *message)
     c->sending = false;
     indigo_copy_utf8(c->status, sizeof c->status, message);
     c->status_is_error = true;
+}
+
+void
+indigo_app_open_settings(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_SETTINGS;
+    app->settings_selected = 0;
 }

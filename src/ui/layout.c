@@ -78,6 +78,13 @@ static const indigo_rect s_pinned_button = {164, 166, 142, 34};
  * spacing test below pins that the button rows leave room for it. */
 #define PROFILE_STATUS_Y 206
 
+/* Settings rows: seven options on bottom screen. */
+#define SETTINGS_ROW_X 14
+#define SETTINGS_ROW_W 292
+#define SETTINGS_ROW_H 24
+#define SETTINGS_ROW_Y0 44
+#define SETTINGS_ROW_STEP 27
+
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
 {
@@ -87,6 +94,16 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_ROW2:
         return (indigo_rect) {ROW_X, ROW_Y0 + ROW_STEP * (float) (action - INDIGO_ACTION_ROW0),
                               ROW_W, ROW_H};
+    case INDIGO_ACTION_SETTINGS_ROW0:
+    case INDIGO_ACTION_SETTINGS_ROW1:
+    case INDIGO_ACTION_SETTINGS_ROW2:
+    case INDIGO_ACTION_SETTINGS_ROW3:
+    case INDIGO_ACTION_SETTINGS_ROW4:
+    case INDIGO_ACTION_SETTINGS_ROW5:
+    case INDIGO_ACTION_SETTINGS_ROW6:
+        return (indigo_rect) {SETTINGS_ROW_X,
+                              SETTINGS_ROW_Y0 + SETTINGS_ROW_STEP * (float) (action - INDIGO_ACTION_SETTINGS_ROW0),
+                              SETTINGS_ROW_W, SETTINGS_ROW_H};
     case INDIGO_ACTION_LIKE:
         return s_pill[0];
     case INDIGO_ACTION_REPOST:
@@ -181,6 +198,11 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
         INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
+    static const indigo_action settings_actions[] = {
+        INDIGO_ACTION_SETTINGS_ROW0, INDIGO_ACTION_SETTINGS_ROW1,
+        INDIGO_ACTION_SETTINGS_ROW2, INDIGO_ACTION_SETTINGS_ROW3,
+        INDIGO_ACTION_SETTINGS_ROW4, INDIGO_ACTION_SETTINGS_ROW5,
+        INDIGO_ACTION_SETTINGS_ROW6, INDIGO_ACTION_BACK};
     const indigo_action *list = signin_actions;
     unsigned count = 0;
 
@@ -209,6 +231,9 @@ indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y)
         break;
     case INDIGO_SCREEN_SEARCH:
         USE(search_actions);
+        break;
+    case INDIGO_SCREEN_SETTINGS:
+        USE(settings_actions);
         break;
     }
 #undef USE
@@ -620,6 +645,34 @@ build_top_compose(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_settings(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_settings *s = &app->settings;
+    top_title(c, "Settings", "");
+
+    const char *theme_str =
+        s->theme == INDIGO_THEME_LIGHT ? "Light"
+        : s->theme == INDIGO_THEME_DARK ? "Dark"
+                                        : "Auto (follows system)";
+    indigo_canvas_text(c, 18, 44, 0.65f, COL_TEXT, "Theme: %s", theme_str);
+    indigo_canvas_text(c, 18, 66, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
+    indigo_canvas_text(c, 18, 88, 0.65f, COL_TEXT, "Reduce motion: %s",
+                       s->reduce_motion ? "On" : "Off");
+    indigo_canvas_text(c, 18, 110, 0.65f, COL_TEXT, "High contrast: %s",
+                       s->high_contrast ? "On" : "Off");
+    indigo_canvas_text(c, 18, 132, 0.65f, COL_TEXT, "Large touch targets: %s",
+                       s->large_targets ? "On" : "Off");
+    indigo_canvas_text(c, 18, 154, 0.65f, COL_TEXT, "Diagnostics log: %s",
+                       s->diagnostics ? "On (indigo.log)" : "Off");
+
+    const char *feed_str = s->default_feed[0] ? s->default_feed : "Following timeline";
+    indigo_canvas_text(c, 18, 176, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
+
+    indigo_canvas_text(c, 18, 206, 0.55f, COL_TEXT_DIM,
+                       "Press A or touch an item below to change.");
+}
+
+static void
 build_top(const indigo_app *app, indigo_canvas *c)
 {
     indigo_canvas_init(c, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT);
@@ -645,6 +698,9 @@ build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_SEARCH:
         build_top_search(app, c);
+        return;
+    case INDIGO_SCREEN_SETTINGS:
+        build_top_settings(app, c);
         return;
     default:
         break;
@@ -1025,6 +1081,62 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_settings(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_settings *s = &app->settings;
+    indigo_canvas_text(c, 14, 10, 0.9f, COL_TEXT, "Settings");
+    back_button(c, INDIGO_ACTION_BACK, "Back");
+
+    static const char *labels[7] = {
+        "Theme", "Text scale", "Reduce motion", "High contrast",
+        "Large targets", "Diagnostics log", "Startup feed"
+    };
+
+    for (unsigned i = 0; i < 7; i++) {
+        indigo_action act = (indigo_action) (INDIGO_ACTION_SETTINGS_ROW0 + i);
+        indigo_rect r = indigo_layout_button_rect(act);
+        bool active = (app->settings_selected == i);
+        char val[64];
+
+        switch (i) {
+        case 0:
+            snprintf(val, sizeof val, "%s",
+                     s->theme == INDIGO_THEME_LIGHT ? "Light"
+                     : s->theme == INDIGO_THEME_DARK ? "Dark" : "Auto");
+            break;
+        case 1:
+            snprintf(val, sizeof val, "%u%%", s->text_scale);
+            break;
+        case 2:
+            snprintf(val, sizeof val, "%s", s->reduce_motion ? "On" : "Off");
+            break;
+        case 3:
+            snprintf(val, sizeof val, "%s", s->high_contrast ? "On" : "Off");
+            break;
+        case 4:
+            snprintf(val, sizeof val, "%s", s->large_targets ? "On" : "Off");
+            break;
+        case 5:
+            snprintf(val, sizeof val, "%s", s->diagnostics ? "On" : "Off");
+            break;
+        case 6:
+            if (s->default_feed[0]) {
+                snprintf(val, sizeof val, "Custom feed");
+            } else if (app->feed_uri[0]) {
+                snprintf(val, sizeof val, "Set current");
+            } else {
+                snprintf(val, sizeof val, "Following");
+            }
+            break;
+        }
+
+        indigo_canvas_rect(c, r.x, r.y, r.w, r.h, active ? COL_PILL_ACTIVE : COL_PILL);
+        indigo_canvas_text(c, r.x + 8, r.y + 4, 0.6f, COL_TEXT, "%s", labels[i]);
+        indigo_canvas_text(c, r.x + r.w - 100, r.y + 4, 0.6f, COL_TEXT_SOFT, "%s", val);
+    }
+}
+
+static void
 build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
 {
     (void) input;
@@ -1053,6 +1165,9 @@ build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
         break;
     case INDIGO_SCREEN_SEARCH:
         build_bottom_search(app, c);
+        break;
+    case INDIGO_SCREEN_SETTINGS:
+        build_bottom_settings(app, c);
         break;
     }
 }
