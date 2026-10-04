@@ -2,7 +2,6 @@
 #include "app/signin.h"
 #include "input/input.h"
 #include "ui/layout.h"
-#include "util/buildinfo.h"
 
 #include <string.h>
 

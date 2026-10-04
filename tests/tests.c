@@ -12,6 +12,7 @@
 #include "input/input.h"
 #include "ui/layout.h"
 #include "ui/wrap.h"
+#include "util/buildinfo.h"
 #include "util/timefmt.h"
 
 #include <math.h>
@@ -2126,6 +2127,43 @@ test_layout_draws_alt_text(void)
     CHECK(!text_has(&top, "frost on the railings"));
 }
 
+/* The settings screen names the build it is: the tag, the build number and the
+ * date, all three. This is the only place any of them is printed, so it is also
+ * the only thing that keeps the Makefile's three stamped strings out of the
+ * linker's reach -- a build with the header generated and nothing reading it
+ * ships a binary that cannot say which build it is. */
+static void
+test_settings_screen_shows_the_build(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+
+    indigo_app_init(&app);
+    indigo_app_open_settings(&app);
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow);
+    CHECK(text_has(&top, INDIGO_BUILD_COMMIT));
+    CHECK(text_has(&top, "build"));
+    /* The host build has no generated header, so it falls back rather than
+     * failing; the numbers are the ones the fallback uses. */
+    if (strcmp(INDIGO_BUILD_COMMIT, "unknown") == 0) {
+        CHECK(INDIGO_BUILD_NUMBER == 0);
+        CHECK(text_has(&top, INDIGO_BUILD_DATE));
+    }
+    /* Every setting the bottom screen can change is also named on the top
+     * screen. The alt-text row was added to one of them and not the other,
+     * which is the kind of thing that only a test notices. */
+    static const char *const labels[] = {
+        "Theme",       "Text scale",  "Reduce motion", "High contrast",
+        "Large touch targets", "Image alt text", "Diagnostics log", "Startup feed"};
+    for (unsigned i = 0; i < sizeof labels / sizeof labels[0]; i++) {
+        CHECK(text_has(&top, labels[i]));
+    }
+    CHECK(text_has(&bottom, "Image alt text"));
+}
+
 static void
 test_shapes_stay_on_screen(void)
 {
@@ -3645,6 +3683,7 @@ main(void)
     test_media_placeholder_colour();
     test_layout_draws_avatars();
     test_shapes_stay_on_screen();
+    test_settings_screen_shows_the_build();
     test_layout_draws_post_images();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();

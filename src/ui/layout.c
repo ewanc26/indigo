@@ -4,6 +4,7 @@
 #include "atproto/session.h"
 #include "media/media.h"
 #include "ui/wrap.h"
+#include "util/buildinfo.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -965,14 +966,24 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
                        s->high_contrast ? "On" : "Off");
     indigo_canvas_text(c, 18, 132, 0.65f, COL_TEXT, "Large touch targets: %s",
                        s->large_targets ? "On" : "Off");
-    indigo_canvas_text(c, 18, 154, 0.65f, COL_TEXT, "Diagnostics log: %s",
+    indigo_canvas_text(c, 18, 154, 0.65f, COL_TEXT, "Image alt text: %s",
+                       s->alt_text ? "On" : "Off");
+    indigo_canvas_text(c, 18, 176, 0.65f, COL_TEXT, "Diagnostics log: %s",
                        s->diagnostics ? "On (indigo.log)" : "Off");
 
     const char *feed_str = s->default_feed[0] ? s->default_feed : "Following timeline";
-    indigo_canvas_text(c, 18, 176, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
+    indigo_canvas_text(c, 18, 198, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
 
-    indigo_canvas_text(c, 18, 206, 0.55f, COL_TEXT_DIM,
+    indigo_canvas_text(c, 18, 218, 0.55f, COL_TEXT_DIM,
                        "Press A or touch an item below to change.");
+
+    /* The build identity, so a bug report can name the build it came from. All
+     * three stamped values, because each answers a different question: the tag
+     * says which release, the number orders two builds of one tag, and the date
+     * says which day. Nothing else in the app prints them, which until now
+     * meant the Makefile stamped three strings the linker then dropped. */
+    indigo_canvas_text(c, 18, 232, 0.5f, COL_TEXT_DIM, "%s (build %d, %s)",
+                       INDIGO_BUILD_COMMIT, INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
 }
 
 static void
