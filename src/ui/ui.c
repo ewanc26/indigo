@@ -337,13 +337,19 @@ indigo_ui_draw(const indigo_app *app, const indigo_input *input)
 }
 
 void
-indigo_ui_shutdown(void)
+indigo_ui_clear_images(void)
 {
     for (unsigned i = 0; i < UI_TEX_MAX; i++) {
         tex_release(&s_texs[i]);
     }
-    indigo_media_loader_stop();
     indigo_media_clear(&s_media);
+}
+
+void
+indigo_ui_shutdown(void)
+{
+    indigo_ui_clear_images();
+    indigo_media_loader_stop();
 
     if (s_text_buf) {
         C2D_TextBufDelete(s_text_buf);
