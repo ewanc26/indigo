@@ -54,6 +54,7 @@ typedef enum {
     INDIGO_ACTION_SETTINGS_ROW5,
     INDIGO_ACTION_SETTINGS_ROW6,
     INDIGO_ACTION_SETTINGS_ROW7,
+    INDIGO_ACTION_IMAGE,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */
@@ -75,6 +76,11 @@ indigo_rect indigo_layout_button_rect(indigo_action action);
  * per target in the layout tests. */
 indigo_action indigo_layout_hit_settings(indigo_screen screen, bool large_targets,
                                          int touch_x, int touch_y);
+/* Hit testing is per screen, not per app, so a button that is drawn
+ * conditionally is still in its screen's list: INDIGO_ACTION_IMAGE sits in the
+ * list for every screen that can offer a viewer whether or not the selected
+ * post has a picture. Opening one from a post without an image is a no-op at
+ * the handler, and indigo_app_image_source() is what asks the real question. */
 indigo_action indigo_layout_hit(indigo_screen screen, int touch_x, int touch_y);
 indigo_action indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y);
 

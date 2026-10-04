@@ -13,6 +13,15 @@ keep_visible(unsigned *scroll, unsigned selected, unsigned rows)
     }
 }
 
+bool
+indigo_post_has_image(const indigo_post *p)
+{
+    /* The same test the detail screen uses to decide it has a picture to draw
+     * (post_draws_embed in ui/layout.c), so the button that opens the viewer
+     * appears exactly when there is something on screen to open. */
+    return p && p->embed_kind == INDIGO_EMBED_IMAGE && p->embed_thumb[0] != '\0';
+}
+
 void
 indigo_notifications_clear(indigo_notifications *n)
 {

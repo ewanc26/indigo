@@ -6,6 +6,41 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Added
+- A full-size image viewer. With a post that has a picture selected, the
+  timeline, the thread and a post in the search results grow an `Image` button
+  in the header bar, and ZR does the same on a New 3DS. The picture is drawn on
+  the top screen fitted to the whole 400x240 and centred, from the aspect ratio
+  the server declared, so a portrait uses the screen's height and a panorama
+  its width. The description of the picture is on the bottom screen -- the one
+  with room for a sentence -- and follows the alt-text setting, and a post of
+  several photographs says `1 of 4 images.` rather than implying it has one.
+  B, ZR or `Close` goes back to the screen it was opened from.
+
+### Changed
+- The image cache will decode a post's picture up to 400px, the top screen's
+  width, instead of 256px. The detail band still asks only for the size it
+  draws, so nothing else changes; the viewer is the screen that draws one
+  across the full width, and a 256px copy of that is an enlargement.
+- The GPU texture pool is bounded by bytes as well as by count, and holds
+  twelve textures rather than eight. A texture is power-of-two padded, so an
+  avatar costs 128x128 and a full-size photograph 512x512: eight of the latter
+  would be 32MB of texture memory, which the console does not have, while eight
+  avatars is half a megabyte.
+
+### Internal
+- Opening the viewer drops the picture's cache slot so the next request decodes
+  it at the size the viewer draws. First-request-wins cuts both ways: a portrait
+  photograph the detail band drew 60px tall would otherwise still be 60px on a
+  240px screen. The screen that wanted the smaller copy is not on screen while
+  the viewer is, and the button it was drawn for is not either.
+- The header bar's status text moves to the top screen's title bar while the
+  `Image` button is up. A status is only ever a transient "Loading...", a
+  "Nothing here yet" for a list with no posts, or a fetch error, and the first
+  two cannot happen while a post is selected -- so the button only ever
+  displaces an error, which is worth more of the top bar's room than the
+  reminder of which key reloads the list.
+
 ## [0.4.0] - 2026-10-04
 
 ### Added

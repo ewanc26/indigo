@@ -27,6 +27,7 @@ typedef enum {
     INDIGO_SCREEN_COMPOSE,
     INDIGO_SCREEN_SEARCH,
     INDIGO_SCREEN_SETTINGS,
+    INDIGO_SCREEN_IMAGE,
 } indigo_screen;
 
 typedef enum {
@@ -133,6 +134,8 @@ typedef struct {
     indigo_notifications notifications;
     indigo_compose compose;
     indigo_search search;
+    /* The image the viewer is showing, and the screen it was opened from. */
+    indigo_image image;
     /* Where B goes back to; a short stack so thread -> profile -> back works. */
     indigo_screen history[6];
     unsigned history_count;
@@ -226,6 +229,19 @@ void indigo_app_graph_failed(indigo_app *app, indigo_graph_action action,
 void indigo_app_set_draft(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);
 void indigo_app_publish_failed(indigo_app *app, const char *message);
+
+/* The full-size image viewer. Opens the image on the selected post of whichever
+ * screen asked -- the timeline, the thread, or a post in the search results --
+ * and is a no-op returning false when that post has no image, which is what
+ * makes the phantom hit of an undrawn button harmless. Closing goes back to
+ * that screen rather than to Home, because the viewer is pushed like any other
+ * screen and the history already knows where it came from. */
+bool indigo_app_open_image(indigo_app *app);
+void indigo_app_close_image(indigo_app *app);
+/* The post whose image the viewer would open on this screen, or NULL. The
+ * layout asks the same question the action does, so the button that opens the
+ * viewer is drawn exactly when opening it would do something. */
+const indigo_post *indigo_app_image_source(const indigo_app *app);
 
 /* Results fed back by the platform glue. */
 void indigo_app_begin_sign_in(indigo_app *app, const char *status);

@@ -28,6 +28,10 @@ typedef struct indigo_input {
     bool like;
     bool repost;
     bool refresh;
+    /* ZR, which only exists on a New 3DS. An enhancement rather than a
+     * requirement: everything it does is also on a touch target, so an old
+     * console loses a shortcut rather than a control. */
+    bool zr;
 
     bool confirm;
     bool back;

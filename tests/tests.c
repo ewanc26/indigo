@@ -3607,6 +3607,457 @@ test_layout_draws_avatars(void)
     CHECK(bottom.image_count == 1);
 }
 
+/* ---------------------------------------------------------------------------
+ * The full-size image viewer
+ * ------------------------------------------------------------------------- */
+
+/* A post with a picture on it, the way the appview describes one: a kind, a
+ * declared aspect, a CDN thumbnail URL and the author's description. */
+static void
+with_image(indigo_post *p, unsigned w, unsigned h, unsigned count, const char *alt)
+{
+    p->embed_kind = INDIGO_EMBED_IMAGE;
+    p->embed_w = (unsigned char) w;
+    p->embed_h = (unsigned char) h;
+    p->embed_count = (unsigned char) count;
+    snprintf(p->embed_thumb, sizeof p->embed_thumb,
+             "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:one/river@jpeg");
+    indigo_copy_utf8(p->embed_alt, sizeof p->embed_alt, alt);
+}
+
+static void
+test_image_viewer_opens_from_the_selected_post(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 3, 4, 4, "The river at dawn.");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    app.thread_focus = 0;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+    app.thread.selected = 0;
+
+    CHECK(indigo_app_open_image(&app));
+    CHECK(app.screen == INDIGO_SCREEN_IMAGE);
+    CHECK(strcmp(app.image.url, p.embed_thumb) == 0);
+    CHECK(strcmp(app.image.alt, "The river at dawn.") == 0);
+    CHECK(app.image.aspect_w == 3 && app.image.aspect_h == 4);
+    CHECK(app.image.count == 4);
+
+    /* B leaves, and leaves for the screen it was opened from rather than for
+     * Home: the viewer is pushed like any other screen. */
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+}
+
+static void
+test_image_viewer_needs_an_image(void)
+{
+    indigo_app app;
+    indigo_post plain = make_post("at://a/app.bsky.feed.post/1", "no picture");
+    indigo_post card = make_post("at://a/app.bsky.feed.post/2", "a link");
+
+    card.embed_kind = INDIGO_EMBED_LINK;
+    indigo_copy_utf8(card.embed_uri, sizeof card.embed_uri, "https://example.com");
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &plain));
+    app.thread.count = 1;
+
+    /* Nothing to open, and the screen must not change: a link card and a post
+     * with no embed are both things the viewer cannot show. */
+    CHECK(!indigo_app_open_image(&app));
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+
+    /* An image post with no URL is the third way to have nothing to show, and
+     * the reason this is about the pair rather than the kind alone. */
+    app.thread.posts[0] = card;
+    with_image(&app.thread.posts[0], 4, 3, 1, "");
+    app.thread.posts[0].embed_thumb[0] = '\0';
+    CHECK(!indigo_app_open_image(&app));
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+
+    /* And with no post selected at all. */
+    app.thread.count = 0;
+    app.thread.selected = 0;
+    CHECK(!indigo_app_open_image(&app));
+}
+
+static void
+test_image_viewer_holds_a_copy(void)
+{
+    indigo_app app;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 16, 9, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+
+    CHECK(indigo_app_open_image(&app));
+    /* The list it came from keeps paging and will reuse that slot, so the
+     * viewer cannot be looking at it. */
+    indigo_timeline_clear(&app.thread);
+    CHECK(strcmp(app.image.url, p.embed_thumb) == 0);
+    CHECK(app.screen == INDIGO_SCREEN_IMAGE);
+}
+
+static void
+test_image_viewer_from_search_results(void)
+{
+    indigo_app app;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 1, 1, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    app.search.kind = INDIGO_SEARCH_POSTS;
+    app.search.results.posts[0] = p;
+    app.search.count = 1;
+
+    CHECK(indigo_app_open_image(&app));
+    CHECK(app.screen == INDIGO_SCREEN_IMAGE);
+
+    /* An actor row has no picture, and opening one from it has to be a no-op
+     * rather than reaching into the union and reading a name as a URL. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SEARCH;
+    app.search.kind = INDIGO_SEARCH_FOLLOWERS;
+    indigo_copy_utf8(app.search.results.actors[0].handle, sizeof app.search.results.actors[0].handle,
+                     "rhi.example.social");
+    app.search.count = 1;
+    CHECK(!indigo_app_open_image(&app));
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+}
+
+static void
+test_image_button_is_offered_only_when_there_is_an_image(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_rect image = indigo_layout_button_rect(INDIGO_ACTION_IMAGE);
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+    int x = (int) (image.x + image.w / 2);
+    int y = (int) (image.y + image.h / 2);
+
+    with_image(&p, 3, 4, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&bottom, "Image"));
+    CHECK(indigo_layout_hit(INDIGO_SCREEN_THREAD, x, y) == INDIGO_ACTION_IMAGE);
+
+    /* With no picture to open the button is gone from the screen, which is the
+     * part a thumb can see. The rectangle stays in the screen's action list --
+     * hit testing is per screen and does not know what is selected -- so what
+     * has to refuse is the handler, and that is checked where the handler is. */
+    app.thread.posts[0].embed_thumb[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&bottom, "Image"));
+    CHECK(indigo_app_image_source(&app) == NULL || !indigo_post_has_image(
+                                                      indigo_app_image_source(&app)));
+
+    /* Moving the selection to a post with a picture brings the button back,
+     * because it follows the selection rather than the screen. */
+    app.thread.posts[1] = p;
+    app.thread.count = 2;
+    app.thread.selected = 1;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&bottom, "Image"));
+
+    /* And the timeline and a post result offer it too, since both draw the
+     * selected post's picture. */
+    app.screen = INDIGO_SCREEN_HOME;
+    app.timeline.posts[0] = p;
+    app.timeline.count = 1;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&bottom, "Image"));
+
+    app.screen = INDIGO_SCREEN_SEARCH;
+    app.search.kind = INDIGO_SEARCH_POSTS;
+    app.search.results.posts[0] = p;
+    app.search.count = 1;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&bottom, "Image"));
+}
+
+static void
+test_image_button_keeps_the_header_bar_readable(void)
+{
+    indigo_rect image = indigo_layout_button_rect(INDIGO_ACTION_IMAGE);
+    indigo_rect back = indigo_layout_button_rect(INDIGO_ACTION_BACK);
+
+    CHECK(!overlap(image, back));
+    CHECK(image.x + image.w <= INDIGO_BOTTOM_WIDTH);
+    CHECK(image.y + image.h <= INDIGO_BOTTOM_HEIGHT);
+    /* Clear of the longest title the header bar draws at its own scale. The
+     * bar is the one place on this screen with no room to be generous, and a
+     * button drawn over the screen's own name is two controls in one place. */
+    CHECK(image.x >= 14.0f + 8.0f * INDIGO_CHAR_WIDTH * 0.75f);
+    /* Tall enough to hit, like every other button here. */
+    CHECK(image.h >= 34.0f);
+}
+
+static void
+test_image_viewer_draws_the_picture_at_the_screen(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    const indigo_cmd *cmd;
+    static const struct {
+        unsigned w;
+        unsigned h;
+        float expect_w;
+        float expect_h;
+    } shapes[] = {
+        {3, 4, 180.0f, 240.0f},  /* portrait: the height is the limit */
+        {16, 9, 400.0f, 225.0f}, /* landscape: the width is */
+        {1, 1, 240.0f, 240.0f},  /* square: the height decides */
+        {0, 0, 240.0f, 240.0f},  /* undeclared: treated as square */
+    };
+
+    for (unsigned i = 0; i < sizeof shapes / sizeof shapes[0]; i++) {
+        indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+        with_image(&p, shapes[i].w, shapes[i].h, 1, "");
+        indigo_app_init(&app);
+        app.screen = INDIGO_SCREEN_THREAD;
+        CHECK(indigo_timeline_append(&app.thread, &p));
+        CHECK(indigo_app_open_image(&app));
+
+        indigo_layout_build(&app, &in, &top, &bottom);
+        CHECK(!top.overflow);
+        cmd = find_image(&top, p.embed_thumb);
+        CHECK(cmd != NULL);
+        if (!cmd) {
+            continue;
+        }
+        /* The declared shape, fitted inside the screen and centred in it. A
+         * box outside the screen is a box the reader cannot see, and a box
+         * stretched to something else is not the photograph. */
+        CHECK(fabsf(cmd->w - shapes[i].expect_w) < 0.5f);
+        CHECK(fabsf(cmd->h - shapes[i].expect_h) < 0.5f);
+        CHECK(fabsf(cmd->x - (INDIGO_TOP_WIDTH - cmd->w) / 2.0f) < 0.5f);
+        CHECK(fabsf(cmd->y - (INDIGO_TOP_HEIGHT - cmd->h) / 2.0f) < 0.5f);
+        CHECK(cmd->x >= 0.0f && cmd->y >= 0.0f);
+        CHECK(cmd->x + cmd->w <= (float) INDIGO_TOP_WIDTH);
+        CHECK(cmd->y + cmd->h <= (float) INDIGO_TOP_HEIGHT);
+        /* Nothing else on the picture's screen: a viewer with a header on it
+         * is a list row. The one command besides the picture is the
+         * background behind it. */
+        {
+            unsigned images = 0;
+
+            for (unsigned k = 0; k < top.count; k++) {
+                images += top.cmds[k].kind == INDIGO_CMD_IMAGE ? 1u : 0u;
+            }
+            CHECK(images == 1);
+            CHECK(top.count == 2);
+            CHECK(top.cmds[0].kind == INDIGO_CMD_RECT);
+            CHECK(!text_has(&top, "Image"));
+        }
+    }
+}
+
+static void
+test_image_viewer_says_what_the_picture_is(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 3, 4, 4, "The river at dawn, frost on the railings.");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+    CHECK(indigo_app_open_image(&app));
+
+    /* The description is on the control screen, where there is room for the
+     * whole sentence, and only when the setting asks for it. */
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&bottom, "frost"));
+    CHECK(text_has(&bottom, "Close"));
+    /* Four images and one of them shown is said out loud rather than left to
+     * look like a post that happens to have one picture. */
+    CHECK(text_has(&bottom, "1 of 4 images."));
+    /* With the setting on, the description appears and nothing is pushed off
+     * the bottom of the screen. */
+    app.settings.alt_text = true;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    /* Wrapped to the bottom screen's width, so it is words that are asserted
+     * rather than the sentence: a line break in the middle of one would
+     * otherwise read as the description having gone missing. */
+    CHECK(text_has(&bottom, "frost"));
+    CHECK(text_has(&bottom, "dawn"));
+    CHECK(!bottom.overflow);
+    for (unsigned i = 0; i < bottom.count; i++) {
+        if (bottom.cmds[i].kind == INDIGO_CMD_TEXT) {
+            CHECK(bottom.cmds[i].y < (float) INDIGO_BOTTOM_HEIGHT);
+        }
+    }
+
+    /* No description is stated as such: an empty area reads as one that failed
+     * to arrive, and most posts have no description at all. */
+    with_image(&p, 3, 4, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+    CHECK(indigo_app_open_image(&app));
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&bottom, "no description"));
+    CHECK(!text_has(&bottom, "1 of 1 images."));
+
+    /* And a viewer with nothing in it says so rather than showing an empty
+     * screen, which is what a stale state would look like. */
+    app.image.url[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "No image to show."));
+}
+
+static void
+test_image_viewer_is_entered_and_left_the_way_the_app_does(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_rect image = indigo_layout_button_rect(INDIGO_ACTION_IMAGE);
+    indigo_rect close = indigo_layout_button_rect(INDIGO_ACTION_BACK);
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 3, 4, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    app.thread_focus = 0;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+
+    /* Touch the button. */
+    in.touch_pressed = true;
+    in.touch_x = (int) (image.x + image.w / 2);
+    in.touch_y = (int) (image.y + image.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_IMAGE);
+
+    /* On the viewer, only Close is a control: a tap on the description does
+     * nothing, so a thumb resting on the screen cannot close it by accident. */
+    in.touch_x = (int) (close.x + close.w / 2);
+    in.touch_y = (int) (close.y + close.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+
+    /* ZR is the same shortcut in both directions, which is what makes it a
+     * path to the viewer rather than a separate feature. */
+    in = (indigo_input) {0};
+    in.zr = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_IMAGE);
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+
+    /* On a post with no picture, ZR does nothing at all rather than opening an
+     * empty screen. */
+    app.thread.posts[0].embed_thumb[0] = '\0';
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+}
+
+static void
+test_image_button_takes_the_status_line(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
+
+    with_image(&p, 3, 4, 1, "");
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    CHECK(indigo_timeline_append(&app.thread, &p));
+
+    /* With no status there is nothing to move, and the bar keeps the screen's
+     * own title. */
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(count_text(&bottom, "Thread") == 1);
+
+    /* A failure fetching the thread is worth reading, so it moves to the top
+     * screen rather than being dropped for a button. */
+    indigo_timeline_fail_fetch(&app.thread, "Could not reach the network.");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(count_text(&bottom, "Could not reach") == 0);
+    CHECK(text_has(&top, "Could not reach the network."));
+    CHECK(!top.overflow && !bottom.overflow);
+    /* The hint it stands in for is only lost while there is a status to show. */
+    indigo_timeline_init(&app.thread);
+    CHECK(indigo_timeline_append(&app.thread, &p));
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!text_has(&top, "Could not reach"));
+    CHECK(text_has(&top, "SEL  Profile"));
+}
+
+static void
+test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
+{
+    indigo_media_cache c;
+    unsigned gen = 0;
+    unsigned again = 0;
+    int slot;
+    int second;
+
+    indigo_media_init(&c);
+    /* The detail band asked for a portrait photograph at the height it draws
+     * it, which is 60px on the band and 240 on the viewer's screen. */
+    CHECK(indigo_media_claim(&c, "https://cdn.example/river@jpeg", 60, &gen) >= 0);
+    CHECK(indigo_media_publish(&c, 0, gen, fake_pixels(45, 60), 45, 60));
+    CHECK(c.bytes == 45u * 60u * 4u);
+
+    slot = indigo_media_slot_of(&c, "https://cdn.example/river@jpeg");
+    CHECK(slot >= 0);
+    CHECK(c.slots[slot].max_dim == 60);
+
+    /* Dropping it is what lets the second claim be a different size. Without
+     * that, first-request-wins hands the viewer the 60px copy, and a 60px
+     * photograph blown up to a 400px screen is not a picture. */
+    indigo_media_forget(&c, "https://cdn.example/river@jpeg");
+    CHECK(c.bytes == 0);
+    CHECK(indigo_media_slot_of(&c, "https://cdn.example/river@jpeg") == -1);
+    CHECK(!indigo_media_known(&c, "https://cdn.example/river@jpeg"));
+
+    second = indigo_media_claim(&c, "https://cdn.example/river@jpeg", INDIGO_TOP_WIDTH, &again);
+    CHECK(second >= 0);
+    CHECK(again != gen);
+    if (second >= 0) {
+        CHECK(c.slots[second].max_dim == INDIGO_TOP_WIDTH);
+    }
+
+    /* Forgetting a URL the cache never had is a no-op, and so is forgetting
+     * one twice. */
+    indigo_media_forget(&c, "https://cdn.example/never@jpeg");
+    CHECK(c.bytes == 0);
+    indigo_media_forget(&c, "https://cdn.example/river@jpeg");
+    CHECK(indigo_media_slot_of(&c, "https://cdn.example/river@jpeg") == -1);
+
+    /* A fetch already in flight when the slot is dropped is not cancelled; its
+     * result arrives with a stale generation and is dropped by publish, which
+     * is what keeps a forgotten image from coming back at the old size. */
+    indigo_media_init(&c);
+    CHECK(indigo_media_claim(&c, "https://cdn.example/busy@jpeg", 60, &gen) >= 0);
+    indigo_media_forget(&c, "https://cdn.example/busy@jpeg");
+    CHECK(!indigo_media_publish(&c, 0, gen, fake_pixels(45, 60), 45, 60));
+    CHECK(c.bytes == 0);
+    CHECK(c.slots[0].state == INDIGO_MEDIA_EMPTY);
+}
+
 int
 main(void)
 {
@@ -3687,6 +4138,17 @@ main(void)
     test_layout_draws_post_images();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();
+    test_image_viewer_opens_from_the_selected_post();
+    test_image_viewer_needs_an_image();
+    test_image_viewer_holds_a_copy();
+    test_image_viewer_from_search_results();
+    test_image_button_is_offered_only_when_there_is_an_image();
+    test_image_button_keeps_the_header_bar_readable();
+    test_image_viewer_draws_the_picture_at_the_screen();
+    test_image_viewer_says_what_the_picture_is();
+    test_image_viewer_is_entered_and_left_the_way_the_app_does();
+    test_image_button_takes_the_status_line();
+    test_media_forget_lets_the_viewer_decode_at_its_own_size();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

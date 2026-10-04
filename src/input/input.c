@@ -24,6 +24,7 @@ indigo_input_begin_frame(indigo_input *input)
     input->like = (input->pressed & KEY_Y) != 0;
     input->repost = (input->pressed & KEY_X) != 0;
     input->refresh = (input->pressed & KEY_SELECT) != 0;
+    input->zr = (input->pressed & KEY_ZR) != 0;
 }
 
 void

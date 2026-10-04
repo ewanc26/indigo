@@ -48,8 +48,15 @@
 /* Longest decoded side for anything else -- a post's thumbnail, a link card --
  * which is drawn far larger than an avatar. The gap is not a preference: an
  * avatar decoded at 256 spends sixteen times the bytes for a picture 40px
- * across, and a thumbnail decoded at 96 is a blur on a 400px-wide screen. */
-#define INDIGO_MEDIA_THUMB_DIM 256
+ * across, and a thumbnail decoded at 96 is a blur on a 400px-wide screen.
+ *
+ * 400 is the top screen's width, which is the widest anything here is ever
+ * drawn: the full-size viewer fits the picture to the whole screen, and a
+ * smaller cap would make the viewer an enlargement of a thumbnail. It is
+ * still a ceiling and not a target -- a request asks for the size it draws and
+ * gets that, capped here -- so the timeline and the detail band are unaffected
+ * by a limit they never reach. */
+#define INDIGO_MEDIA_THUMB_DIM 400
 
 /* Total decoded bytes across every slot. At the caps above, INDIGO_MEDIA_SLOTS
  * of thumbnails would be ~6MB, which the 3DS should not hold; this budget is
@@ -151,6 +158,24 @@ void indigo_media_fail(indigo_media_cache *c, int slot, unsigned generation);
  * per image command per frame, which is how the backend decides whether to
  * ask the loader for it. */
 bool indigo_media_known(const indigo_media_cache *c, const char *url);
+
+/* Index of the slot holding `url` in any state, or -1. For a caller that needs
+ * to look at the slot rather than its pixels -- the viewer, to ask how big the
+ * copy it has is. */
+int indigo_media_slot_of(const indigo_media_cache *c, const char *url);
+
+/* Drops the slot holding `url`, if there is one, so the next claim can decode
+ * it again at a different size.
+ *
+ * The one caller is the full-size viewer, and the reason is that first-request-
+ * wins cuts both ways: a portrait photograph the detail band drew 60px tall
+ * would still be 60px here, four times too small for a screen, and a blur at
+ * 60px is not a picture. Nothing else needs this -- the screen the smaller copy
+ * was decoded for is not on screen while the viewer is -- which is why it is a
+ * deliberate call at the call site rather than a rule inside the cache. A fetch
+ * already in flight is not cancelled: its result arrives with a stale
+ * generation and is dropped. Counted as an eviction, because it is one. */
+void indigo_media_forget(indigo_media_cache *c, const char *url);
 
 /* A stable colour for a URL, for the placeholder drawn while the real image is
  * still loading or never arrives. A column of identical grey squares reads as

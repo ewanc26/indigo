@@ -20,6 +20,10 @@
  * it reads as a card the reader can look into rather than something to press. */
 #define COL_CARD INDIGO_RGBA(27, 31, 41, 255)
 #define COL_PILL_ACTIVE INDIGO_RGBA(74, 96, 180, 255)
+/* The one colour that is not themed: the surround of the full-size viewer. A
+ * photograph has to be judged against something neutral, and it is explained
+ * where it is drawn. */
+#define COL_VIEWER_BG INDIGO_RGBA(8, 8, 10, 255)
 
 /* Timeline-style lists: three rows with 4px between, then a row of four
  * action pills with 6px gaps. Every list screen shares them. */
@@ -40,6 +44,16 @@ static const indigo_rect s_pill[4] = {
 
 /* Top-right of the bottom screen's header bar: Back, or Menu on Home. */
 static const indigo_rect s_back_button = {232, 4, 82, 34};
+
+/* Opens the full-size image viewer, in the header bar's empty middle. It is
+ * drawn only when the selected post has an image to open, and it takes the
+ * status text's slot to do it: a status is only ever a transient "Loading...",
+ * a "Nothing here yet" for a list with no posts, or a fetch error, and the
+ * first two cannot happen while a post is selected. So when this button is up,
+ * the only status it can displace is one worth more of the room than the
+ * button -- which is why that status moves to the top screen's title bar
+ * instead of being dropped. */
+static const indigo_rect s_image_button = {104, 4, 92, 34};
 
 /* Menu: five full-width items. */
 #define MENU_X 20
@@ -131,6 +145,8 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_BACK:
     case INDIGO_ACTION_MENU:
         return s_back_button;
+    case INDIGO_ACTION_IMAGE:
+        return s_image_button;
     case INDIGO_ACTION_MENU0:
     case INDIGO_ACTION_MENU1:
     case INDIGO_ACTION_MENU2:
@@ -244,10 +260,12 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_FIELD_PASSWORD, INDIGO_ACTION_SIGN_IN};
     static const indigo_action home_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
-        INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH, INDIGO_ACTION_MENU};
+        INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH, INDIGO_ACTION_MENU,
+        INDIGO_ACTION_IMAGE};
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
-        INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK,
+        INDIGO_ACTION_IMAGE};
     static const indigo_action profile_actions[] = {
     INDIGO_ACTION_FOLLOW, INDIGO_ACTION_MUTE, INDIGO_ACTION_BLOCK,
     INDIGO_ACTION_FOLLOWERS, INDIGO_ACTION_FOLLOWING, INDIGO_ACTION_POSTS,
@@ -262,7 +280,10 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_EDIT, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
-        INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK, INDIGO_ACTION_IMAGE};
+    /* The viewer has nothing to choose between: it is one picture, and the way
+     * out is the same way every screen has one. */
+    static const indigo_action image_actions[] = {INDIGO_ACTION_BACK};
     static const indigo_action settings_actions[] = {
         INDIGO_ACTION_SETTINGS_ROW0, INDIGO_ACTION_SETTINGS_ROW1,
         INDIGO_ACTION_SETTINGS_ROW2, INDIGO_ACTION_SETTINGS_ROW3,
@@ -300,6 +321,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_SETTINGS:
         USE(settings_actions);
+        break;
+    case INDIGO_SCREEN_IMAGE:
+        USE(image_actions);
         break;
     }
 #undef USE
@@ -402,6 +426,36 @@ author_name(const indigo_post *p)
 /* The thumbnail inside a link card, and the space kept clear for it. */
 #define CARD_THUMB 52
 #define PROFILE_AVATAR 40
+
+/* Whether the header bar is showing the viewer button, which is what costs the
+ * status text its slot. One predicate for the bottom screen that draws it and
+ * the top screen that gives the status up, so the two cannot disagree about
+ * which of them is showing what. */
+static bool
+image_button_shown(const indigo_app *app)
+{
+    return indigo_post_has_image(indigo_app_image_source(app));
+}
+
+/* The button that opens the viewer. Returns whether it was drawn, which is what
+ * the top screen asks before it takes the status text over from its own hint
+ * line. */
+static bool
+image_button(indigo_canvas *c, const indigo_app *app)
+{
+    indigo_rect r;
+
+    if (!image_button_shown(app)) {
+        return false;
+    }
+    r = indigo_layout_button_rect(INDIGO_ACTION_IMAGE);
+    indigo_canvas_rect(c, r.x, r.y, r.w, r.h, COL_PILL_ACTIVE);
+    /* Named for the action and not the key, like the Profile pill: every one
+     * of these controls is on the touchscreen, and ZR is a shortcut only a
+     * New 3DS has rather than the way in. */
+    indigo_canvas_text(c, r.x + 26, r.y + 7, 0.6f, COL_TEXT, "Image");
+    return true;
+}
 
 /* A square image at `size` pixels, or a tinted placeholder while it loads.
  *
@@ -644,8 +698,17 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", title);
     }
     /* The bottom pills carry the hints for the list actions (Y, X, A, SEL), so
-     * the title bar only states what they cannot: leaving the screen. */
-    indigo_canvas_text(c, hint_x, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
+     * the title bar only states what they cannot: leaving the screen. The one
+     * exception is a status the bottom screen's header gave up to the viewer
+     * button: a failure fetching this list is worth this bar more than the
+     * reminder of which key reloads it, and this bar has the room the header
+     * spent. */
+    if (image_button_shown(app) && t->status[0]) {
+        indigo_canvas_text(c, hint_x, 12, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%.60s", t->status);
+    } else {
+        indigo_canvas_text(c, hint_x, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
+    }
     if (p) {
         indigo_canvas_text(c, 330, 12, 0.6f, COL_TEXT_DIM, "%u / %u%s", t->selected + 1,
                            t->count, t->has_more ? "+" : "");
@@ -706,12 +769,12 @@ top_title(indigo_canvas *c, const char *title, const char *hint)
 
 /* Wrap `text` into the top screen at (x, y); returns the next free y. */
 static float
-top_paragraph(indigo_canvas *c, float x, float y, float scale, uint32_t color,
-              unsigned max_lines, const char *text)
+paragraph(indigo_canvas *c, float x, float y, float width, float scale, uint32_t color,
+           unsigned max_lines, const char *text)
 {
     indigo_line lines[8];
     int truncated;
-    unsigned units = (unsigned) ((INDIGO_TOP_WIDTH - 2 * x) / (INDIGO_CHAR_WIDTH * scale));
+    unsigned units = (unsigned) ((width - 2 * x) / (INDIGO_CHAR_WIDTH * scale));
     unsigned n;
 
     if (max_lines > 8) {
@@ -724,6 +787,15 @@ top_paragraph(indigo_canvas *c, float x, float y, float scale, uint32_t color,
         y += (float) POST_LINE_PITCH * scale / POST_TEXT_SCALE * 0.95f;
     }
     return y;
+}
+
+/* The top screen's own width, which is what every other paragraph on it wraps
+ * to. The viewer is the one place a paragraph goes on the bottom screen. */
+static float
+top_paragraph(indigo_canvas *c, float x, float y, float scale, uint32_t color,
+              unsigned max_lines, const char *text)
+{
+    return paragraph(c, x, y, (float) INDIGO_TOP_WIDTH, scale, color, max_lines, text);
 }
 
 static void
@@ -986,13 +1058,55 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
                        INDIGO_BUILD_COMMIT, INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
 }
 
+/* The full-size viewer, top screen: the picture and nothing else.
+ *
+ * The surround is a fixed near-black rather than the theme's background, which
+ * is the one place in Indigo that ignores the palette. A photograph is judged
+ * against what is around it, and a pale surround puts a box round every image
+ * that is lighter than the box; every other screen is showing text and panels,
+ * where the theme is the point. */
+static void
+build_top_image(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_image *img = &app->image;
+    /* A square is the assumption that distorts least when the server declared
+     * no aspect ratio, because the box drawn is stretched to whatever shape it
+     * is given -- the same choice the detail band makes. */
+    float aw = img->aspect_w && img->aspect_h ? (float) img->aspect_w : 1.0f;
+    float ah = img->aspect_w && img->aspect_h ? (float) img->aspect_h : 1.0f;
+    float k = INDIGO_TOP_WIDTH / aw;
+    float by_height = INDIGO_TOP_HEIGHT / ah;
+    float w;
+    float h;
+
+    indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, COL_VIEWER_BG);
+    if (!img->url[0]) {
+        indigo_canvas_text(c, 18, 104, 0.7f, COL_TEXT_SOFT, "No image to show.");
+        return;
+    }
+    /* The detail band's fit, against the whole screen rather than the band:
+     * scale by the smaller of the two ratios, so a 1:3 panorama comes out
+     * 400x133 instead of being 1200px tall. */
+    if (by_height < k) {
+        k = by_height;
+    }
+    w = aw * k;
+    h = ah * k;
+    indigo_canvas_image(c, (INDIGO_TOP_WIDTH - w) / 2.0f, (INDIGO_TOP_HEIGHT - h) / 2.0f, w,
+                        h, img->url, indigo_media_placeholder_color(img->url));
+}
+
 static void
 build_top(const indigo_app *app, indigo_canvas *c)
 {
     indigo_palette pal = indigo_layout_palette(&app->settings);
 
     indigo_canvas_init(c, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT);
-    indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, pal.bg_top);
+    /* The viewer paints the whole screen itself, in a colour that is not the
+     * theme's, so the themed background is not drawn first and then covered. */
+    if (app->screen != INDIGO_SCREEN_IMAGE) {
+        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, pal.bg_top);
+    }
 
     if (app->screen == INDIGO_SCREEN_HOME || app->screen == INDIGO_SCREEN_THREAD) {
         indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, pal.bar);
@@ -1017,6 +1131,9 @@ build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_SETTINGS:
         build_top_settings(app, c);
+        return;
+    case INDIGO_SCREEN_IMAGE:
+        build_top_image(app, c);
         return;
     default:
         break;
@@ -1127,8 +1244,10 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     const indigo_post *sel = indigo_timeline_selected(t);
 
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, thread ? "Thread" : "Timeline");
-    indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM, "%.22s",
-                       t->loading ? "Loading..." : t->status);
+    if (!image_button(c, app)) {
+        indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%.22s", t->loading ? "Loading..." : t->status);
+    }
     /* The button hints live in the top screen's title bar; a bottom pill is
      * labelled with its action so no back hint appears twice. A feed view's B
      * goes back to the picker, so its button is named for the picker. */
@@ -1350,6 +1469,9 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_rect(c, q.x, q.y, q.w, q.h, COL_PILL);
         indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s", s->subject);
     }
+    /* The search screen has no status line in its header to give up, so the
+     * button simply lands in the empty middle of the bar. */
+    image_button(c, app);
     back_button(c, INDIGO_ACTION_BACK, "Back");
 
     for (unsigned row = 0; row < INDIGO_SEARCH_ROWS; row++) {
@@ -1469,6 +1591,43 @@ build_bottom_settings(const indigo_app *app, indigo_canvas *c)
     }
 }
 
+/* The viewer, bottom screen: the controls, and the description of the picture
+ * rather than a caption over it. The top screen is where the picture is, and
+ * text on top of a photograph reads as part of the photograph; here there is
+ * room for the whole sentence. */
+static void
+build_bottom_image(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_image *img = &app->image;
+    float y = 62.0f;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Image");
+    back_button(c, INDIGO_ACTION_BACK, "Close");
+
+    if (img->alt[0] && app->settings.alt_text) {
+        y = paragraph(c, 14, y, (float) INDIGO_BOTTOM_WIDTH, 0.55f, COL_TEXT_SOFT, 9,
+                      img->alt);
+        y += 6.0f;
+    } else if (!img->alt[0]) {
+        /* Said rather than left blank: a picture with no description is the
+         * normal case, and silence would read as a description that failed to
+         * arrive. */
+        indigo_canvas_text(c, 14, y, 0.55f, COL_TEXT_DIM, "The author added no description.");
+        y += 20.0f;
+    }
+    /* Bluesky allows four images and a post carries one URL, so the viewer can
+     * only ever show the first. Saying so is the difference between one picture
+     * of four and a post that happens to have one picture. */
+    if (img->count > 1) {
+        indigo_canvas_text(c, 14, y, 0.55f, COL_TEXT_DIM, "1 of %u images.", img->count);
+        y += 20.0f;
+    }
+    if (y + 26.0f > (float) INDIGO_BOTTOM_HEIGHT) {
+        indigo_canvas_text(c, 14, (float) INDIGO_BOTTOM_HEIGHT - 14.0f, 0.55f, COL_TEXT_DIM,
+                           "...");
+    }
+}
+
 static void
 build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
 {
@@ -1503,6 +1662,9 @@ build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
         break;
     case INDIGO_SCREEN_SETTINGS:
         build_bottom_settings(app, c);
+        break;
+    case INDIGO_SCREEN_IMAGE:
+        build_bottom_image(app, c);
         break;
     }
 }
