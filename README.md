@@ -19,7 +19,7 @@ The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol
 
 ## Status
 
-**0.3.0 is released** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.3.0)). Sign-in, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, mute and block, a settings screen, and — as of 0.3.0 — an image pipeline with avatars on every row. Post images and link cards are in since 0.3.0's follow-up work; a full-size viewer and an alt-text setting are the next stage, tracked as issues rather than as work in progress.
+**0.4.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.4.0)) adds browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- alongside post images, link cards and an alt-text setting on top of 0.3.0's image pipeline and avatars. Also in: timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block. A full-size image viewer is the next stage, tracked as an issue rather than as work in progress.
 
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 

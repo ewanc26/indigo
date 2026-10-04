@@ -6,7 +6,10 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-04
+
 ### Added
+- Browser-based AT Protocol OAuth sign-in through the hosted Wolfram OAuth node, with a short-lived pairing link that can be opened on another device. The PDS handles the account password and MFA; Indigo never sees them.
 - Post images. A post with an `images` embed draws its first picture in a box
   of the shape the server declared, and the post's text gives up three of its
   five lines to make room for it. One image of up to four is drawn and the count
@@ -22,26 +25,26 @@ publishes the section matching the version you pass it.
   lines it needs out of the bottom of the band and the picture is fitted into
   what is left.
 
-### Notes
-- A post's image and link card are drawn on the detail surfaces -- the home and
-  thread post, and a post in the search results. List rows are unchanged: a row
-  is two lines of text and a face, and there is no honest way to fit a
-  thumbnail into one.
+### Changed
+- OAuth-node sessions are persisted separately from ordinary PDS sessions and resumed through Wolfram's hosted authentication path.
 - The image cache's decode cap is now per request rather than one 96px cap for
   everything, and its byte budget is 1.5MB so that a handful of full-size
   thumbnails fit. An avatar still decodes at 96px; a thumbnail asks for what it
   is drawn at.
 
-## [0.4.0] - 2026-10-04
-
-### Added
-- Browser-based AT Protocol OAuth sign-in through the hosted Wolfram OAuth node, with a short-lived pairing link that can be opened on another device. The PDS handles the account password and MFA; Indigo never sees them.
-
-### Changed
-- OAuth-node sessions are persisted separately from ordinary PDS sessions and resumed through Wolfram's hosted authentication path.
+### Notes
+- A post's image and link card are drawn on the detail surfaces -- the home and
+  thread post, and a post in the search results. List rows are unchanged: a row
+  is two lines of text and a face, and there is no honest way to fit a
+  thumbnail into one.
 
 ### Internal
 - Added the unified hosted OAuth node to Wolfram and wired Indigo to it as a thin 3DS client.
+- The settings screen has eight rows and fits them by 2px of row height and a
+  3px upward nudge of the first row; the gap between rows is unchanged, because
+  the gap is what decides whether a thumb lands on the wrong row.
+- `indigo_layout_hit()` no longer builds a 370KB `indigo_app` on the stack to
+  read one enum out of it.
 
 ## [0.3.0] - 2026-10-04
 
