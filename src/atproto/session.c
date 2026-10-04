@@ -1,6 +1,7 @@
 #include "atproto/session.h"
 
 #include "atproto/atproto.h"
+#include "atproto/prefs.h"
 
 #include "store/session_store.h"
 #include "util/log.h"
@@ -17,6 +18,7 @@
 
 #include <3ds.h>
 #include <wolfram/3ds.h>
+#include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
 #include <wolfram/feed_gen_typed.h>
@@ -101,6 +103,10 @@ static indigo_saved_session s_saved;
 static bool s_node_session;
 static char s_pair_url[INDIGO_OAUTH_URL_MAX];
 static char s_pair_code[INDIGO_OAUTH_CODE_MAX];
+/* Worker-only: the account's muted words and hide-reposts, fetched once per
+ * sign-in and applied to every timeline and feed page. */
+static indigo_prefs s_prefs;
+static bool s_prefs_loaded;
 
 /* Written by the worker before it publishes TIMELINE_PAGE; the main thread
  * reads it after polling that event and before the next submit. */
@@ -184,6 +190,7 @@ drop_agent(void)
         wf_agent_free(s_agent);
         s_agent = NULL;
     }
+    s_prefs_loaded = false;
 }
 
 static wf_agent *
@@ -720,6 +727,29 @@ to_post(const wf_agent_feed_item *item, indigo_post *out)
     return true;
 }
 
+/* Fetch the saved preferences once per sign-in. Failure is not fatal: the
+ * feed is simply shown unfiltered, and the next page tries again. */
+static void
+ensure_prefs(void)
+{
+    wf_actor_preferences p;
+    wf_status st;
+
+    if (s_prefs_loaded || !s_agent) {
+        return;
+    }
+    memset(&p, 0, sizeof p);
+    st = wf_agent_get_actor_prefs_typed(s_agent, &p);
+    if (st != WF_OK) {
+        indigo_log_warn("getPreferences failed (%d); feed unfiltered", (int) st);
+        indigo_prefs_clear(&s_prefs);
+        return;
+    }
+    indigo_prefs_from_wolfram(&s_prefs, &p, indigo_time_now());
+    wf_actor_preferences_free(&p);
+    s_prefs_loaded = true;
+}
+
 static void
 do_timeline(const job *j)
 {
@@ -732,6 +762,7 @@ do_timeline(const job *j)
         publish_event(&ev);
         return;
     }
+    ensure_prefs();
     memset(&list, 0, sizeof list);
     st = wf_agent_get_timeline_typed(s_agent, INDIGO_PAGE_SIZE,
                                      j->cursor[0] ? j->cursor : NULL, &list);
@@ -749,6 +780,7 @@ do_timeline(const job *j)
             s_page_count++;
         }
     }
+    s_page_count -= indigo_prefs_filter_page(&s_prefs, s_page, s_page_count, 0, true);
     ev.kind = INDIGO_SESSION_EVENT_TIMELINE_PAGE;
     ev.page_count = s_page_count;
     if (list.cursor && strlen(list.cursor) < sizeof ev.cursor) {
@@ -1452,6 +1484,7 @@ do_feed(const job *j)
         publish_event(&ev);
         return;
     }
+    ensure_prefs();
     memset(&list, 0, sizeof list);
     st = wf_agent_get_feed_typed(s_agent, j->feed_uri, INDIGO_PAGE_SIZE,
                                  j->cursor[0] ? j->cursor : NULL, &list);
@@ -1469,6 +1502,9 @@ do_feed(const job *j)
             s_page_count++;
         }
     }
+    /* A custom feed is not the home timeline, so hide_reposts does not apply;
+     * the muted words do, because they are about the content, not the feed. */
+    s_page_count -= indigo_prefs_filter_page(&s_prefs, s_page, s_page_count, 0, false);
     ev.kind = INDIGO_SESSION_EVENT_TIMELINE_PAGE;
     ev.page_count = s_page_count;
     if (list.cursor && strlen(list.cursor) < sizeof ev.cursor) {
