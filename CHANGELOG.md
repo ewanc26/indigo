@@ -49,6 +49,10 @@ publishes the section matching the version you pass it.
   in `INDIGO_BUILD_COMMIT` rather than the previous tag plus a commit count.
   Releases before this one shipped an artifact that reported the tag they were
   about to become's predecessor.
+- The settings screen prints the build identity -- tag, build number and date --
+  at the foot of its top screen. The Makefile has stamped those three values
+  since 0.1.0 and nothing read them, so the linker dropped all three and no
+  build could name itself.
 
 ## [0.3.0] - 2026-10-04
 
