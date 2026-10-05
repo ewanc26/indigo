@@ -21,6 +21,7 @@
 #include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
+#include <wolfram/oauth_pairing.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/moderation_typed.h>
@@ -104,8 +105,8 @@ static bool s_event_ready;
 static wf_agent *s_agent;
 static indigo_saved_session s_saved;
 static bool s_node_session;
-static char s_pair_url[INDIGO_OAUTH_URL_MAX];
-static char s_pair_code[INDIGO_OAUTH_CODE_MAX];
+static char s_pair_url[WF_OAUTH_PAIR_URL_MAX];
+static char s_pair_code[WF_OAUTH_PAIR_CODE_MAX];
 /* Worker-only: the account's muted words and hide-reposts, fetched once per
  * sign-in and applied to every timeline and feed page. */
 static indigo_prefs s_prefs;
@@ -288,11 +289,43 @@ remember(const char *service)
 }
 
 
+/* The pairing client is Wolfram's (wolfram#101, include/wolfram/oauth_pairing.h):
+ * it owns the begin/poll loop, the 404-is-terminal rule and the expiry. Indigo
+ * supplies only the hooks: where to show the code, how to sleep. Every hook
+ * runs on this worker thread. Nothing here logs the code or the token. */
+static void
+pair_on_code(const wf_oauth_pair_begin *begin, void *userdata)
+{
+    (void) userdata;
+    LightLock_Lock(&s_lock);
+    snprintf(s_pair_code, sizeof s_pair_code, "%s", begin->pair_code);
+    snprintf(s_pair_url, sizeof s_pair_url, "%s", begin->pair_url);
+    LightLock_Unlock(&s_lock);
+}
+
+static void
+pair_sleep(unsigned ms, void *userdata)
+{
+    (void) userdata;
+    svcSleepThread((s64) ms * 1000000LL);
+}
+
+static void
+clear_pairing(void)
+{
+    LightLock_Lock(&s_lock);
+    s_pair_code[0] = '\0';
+    s_pair_url[0] = '\0';
+    LightLock_Unlock(&s_lock);
+}
+
 static void
 do_oauth(const job *j)
 {
+    static wf_oauth_pair_poll result;
+    wf_oauth_pair_hooks hooks = {pair_on_code, NULL, pair_sleep, NULL, NULL};
     wf_xrpc_client *client = wf_xrpc_client_new(j->service);
-    wf_response response = {0};
+    wf_status st;
 
     if (!client) {
         publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TLS, NULL);
@@ -300,122 +333,44 @@ do_oauth(const job *j)
     }
     wf_xrpc_client_set_ca_bundle(client, INDIGO_CA_BUNDLE_PATH);
 
-    cJSON *body = cJSON_CreateObject();
-    if (!body || !cJSON_AddStringToObject(body, "handle", j->identifier)) {
-        cJSON_Delete(body);
-        wf_xrpc_client_free(client);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
-        return;
-    }
-    char *body_json = cJSON_PrintUnformatted(body);
-    cJSON_Delete(body);
-    if (!body_json) {
-        wf_xrpc_client_free(client);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
-        return;
-    }
-
-    wf_status st = wf_xrpc_procedure(client, "uk.ewancroft.oauth.begin", body_json, &response);
-    free(body_json);
-    if (st != WF_OK) {
-        wf_response_free(&response);
-        wf_xrpc_client_free(client);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, classify(st), NULL);
-        return;
-    }
-
-    cJSON *begin = cJSON_ParseWithLength(response.body, response.body_len);
-    const cJSON *code = begin ? cJSON_GetObjectItemCaseSensitive(begin, "pair_code") : NULL;
-    const cJSON *url = begin ? cJSON_GetObjectItemCaseSensitive(begin, "pair_url") : NULL;
-    if (!begin || !cJSON_IsString(code) || !cJSON_IsString(url) ||
-        strlen(code->valuestring) >= sizeof s_pair_code ||
-        strlen(url->valuestring) >= sizeof s_pair_url) {
-        cJSON_Delete(begin);
-        wf_response_free(&response);
-        wf_xrpc_client_free(client);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_BAD_RESPONSE, NULL);
-        return;
-    }
-
-    LightLock_Lock(&s_lock);
-    snprintf(s_pair_code, sizeof s_pair_code, "%s", code->valuestring);
-    snprintf(s_pair_url, sizeof s_pair_url, "%s", url->valuestring);
-    LightLock_Unlock(&s_lock);
-
-    char code_copy[INDIGO_OAUTH_CODE_MAX];
-    snprintf(code_copy, sizeof code_copy, "%s", code->valuestring);
-    cJSON_Delete(begin);
-    wf_response_free(&response);
-
-    for (int attempt = 0; attempt < 360; attempt++) {
-        if (attempt != 0) svcSleepThread(1500000000LL);
-
-        wf_xrpc_param p = {"code", code_copy};
-        memset(&response, 0, sizeof response);
-        st = wf_xrpc_query_params(client, "uk.ewancroft.oauth.poll", &p, 1, &response);
-        if (st != WF_OK) {
-            wf_response_free(&response);
-            continue;
-        }
-
-        cJSON *poll = cJSON_ParseWithLength(response.body, response.body_len);
-        const cJSON *status = poll ? cJSON_GetObjectItemCaseSensitive(poll, "status") : NULL;
-        if (status && cJSON_IsString(status) && !strcmp(status->valuestring, "complete")) {
-            const cJSON *token = cJSON_GetObjectItemCaseSensitive(poll, "token");
-            const cJSON *handle = cJSON_GetObjectItemCaseSensitive(poll, "handle");
-            const cJSON *did = cJSON_GetObjectItemCaseSensitive(poll, "did");
-            const cJSON *service = cJSON_GetObjectItemCaseSensitive(poll, "service");
-
-            if (cJSON_IsString(token) && cJSON_IsString(handle) &&
-                cJSON_IsString(did) && cJSON_IsString(service)) {
-                drop_agent();
-                s_agent = new_agent(service->valuestring);
-                if (s_agent && wf_agent_set_bearer(s_agent, token->valuestring,
-                                                   handle->valuestring, did->valuestring) == WF_OK) {
-                    s_node_session = true;
-                    remember(service->valuestring);
-                    LightLock_Lock(&s_lock);
-                    s_pair_code[0] = '\0';
-                    s_pair_url[0] = '\0';
-                    LightLock_Unlock(&s_lock);
-                    wf_response_free(&response);
-                    cJSON_Delete(poll);
-                    wf_xrpc_client_free(client);
-                    publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, handle->valuestring);
-                    return;
-                }
-                drop_agent();
-            }
-            wf_response_free(&response);
-            cJSON_Delete(poll);
-            wf_xrpc_client_free(client);
-            publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
-            return;
-        }
-        if (status && cJSON_IsString(status) && !strcmp(status->valuestring, "error")) {
-            const cJSON *message = cJSON_GetObjectItemCaseSensitive(poll, "message");
-            indigo_log_warn("OAuth sign-in failed: %s",
-                            message && cJSON_IsString(message) ? message->valuestring : "unknown");
-            wf_response_free(&response);
-            cJSON_Delete(poll);
-            wf_xrpc_client_free(client);
-            LightLock_Lock(&s_lock);
-            s_pair_code[0] = '\0';
-            s_pair_url[0] = '\0';
-            LightLock_Unlock(&s_lock);
-            publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_SERVER, NULL);
-            return;
-        }
-        wf_response_free(&response);
-        cJSON_Delete(poll);
-    }
-
+    st = wf_oauth_pair_run(client, j->identifier, &hooks, &result);
     wf_xrpc_client_free(client);
-    LightLock_Lock(&s_lock);
-    s_pair_code[0] = '\0';
-    s_pair_url[0] = '\0';
-    LightLock_Unlock(&s_lock);
-    publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TIMEOUT, NULL);
+    clear_pairing();
+
+    if (st == WF_OK) {
+        drop_agent();
+        s_agent = new_agent(result.service);
+        if (s_agent &&
+            wf_agent_set_bearer(s_agent, result.token, result.handle, result.did) == WF_OK) {
+            char handle[WF_OAUTH_PAIR_HANDLE_MAX];
+
+            snprintf(handle, sizeof handle, "%s", result.handle);
+            s_node_session = true;
+            remember(result.service);
+            wf_oauth_pair_poll_wipe(&result);
+            publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, handle);
+            return;
+        }
+        drop_agent();
+        wf_oauth_pair_poll_wipe(&result);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
+        return;
+    }
+    if (st == WF_ERR_AUTH) {
+        /* The node's own message, e.g. "This pairing request expired." It is
+         * written for a person and carries no credential. */
+        indigo_log_warn("OAuth sign-in failed: %s",
+                        result.message[0] ? result.message : "unknown");
+        wf_oauth_pair_poll_wipe(&result);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_SERVER, NULL);
+        return;
+    }
+    wf_oauth_pair_poll_wipe(&result);
+    publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED,
+            st == WF_ERR_TIMEOUT ? INDIGO_FAIL_TIMEOUT
+            : st == WF_ERR_PARSE ? INDIGO_FAIL_BAD_RESPONSE
+                                 : classify(st),
+            NULL);
 }
 
 static void
