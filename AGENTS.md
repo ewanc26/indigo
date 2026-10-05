@@ -506,6 +506,20 @@ For development, 3dslink/netloader is a useful alternative to repeatedly removin
 
 If an icon is added, wire it through the standard `APP_ICON`/SMDH path supplied by `3ds_rules` rather than inventing an application-specific packaging format.
 
+### Self-update
+
+`docs/UPDATE.md` is the user-facing design and the research behind it. Rules:
+
+- Update only from this repository's GitHub releases: the manifest is `INDIGO_UPDATE_MANIFEST_URL`, and an asset URL must start with `indigo_update_asset_prefix(version)`. Never accept a host or path from anywhere else.
+- Manifest parsing, version ordering and SHA-256 are Wolfram's (wolfram#106). Do not write an Indigo copy. Adopt only after the Wolfram agent says "released", and pin the version.
+- Never update without the person confirming on screen, and never start a download before that.
+- Check the download's size and SHA-256 against the manifest in memory, write it to `.new`, then `indigo_update_stage()`, which re-hashes it from the card. Only then call `indigo_update_install()`, after `romfsExit()`, and exit straight afterwards.
+- `indigo_update_sd_recover()` runs in `main()` before `romfsInit()`. Recovery must never rename the file the running build was launched from (copy it), never delete the last copy of a build, and keep the backup until the new build has started from the target.
+- Any change to the swap or recovery needs a case in `test_update_survives_power_loss_anywhere`. Copies on the card go through a temporary and a rename, so the swap never sees half a `.3dsx`.
+- Log steps and versions only. No URL with a query string, no response body, nothing from the session.
+- `scripts/release.sh` produces the assets through `scripts/update-manifest.sh make`; `.github/workflows/release-assets.yml` verifies what GitHub serves. Keep the asset names stable.
+- A signature needs the owner's key. Never generate or commit a signing key.
+
 ## 20. Debugging
 
 Luma3DS/Rosalina is the preferred modern homebrew launch environment and provides facilities useful for development, including remote debugging.
