@@ -8,6 +8,11 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Browser sign-in now uses Wolfram's pairing client rather than Indigo's own
+  copy. The visible difference: if the sign-in node has forgotten the pairing
+  (it restarted), Indigo says so at once instead of polling for nine minutes.
+
 ### Added
 - Who liked a post and who reposted it, from the post menu, as paged lists of
   people with avatars, the same as followers. This was the one thing on
