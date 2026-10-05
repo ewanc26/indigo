@@ -1047,7 +1047,7 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
                                         : "Auto (follows system)";
     indigo_canvas_text(c, 18, 44, 0.65f, COL_TEXT, "Theme: %s", theme_str);
     indigo_canvas_text(c, 18, 66, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
-    indigo_canvas_text(c, 18, 88, 0.65f, COL_TEXT, "Reduce motion: %s",
+    indigo_canvas_text(c, 18, 88, 0.65f, COL_TEXT, "Reduce motion (reserved): %s",
                        s->reduce_motion ? "On" : "Off");
     indigo_canvas_text(c, 18, 110, 0.65f, COL_TEXT, "High contrast: %s",
                        s->high_contrast ? "On" : "Off");
