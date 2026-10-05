@@ -504,7 +504,7 @@ So a `.cia` buys a launcher icon in exchange for a Makefile rule, a tool that de
 
 For development, 3dslink/netloader is a useful alternative to repeatedly removing the SD card. Do not hot-swap the SD card while homebrew is running.
 
-If an icon is added, wire it through the standard `APP_ICON`/SMDH path supplied by `3ds_rules` rather than inventing an application-specific packaging format.
+The icon goes through the standard `APP_ICON`/SMDH path: `ICON := assets/icon.png` in the Makefile, plus an explicit `$(OUTPUT).smdh` rule that also passes `assets/icon-small.png` to `smdhtool`. Never hand-edit `assets/icon*.png` or `docs/logo.svg`; change `tools/gen_logo.py` and run it. CI runs `python3 tools/gen_logo.py --check`. A `.3dsx` carries no banner; do not add one without a CIA target.
 
 ### Self-update
 
