@@ -1,0 +1,20 @@
+name: Release check
+
+# A v* tag must have a CHANGELOG section, sit on main, and have a green
+# "CI gate" on that exact commit. Releases are cut with scripts/release.sh;
+# this is the backstop for a tag pushed by any other route.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag is releasable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-flow.sh release "${GITHUB_REF_NAME#v}" "$GITHUB_SHA"

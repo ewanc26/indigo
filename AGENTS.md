@@ -727,6 +727,21 @@ After editing:
 
 Prefer focused commits.
 
+### Change flow
+
+CONTRIBUTING.md is the written flow; these are the rules.
+
+- Never push to `main`. Branch from a fresh `origin/main` as `<type>/<kebab-name>`, open a pull request, merge with squash only when `CI gate` is green.
+- Types: `feat fix docs chore ci refactor test build ui perf release revert`. Commit subjects and PR titles are `type(scope): subject`, 100 characters at most.
+- The PR body is `.github/pull_request_template.md`: `## Summary` and `## Verification`. Verification states what ran and where; say "host only" without devkitARM.
+- Update AGENTS.md, README, `docs/` and CHANGELOG in the same PR as the change.
+- Run `scripts/check-flow.sh drift` and `scripts/check-flow-selftest.sh` before pushing. `CI gate` (`.github/workflows/ci.yml`) waits on `flow`, `host` and `build-3ds`; add any new mandatory job to its `needs`.
+- Doc drift: every `src/`, `scripts/`, `tools/`, `mk/`, `docs/`, `tests/` path and `make` target named in backticks in the docs must exist. Deliberate exceptions go in `scripts/flow-drift-allow.txt` with a reason.
+- Never weaken a check to make it pass. A new check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
+- Releases only through `scripts/release.sh`. `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
+- Branch protection (require `CI gate`, no direct pushes) is an owner setting; the agent cannot set it. It is tracked by a `needs-owner` issue.
+- Shared flow tooling may move to Wolfram as reusable workflows; Wolfram has none yet, so the scripts live here until it does.
+
 ## 28. Current state
 
 The current repository has:
