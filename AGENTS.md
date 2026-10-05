@@ -398,6 +398,16 @@ nothing to act on yet: Indigo draws no animation.
 `indigo_app_init` calls `indigo_settings_defaults` because its `memset` leaves
 `text_scale` at 0, which is not one of the valid scales.
 
+### Drafts
+
+`store/draft_store` keeps the unsent compose text in `draft.dat`: a versioned,
+length-prefixed file with an `end` marker, so a truncated write is detected
+rather than loaded as half a post. `main.c` restores it into the compose buffer
+at startup (the existing "Draft kept from earlier." note then tells the person)
+and saves whenever the text changes; an empty draft removes the file. A damaged
+file is moved to `.bad`, never deleted. Nothing is ever sent without the person
+pressing send. Only the text is persisted, not what it was replying to.
+
 ## 15. Offline behaviour
 
 Separate:

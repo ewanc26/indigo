@@ -8,6 +8,7 @@
 #include "util/log.h"
 #include "store/session_store.h"
 #include "store/settings_codec.h"
+#include "store/draft_store.h"
 #include "store/settings_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
@@ -1045,6 +1046,75 @@ test_settings_codec(void)
     CHECK(indigo_settings_decode(buf, len, &out) == INDIGO_CODEC_OK);
     CHECK(out.theme == INDIGO_THEME_AUTO);
     CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
+}
+
+static void
+test_draft_store(void)
+{
+    char buf[2048];
+    char out[1024];
+    char dir[64], path[256], bad[300], cmd[300];
+    size_t len = 0;
+    const char *text = "Line one\nline two with \xc3\xa9 and \xf0\x9f\x98\x80";
+
+    /* Round trip, including newlines and multibyte text. */
+    CHECK(indigo_draft_encode(text, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_draft_decode(buf, len, out, sizeof out) == INDIGO_CODEC_OK);
+    CHECK(strcmp(out, text) == 0);
+
+    /* Every strict prefix is refused and leaves out alone. */
+    for (size_t n = 0; n < len; n++) {
+        strcpy(out, "sentinel");
+        CHECK(indigo_draft_decode(buf, n, out, sizeof out) != INDIGO_CODEC_OK);
+        CHECK(strcmp(out, "sentinel") == 0);
+    }
+    CHECK(indigo_draft_decode("indigo-draft 2\nlen=1\nx\nend\n", 27, out, sizeof out) ==
+          INDIGO_CODEC_BAD_VERSION);
+    CHECK(indigo_draft_decode("garbage that is not a draft", 27, out, sizeof out) ==
+          INDIGO_CODEC_CORRUPT);
+    /* A declared length larger than the buffer is refused, not trusted. */
+    CHECK(indigo_draft_decode("indigo-draft 1\nlen=999999\n", 27, out, 16) ==
+          INDIGO_CODEC_TOO_BIG);
+    CHECK(indigo_draft_encode("0123456789", buf, 20, &len) == INDIGO_CODEC_TOO_BIG);
+
+    snprintf(dir, sizeof dir, "build-host/draft-test");
+    snprintf(cmd, sizeof cmd, "rm -rf %s && mkdir -p %s", dir, dir);
+    CHECK(system(cmd) == 0);
+    snprintf(path, sizeof path, "%s/draft.dat", dir);
+    snprintf(bad, sizeof bad, "%s.bad", path);
+
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+    CHECK(out[0] == '\0');
+    CHECK(indigo_draft_store_save(path, text) == INDIGO_STORE_OK);
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_OK);
+    CHECK(strcmp(out, text) == 0);
+
+    /* An empty draft removes the file, and removing nothing is not an error. */
+    CHECK(indigo_draft_store_save(path, "") == INDIGO_STORE_OK);
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+    CHECK(indigo_draft_store_save(path, "") == INDIGO_STORE_OK);
+
+    /* A damaged file is moved aside, not deleted, and loads as empty. */
+    {
+        FILE *f = fopen(path, "wb");
+
+        CHECK(f != NULL);
+        if (f) {
+            fputs("indigo-draft 1\nlen=50\nshort", f);
+            fclose(f);
+        }
+    }
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_UNREADABLE);
+    CHECK(out[0] == '\0');
+    {
+        FILE *f = fopen(bad, "rb");
+
+        CHECK(f != NULL);
+        if (f) {
+            fclose(f);
+        }
+    }
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
 }
 
 static void
@@ -4274,6 +4344,7 @@ main(void)
     test_settings_defaults_and_clamp();
     test_settings_codec();
     test_settings_store();
+    test_draft_store();
     test_settings_reach_the_app();
     test_failures();
     test_log_file();
