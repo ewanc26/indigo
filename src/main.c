@@ -7,6 +7,7 @@
 #include "store/draft_store.h"
 #include "store/settings_store.h"
 #include "ui/ui.h"
+#include "update/update_sd.h"
 #include "util/log.h"
 
 #include <3ds.h>
@@ -19,6 +20,7 @@
 #define SESSION_PATH DATA_DIR "/session.dat"
 #define SETTINGS_PATH DATA_DIR "/settings.dat"
 #define DRAFT_PATH DATA_DIR "/draft.dat"
+#define UPDATE_STATE_PATH DATA_DIR "/update.state"
 #define AUTOFILL_PATH DATA_DIR "/autofill.txt"
 #define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
 
@@ -447,7 +449,7 @@ dev_autofill(indigo_app *app)
 #endif
 
 int
-main(void)
+main(int argc, char **argv)
 {
     indigo_log_init();
     mkdir("sdmc:/3ds", 0777);
@@ -465,6 +467,10 @@ main(void)
     if (settings.diagnostics && !indigo_log_open_file(LOG_PATH)) {
         indigo_log_warn("no log file; continuing with stderr only");
     }
+
+    /* Before RomFS is mounted: recovery may have to move the .3dsx that RomFS
+     * reads from. argv[0] is the path the Homebrew Menu launched. */
+    indigo_update_sd_recover(argc > 0 ? argv[0] : NULL, UPDATE_STATE_PATH);
 
     gfxInitDefault();
     romfsInit();

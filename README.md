@@ -47,6 +47,8 @@ Each release is a tag on this repository with the `.3dsx` attached. The changelo
 
 Sign-in has two flows, and the second is not a replacement for the first. With an app password, it takes a service URL (default `https://bsky.social`), a handle and the app password, and follows the account's PDS; that is the one I have run on an emulator. With an empty password it starts browser sign-in through a hosted Wolfram OAuth node, and then the service URL has to be that node, because bsky.social does not serve the pairing calls. The OAuth flow has not been run on a host test, an emulator or hardware. The state of every feature against Cobalt is in [docs/PARITY.md](docs/PARITY.md). The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
+Updating from inside Indigo is half built: releases now carry what the updater reads, and an interrupted update is finished or undone at start-up, but the screen that offers an update waits on Wolfram. Until then, copy the new `indigo.3dsx` over the old one. The design, and what I checked to arrive at it, is in [docs/UPDATE.md](docs/UPDATE.md).
+
 Development and verification happen on the host and on an emulator; nothing here has been tested on real 3DS hardware. Sound, sleep, the HOME menu, the icon and the banner are untouched.
 
 ### Emulator sign-in autofill

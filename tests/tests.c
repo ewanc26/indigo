@@ -16,6 +16,7 @@
 #include "ui/wrap.h"
 #include "util/buildinfo.h"
 #include "util/timefmt.h"
+#include "update/update.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -4369,6 +4370,449 @@ test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
     CHECK(c.slots[0].state == INDIGO_MEDIA_EMPTY);
 }
 
+/* ---- Self-update: release identity, URL prefix, journal, swap ----------- */
+
+static void
+test_update_release_of(void)
+{
+    char v[INDIGO_UPDATE_VERSION_MAX];
+    bool dev = true;
+
+    CHECK(indigo_update_release_of("v0.5.0", v, sizeof v, &dev) && !strcmp(v, "0.5.0") && !dev);
+    CHECK(indigo_update_release_of("0.10.2", v, sizeof v, &dev) && !strcmp(v, "0.10.2") && !dev);
+    CHECK(indigo_update_release_of("v0.5.0-3-gabc1234", v, sizeof v, &dev) && !strcmp(v, "0.5.0") &&
+          dev);
+    CHECK(indigo_update_release_of("v0.5.0-dirty", v, sizeof v, &dev) && dev);
+    CHECK(indigo_update_release_of("v0.5.0-12-g0123abcd-dirty", v, sizeof v, &dev) && dev);
+    /* What describe --always gives with no tag, and other things that are not
+     * a release. */
+    CHECK(!indigo_update_release_of("abc1234", v, sizeof v, &dev) && v[0] == '\0');
+    CHECK(!indigo_update_release_of("unknown", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0.1", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v01.5.0", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0-rc.1", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0-3-gXYZ", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0-3", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0 ", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v99999.0.0", v, sizeof v, &dev));
+    CHECK(!indigo_update_release_of("v0.5.0", v, 5, &dev));
+    CHECK(!indigo_update_release_of(NULL, v, sizeof v, &dev));
+}
+
+static void
+test_update_asset_prefix(void)
+{
+    char url[INDIGO_UPDATE_URL_MAX];
+
+    CHECK(indigo_update_asset_prefix("0.6.0", url, sizeof url));
+    CHECK(!strcmp(url, "https://github.com/ewanc26/indigo/releases/download/v0.6.0/"));
+    /* Only a plain release number: nothing that could add path segments. */
+    CHECK(!indigo_update_asset_prefix("v0.6.0", url, sizeof url));
+    CHECK(!indigo_update_asset_prefix("0.6.0-1-gabcd", url, sizeof url));
+    CHECK(!indigo_update_asset_prefix("0.6.0/../../evil", url, sizeof url));
+    CHECK(!indigo_update_asset_prefix("", url, sizeof url));
+    CHECK(!indigo_update_asset_prefix("0.6.0", url, 20));
+    CHECK(!strcmp(INDIGO_UPDATE_MANIFEST_URL,
+                  "https://github.com/ewanc26/indigo/releases/latest/download/update.json"));
+}
+
+static void
+test_update_paths(void)
+{
+    indigo_update_paths p;
+
+    CHECK(indigo_update_paths_from("sdmc:/3ds/indigo.3dsx", "sdmc:/3ds/indigo/update.state", &p));
+    CHECK(!strcmp(p.target, "sdmc:/3ds/indigo.3dsx"));
+    CHECK(!strcmp(p.staged, "sdmc:/3ds/indigo.3dsx.new"));
+    CHECK(!strcmp(p.backup, "sdmc:/3ds/indigo-previous.3dsx"));
+    CHECK(!strcmp(p.state, "sdmc:/3ds/indigo/update.state"));
+    CHECK(indigo_update_paths_from("sdmc:/3ds/indigo/indigo.3dsx", "s", &p));
+    CHECK(!strcmp(p.backup, "sdmc:/3ds/indigo/indigo-previous.3dsx"));
+    /* Not from the SD card, not a .3dsx, or no argv at all: no self-update. */
+    CHECK(!indigo_update_paths_from("3dslink:/indigo.3dsx", "s", &p));
+    CHECK(!indigo_update_paths_from("sdmc:/3ds/indigo.cia", "s", &p));
+    CHECK(!indigo_update_paths_from("", "s", &p));
+    CHECK(!indigo_update_paths_from(NULL, "s", &p));
+    CHECK(!indigo_update_paths_from("sdmc:/.3dsx", "s", &p));
+    CHECK(!indigo_update_paths_from("sdmc:/3ds/../x/indigo.3dsx", "s", &p));
+}
+
+static void
+test_update_state_codec(void)
+{
+    indigo_update_state s;
+    indigo_update_state back;
+    char buf[256];
+    size_t len = 0;
+
+    memset(&s, 0, sizeof s);
+    s.phase = INDIGO_UPDATE_PHASE_SWAPPING;
+    strcpy(s.version, "0.6.0");
+    for (int i = 0; i < 32; i++) {
+        s.sha256[i] = (unsigned char) (i * 7);
+    }
+    CHECK(indigo_update_state_encode(&s, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_update_state_decode(buf, len, &back) == INDIGO_CODEC_OK);
+    CHECK(back.phase == s.phase && !strcmp(back.version, "0.6.0") &&
+          !memcmp(back.sha256, s.sha256, 32));
+    /* Every truncation is detected rather than loaded. */
+    for (size_t cut = 0; cut < len; cut++) {
+        CHECK(indigo_update_state_decode(buf, cut, &back) != INDIGO_CODEC_OK);
+    }
+    CHECK(indigo_update_state_decode("", 0, &back) == INDIGO_CODEC_EMPTY);
+    {
+        static const char bad_phase[] = "indigo-update-state 1\nphase=done\nversion=0.6.0\nsha256="
+                                        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\nend\n";
+        static const char upper[] = "indigo-update-state 1\nphase=staged\nversion=0.6.0\nsha256="
+                                    "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F\nend\n";
+        static const char dup[] = "indigo-update-state 1\nphase=staged\nphase=staged\nversion=0.6.0\nsha256="
+                                  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\nend\n";
+        static const char devver[] = "indigo-update-state 1\nphase=staged\nversion=0.6.0-1-gabcd\nsha256="
+                                     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\nend\n";
+        CHECK(indigo_update_state_decode(bad_phase, sizeof bad_phase - 1, &back) == INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_update_state_decode(upper, sizeof upper - 1, &back) == INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_update_state_decode(dup, sizeof dup - 1, &back) == INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_update_state_decode(devver, sizeof devver - 1, &back) == INDIGO_CODEC_CORRUPT);
+    }
+    s.phase = INDIGO_UPDATE_PHASE_NONE;
+    CHECK(indigo_update_state_encode(&s, buf, sizeof buf, &len) == INDIGO_CODEC_CORRUPT);
+    s.phase = INDIGO_UPDATE_PHASE_STAGED;
+    CHECK(indigo_update_state_encode(&s, buf, 20, &len) == INDIGO_CODEC_TOO_BIG);
+}
+
+/* A fake SD card. Files hold a short label ("old", "new", "bad"); a file's
+ * "hash" is its label zero-padded to 32 bytes, which is all the swap needs to
+ * tell builds apart. `budget` is how many more writes succeed before the
+ * console "loses power": after that every write fails and changes nothing. */
+#define FAKE_FILES 8
+typedef struct {
+    char name[INDIGO_UPDATE_PATH_MAX];
+    char data[256];
+    size_t len;
+    bool used;
+} fake_file;
+
+typedef struct {
+    fake_file files[FAKE_FILES];
+    int budget; /* -1 = unlimited */
+    int writes;
+} fake_sd;
+
+static fake_file *
+fake_find(fake_sd *sd, const char *name)
+{
+    for (int i = 0; i < FAKE_FILES; i++) {
+        if (sd->files[i].used && !strcmp(sd->files[i].name, name)) {
+            return &sd->files[i];
+        }
+    }
+    return NULL;
+}
+
+static bool
+fake_spend(fake_sd *sd)
+{
+    if (sd->budget == 0) {
+        return false;
+    }
+    if (sd->budget > 0) {
+        sd->budget--;
+    }
+    sd->writes++;
+    return true;
+}
+
+static void
+fake_put(fake_sd *sd, const char *name, const char *data, size_t len)
+{
+    fake_file *f = fake_find(sd, name);
+    for (int i = 0; !f && i < FAKE_FILES; i++) {
+        if (!sd->files[i].used) {
+            f = &sd->files[i];
+        }
+    }
+    if (!f) {
+        return;
+    }
+    f->used = true;
+    snprintf(f->name, sizeof f->name, "%s", name);
+    memcpy(f->data, data, len);
+    f->len = len;
+}
+
+static const char *
+fake_label(fake_sd *sd, const char *name)
+{
+    fake_file *f = fake_find(sd, name);
+    static char out[256];
+    if (!f) {
+        return NULL;
+    }
+    memcpy(out, f->data, f->len);
+    out[f->len] = '\0';
+    return out;
+}
+
+static bool
+fake_exists(void *ctx, const char *path)
+{
+    return fake_find(ctx, path) != NULL;
+}
+
+static bool
+fake_rename(void *ctx, const char *from, const char *to)
+{
+    fake_sd *sd = ctx;
+    fake_file *f = fake_find(sd, from);
+    if (!f || fake_find(sd, to) || !fake_spend(sd)) {
+        return false; /* FAT rename does not overwrite */
+    }
+    snprintf(f->name, sizeof f->name, "%s", to);
+    return true;
+}
+
+static bool
+fake_remove(void *ctx, const char *path)
+{
+    fake_sd *sd = ctx;
+    fake_file *f = fake_find(sd, path);
+    if (!f || !fake_spend(sd)) {
+        return false;
+    }
+    f->used = false;
+    return true;
+}
+
+/* The 3DS copy writes a temporary and renames it, so it is all or nothing. */
+static bool
+fake_copy(void *ctx, const char *from, const char *to)
+{
+    fake_sd *sd = ctx;
+    fake_file *f = fake_find(sd, from);
+    if (!f || fake_find(sd, to) || !fake_spend(sd)) {
+        return false;
+    }
+    fake_put(sd, to, f->data, f->len);
+    return true;
+}
+
+static void
+fake_digest(const char *label, size_t len, unsigned char out[32])
+{
+    memset(out, 0, 32);
+    memcpy(out, label, len < 32 ? len : 32);
+}
+
+static bool
+fake_sha256(void *ctx, const char *path, unsigned char out[32])
+{
+    fake_file *f = fake_find(ctx, path);
+    if (!f) {
+        return false;
+    }
+    fake_digest(f->data, f->len, out);
+    return true;
+}
+
+static bool
+fake_write_state(void *ctx, const char *path, const indigo_update_state *s)
+{
+    fake_sd *sd = ctx;
+    char buf[256];
+    size_t len = 0;
+    if (indigo_update_state_encode(s, buf, sizeof buf, &len) != INDIGO_CODEC_OK || !fake_spend(sd)) {
+        return false;
+    }
+    fake_put(sd, path, buf, len);
+    return true;
+}
+
+static bool
+fake_read_state(void *ctx, const char *path, indigo_update_state *s)
+{
+    fake_file *f = fake_find(ctx, path);
+    return f && indigo_update_state_decode(f->data, f->len, s) == INDIGO_CODEC_OK;
+}
+
+static indigo_update_fs
+fake_fs(fake_sd *sd)
+{
+    indigo_update_fs fs = {sd,          fake_exists, fake_rename,      fake_remove,
+                           fake_copy,   fake_sha256, fake_write_state, fake_read_state};
+    return fs;
+}
+
+static void
+fake_setup(fake_sd *sd, indigo_update_paths *p, const char *staged_label)
+{
+    memset(sd, 0, sizeof *sd);
+    sd->budget = -1;
+    CHECK(indigo_update_paths_from("sdmc:/3ds/indigo.3dsx", "sdmc:/3ds/indigo/update.state", p));
+    fake_put(sd, p->target, "old", 3);
+    fake_put(sd, p->staged, staged_label, strlen(staged_label));
+}
+
+/* Which build the person can launch, the way the Homebrew Menu would find it:
+ * the target if it is there, otherwise the backup. NULL means nothing. */
+static const char *
+fake_boot(fake_sd *sd, const indigo_update_paths *p, const char **path, const char **version)
+{
+    const char *label = fake_label(sd, p->target);
+    *path = p->target;
+    if (!label) {
+        label = fake_label(sd, p->backup);
+        *path = p->backup;
+    }
+    if (!label) {
+        return NULL;
+    }
+    *version = !strcmp(label, "new") ? "0.6.0" : "0.5.0";
+    return label;
+}
+
+static void
+test_update_stage_verifies_from_disk(void)
+{
+    fake_sd sd;
+    indigo_update_paths p;
+    indigo_update_fs fs;
+    unsigned char want[32];
+
+    fake_setup(&sd, &p, "bad");
+    fs = fake_fs(&sd);
+    fake_digest("new", 3, want);
+    /* The bytes on the card are not the release: refused and removed. */
+    CHECK(indigo_update_stage(&fs, &p, "0.6.0", want) == INDIGO_UPDATE_NOT_STAGED);
+    CHECK(!fake_exists(&sd, p.staged));
+    CHECK(!fake_exists(&sd, p.state));
+    CHECK(indigo_update_install(&fs, &p) == INDIGO_UPDATE_NOT_STAGED);
+    CHECK(!strcmp(fake_label(&sd, p.target), "old"));
+    /* A dev version is never staged. */
+    fake_put(&sd, p.staged, "new", 3);
+    CHECK(indigo_update_stage(&fs, &p, "0.6.0-1-gabcd", want) == INDIGO_UPDATE_NOT_STAGED);
+}
+
+static void
+test_update_install_happy_path(void)
+{
+    fake_sd sd;
+    indigo_update_paths p;
+    indigo_update_fs fs;
+    unsigned char want[32];
+
+    fake_setup(&sd, &p, "new");
+    fs = fake_fs(&sd);
+    fake_digest("new", 3, want);
+    CHECK(indigo_update_stage(&fs, &p, "0.6.0", want) == INDIGO_UPDATE_OK);
+    CHECK(indigo_update_install(&fs, &p) == INDIGO_UPDATE_OK);
+    CHECK(!strcmp(fake_label(&sd, p.target), "new"));
+    CHECK(!strcmp(fake_label(&sd, p.backup), "old"));
+    CHECK(!fake_exists(&sd, p.staged));
+    /* The old build is launched from its backup: it waits, keeps everything. */
+    CHECK(indigo_update_recover(&fs, &p, "0.5.0", p.backup) == INDIGO_RECOVER_WAITING);
+    CHECK(fake_exists(&sd, p.backup));
+    /* The new build boots from the target: the backup goes. */
+    CHECK(indigo_update_recover(&fs, &p, "0.6.0", p.target) == INDIGO_RECOVER_CONFIRMED);
+    CHECK(!fake_exists(&sd, p.backup) && !fake_exists(&sd, p.state));
+    CHECK(indigo_update_recover(&fs, &p, "0.6.0", p.target) == INDIGO_RECOVER_NOTHING);
+}
+
+/* Pull the power after every possible number of writes, in the install and
+ * then in each recovery after it, and require that (a) there is always a
+ * build to launch, (b) only "old" or the verified "new" is ever at the target,
+ * and (c) a few clean boots later the card is tidy. */
+static void
+test_update_survives_power_loss_anywhere(void)
+{
+    for (int k = 0; k < 8; k++) {
+        for (int r = 0; r < 4; r++) {
+            fake_sd sd;
+            indigo_update_paths p;
+            indigo_update_fs fs;
+            unsigned char want[32];
+            const char *path;
+            const char *version = NULL;
+            const char *label;
+            bool installed;
+
+            fake_setup(&sd, &p, "new");
+            fs = fake_fs(&sd);
+            fake_digest("new", 3, want);
+            CHECK(indigo_update_stage(&fs, &p, "0.6.0", want) == INDIGO_UPDATE_OK);
+            sd.budget = k;
+            installed = indigo_update_install(&fs, &p) == INDIGO_UPDATE_OK;
+            CHECK(installed == (k >= 4));
+
+            for (int boot = 0; boot < 6; boot++) {
+                label = fake_boot(&sd, &p, &path, &version);
+                CHECK(label != NULL);
+                if (!label) {
+                    break;
+                }
+                CHECK(!strcmp(label, "old") || !strcmp(label, "new"));
+                /* The first recovery is itself interrupted after r writes. */
+                sd.budget = boot == 0 ? r : -1;
+                indigo_update_recover(&fs, &p, version, path);
+            }
+            label = fake_boot(&sd, &p, &path, &version);
+            CHECK(label && !strcmp(path, p.target));
+            CHECK(!fake_exists(&sd, p.staged));
+            CHECK(!fake_exists(&sd, p.state));
+            CHECK(!fake_exists(&sd, p.backup));
+            if (installed) {
+                CHECK(label && !strcmp(label, "new"));
+            }
+        }
+    }
+}
+
+static void
+test_update_recover_rejects_a_damaged_staged_file(void)
+{
+    fake_sd sd;
+    indigo_update_paths p;
+    indigo_update_fs fs;
+    indigo_update_state s;
+
+    /* Journal says swapping, the target has moved, and the staged file is not
+     * the release the journal names: the old build goes back. */
+    fake_setup(&sd, &p, "bad");
+    fs = fake_fs(&sd);
+    memset(&s, 0, sizeof s);
+    s.phase = INDIGO_UPDATE_PHASE_SWAPPING;
+    strcpy(s.version, "0.6.0");
+    fake_digest("new", 3, s.sha256);
+    CHECK(fake_write_state(&sd, p.state, &s));
+    CHECK(fake_rename(&sd, p.target, p.backup));
+    /* Launched from the backup: it is copied, never moved out from under the
+     * running build. */
+    CHECK(indigo_update_recover(&fs, &p, "0.5.0", p.backup) == INDIGO_RECOVER_RESTORED_BACKUP);
+    CHECK(!strcmp(fake_label(&sd, p.target), "old"));
+    CHECK(fake_exists(&sd, p.backup));
+    CHECK(!fake_exists(&sd, p.staged) && !fake_exists(&sd, p.state));
+}
+
+static void
+test_update_recover_without_a_journal(void)
+{
+    fake_sd sd;
+    indigo_update_paths p;
+    indigo_update_fs fs;
+
+    /* A stray staged file and a damaged journal: the file goes, the target and
+     * any backup are left alone. */
+    fake_setup(&sd, &p, "new");
+    fs = fake_fs(&sd);
+    fake_put(&sd, p.state, "garbage", 7);
+    fake_put(&sd, p.backup, "old", 3);
+    CHECK(indigo_update_recover(&fs, &p, "0.5.0", p.target) == INDIGO_RECOVER_DISCARDED_STAGED);
+    CHECK(!fake_exists(&sd, p.staged) && !fake_exists(&sd, p.state));
+    CHECK(fake_exists(&sd, p.target) && fake_exists(&sd, p.backup));
+    CHECK(indigo_update_recover(&fs, &p, NULL, p.target) == INDIGO_RECOVER_NOTHING);
+}
+
 int
 main(void)
 {
@@ -4465,6 +4909,16 @@ main(void)
     test_image_viewer_is_entered_and_left_the_way_the_app_does();
     test_image_button_takes_the_status_line();
     test_media_forget_lets_the_viewer_decode_at_its_own_size();
+
+    test_update_release_of();
+    test_update_asset_prefix();
+    test_update_paths();
+    test_update_state_codec();
+    test_update_stage_verifies_from_disk();
+    test_update_install_happy_path();
+    test_update_survives_power_loss_anywhere();
+    test_update_recover_rejects_a_damaged_staged_file();
+    test_update_recover_without_a_journal();
 
     printf("%d checks, %d failures\n", s_checks, s_failures);
     return s_failures ? 1 : 0;

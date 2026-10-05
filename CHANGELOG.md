@@ -4,6 +4,16 @@ All notable changes to Indigo are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `scripts/release.sh`
 publishes the section matching the version you pass it.
 
+## [Unreleased]
+
+### Added
+- The groundwork for updating from inside Indigo (docs/UPDATE.md). Each release
+  now carries `update.json`, a versioned `indigo-<version>.3dsx` and its
+  `.sha256`, and a workflow checks what GitHub serves against them. At start-up
+  Indigo finishes or undoes an update that was interrupted, keeping the old
+  build until the new one has started. The screen that offers an update is not
+  in yet; it waits on Wolfram's shared update module.
+
 ## [0.5.0] - 2026-10-04
 
 ### Added

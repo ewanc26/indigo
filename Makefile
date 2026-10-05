@@ -33,7 +33,7 @@ include $(DEVKITARM)/3ds_rules
 TARGET := indigo
 BUILD := build
 
-SOURCES := src src/app src/ui src/input src/atproto src/store src/util src/gfx src/media
+SOURCES := src src/app src/ui src/input src/atproto src/store src/util src/gfx src/media src/update
 DATA :=
 ROMFS := romfs
 INCLUDES := src
