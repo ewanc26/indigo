@@ -3,7 +3,7 @@ name: Release assets
 # Check what GitHub actually serves for a published release: the versioned
 # .3dsx matches its .sha256 and update.json, and indigo.3dsx is the same file.
 # This is what the console's updater will download, so a release that fails
-# here must be fixed (re-uploaded by scripts/release.sh), not left.
+# here must be fixed with a new patch release, never by re-tagging.
 on:
   release:
     types: [published]

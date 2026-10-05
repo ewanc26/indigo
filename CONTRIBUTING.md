@@ -21,4 +21,4 @@ Branch protection, meaning requiring those two checks and allowing rebase merges
 
 ## Releasing
 
-Releases are cut only with `scripts/release.sh <version>`, from a clean, up-to-date `main`, with a `## [<version>]` section already in `CHANGELOG.md`. The `Release check` workflow fails a `v*` tag that has no changelog section, is not on `main`, or has no green `CI gate` on its commit. `Release assets` then checks what GitHub serves against `update.json`.
+Every pull request adds its entry to `CHANGELOG.md` under `## [Unreleased]`. A release is a pull request that turns that section into `## [<version>] - <date>`, followed by `scripts/release.sh <version>` on `main`. That script only checks and tags. The `Release` workflow builds from the tag against the Wolfram release in `wolfram.ref`, publishes the release with the update assets, and checks what GitHub serves. A tag that has no changelog section, is not on `main`, or has no green `CI gate` on its commit does not get a release.

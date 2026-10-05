@@ -1,0 +1,94 @@
+name: Release
+
+# A v* tag, pushed by scripts/release.sh, becomes a GitHub release. Every step
+# a release needs is here, so nothing is built or uploaded from anyone's
+# machine. The tag is never moved: a wrong release is fixed by a new patch.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Release check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag is releasable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The tag and main's own CI run start together; wait for the gate.
+          RELEASE_WAIT_SECONDS: "1500"
+        run: scripts/check-flow.sh release "${GITHUB_REF_NAME#v}" "$GITHUB_SHA"
+
+  build:
+    name: Build release assets
+    needs: check
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: indigo
+          fetch-depth: 0
+      - name: Wolfram pin
+        id: wolfram
+        run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: ewanc26/wolfram
+          ref: ${{ steps.wolfram.outputs.ref }}
+          path: wolfram
+      - name: Build Wolfram for 3DS
+        working-directory: indigo
+        run: make wolfram-3ds
+      - name: Build Indigo from the tag
+        working-directory: indigo
+        run: |
+          git config --global --add safe.directory "$PWD"
+          make
+          test -f indigo.3dsx
+      - name: Update assets
+        working-directory: indigo
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          scripts/update-manifest.sh make "$v" indigo.3dsx release
+          cp indigo.3dsx release/indigo.3dsx
+          scripts/update-manifest.sh verify "$v" release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: indigo/release/
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          scripts/release-notes.sh "$v" > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Indigo $v" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json
+      - name: Verify what GitHub serves
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir served
+          gh release download "$GITHUB_REF_NAME" --dir served
+          scripts/update-manifest.sh verify "${GITHUB_REF_NAME#v}" served

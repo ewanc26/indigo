@@ -47,10 +47,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: indigo
+      # Indigo builds against the Wolfram release named in wolfram.ref, never
+      # Wolfram's main. Bumping it is a PR like any other.
+      - name: Wolfram pin
+        id: wolfram
+        run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: ewanc26/wolfram
-          ref: main
+          ref: ${{ steps.wolfram.outputs.ref }}
           path: wolfram
       - name: Build Wolfram for 3DS
         working-directory: indigo

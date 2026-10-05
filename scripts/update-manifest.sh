@@ -9,7 +9,7 @@
 #   indigo-<version>.3dsx.sha256   sha256sum format
 #   update.json                    the manifest in the wolfram#106 shape
 # `verify` checks a directory of downloaded assets against each other and
-# fails on any mismatch. release.sh runs `make`; the Release assets workflow
+# fails on any mismatch. The Release workflow runs both; the Release assets workflow
 # runs `verify` on what GitHub actually serves.
 set -euo pipefail
 
