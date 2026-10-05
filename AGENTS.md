@@ -748,22 +748,39 @@ Prefer focused commits.
 
 ### Change flow
 
-CONTRIBUTING.md is the written flow; these are the rules.
+The shared rules are the canonical block below, copied byte for byte from Wolfram (`flow / drift` fails if it differs). Indigo's own rules follow it.
 
-- Never push to `main`. Branch from a fresh `origin/main` as `<type>/<kebab-name>`, open a pull request, merge with **rebase** (`merge_method: rebase`) only when `CI gate` is green.
-- Every commit lands on `main` unchanged: each must be a standalone conventional commit that builds and passes `make test`. Write review fixes as new `fix(scope): ...` commits.
-- Never merge `main` into a PR branch; `scripts/check-flow.sh merges` fails a PR containing a merge commit. If a PR cannot be rebased cleanly, cut a fresh branch from `origin/main`, cherry-pick, open a new PR linking the old one, and close the old one with a comment. Never force-push.
-- Types: `feat fix docs chore ci refactor test build ui perf release revert`. Commit subjects and PR titles are `type(scope): subject`, 100 characters at most.
-- The PR body is `.github/pull_request_template.md`: `## Summary` and `## Verification`. Verification states what ran and where; say "host only" without devkitARM.
-- Update AGENTS.md, README, `docs/` and CHANGELOG in the same PR as the change.
-- Run `scripts/check-flow.sh drift` and `scripts/check-flow-selftest.sh` before pushing. `CI gate` (`.github/workflows/ci.yml`) waits on `flow`, `host` and `build-3ds`; add any new mandatory job to its `needs`.
+<!-- flow:begin -->
+## Unified flow (canonical: ewanc26/wolfram, docs/flow.md)
+
+This block is byte-identical in every repo of the stack and is drift-checked by CI. Do not edit a copy; change it by PR to wolfram, then copy it out.
+
+- Branch from main as `<type>/<slug>`. Types: feat fix docs ci chore refactor test perf build ui release (titles and commits also allow revert). Slug: lowercase `a-z 0-9 . _ -`.
+- Commit subjects and PR titles are Conventional Commits: `type(scope): summary`. Keep commits focused. Never push an empty commit.
+- Agent commits end with the `Co-Authored-By:` and `Claude-Session:` trailers the session supplies. PR descriptions use `.github/PULL_REQUEST_TEMPLATE.md` (What this changes, Verification, Docs) and end with the session link.
+- Nothing goes straight to main. Branch, open a PR, wait for green CI, merge the PR with a rebase merge (never squash, never a merge commit). Required checks: `CI gate` and `flow / conventions`.
+- A rebase merge lands every commit on main as written, so each commit stands alone: a conventional subject, builds, passes tests. Write review fixes as real conventional commits (`fix(scope): ...`), never "address review".
+- Never force-push, so a PR branch is never rebased locally, and never merge main into a PR branch (a merge commit breaks the rebase merge; the flow check fails it). If a PR is behind or conflicted and GitHub can still rebase-merge it cleanly, merge it once CI is green on the current head. Otherwise cut a fresh branch from main, cherry-pick the commits, open a new PR linking the old one, and close the old one with a comment.
+- Never merge red. Never force-push. Never skip, disable or delete a test to get green: read the job log, reproduce, fix the root cause, wait, repeat. A red main is fixed before anything else.
+- Update AGENTS.md, README and docs/ in the same PR as the change. AGENTS.md is imperative and exact; README and docs are user-facing prose.
+- State exactly what was verified and where (host, emulator, hardware). Never claim hardware you did not use.
+- Releases go through the repo's own release script only, and only after every consumer in the stack has been verified against the change.
+- Anything only the owner can supply (credentials, hardware results, money, irreversible actions): file an issue labelled `needs-owner` and move on.
+- READMEs and logos follow `docs/house-style.md` (wolfram), checked by `flow / style`.
+- No secrets in the repo or its CI. No Vercel. No registry publishing.
+<!-- flow:end -->
+
+Indigo-specific rules:
+
+- Required checks are `CI gate` (`.github/workflows/ci.yml`, waits on `checks`, `host` and `build-3ds`; add any new mandatory job to its `needs`) and `flow / conventions` (`.github/workflows/flow.yml`, Wolfram's reusable workflow). Never edit `.github/PULL_REQUEST_TEMPLATE.md` or the block above here; change them in Wolfram and copy them out.
+- Run `scripts/check-flow.sh drift`, `scripts/check-flow.sh protocol` and `scripts/check-flow-selftest.sh` before pushing.
 - Protocol guard: `scripts/check-flow.sh protocol` rejects raw `com.atproto.*`, `app.bsky.*` and `uk.ewancroft.*` method strings in `src/` unless listed with a reason in `scripts/flow-protocol-allow.txt`. Shared logic goes to Wolfram; duplication with Cobalt is tracked in #20.
 - Doc drift: every `src/`, `scripts/`, `tools/`, `mk/`, `docs/`, `tests/` path and `make` target named in backticks in the docs must exist. Deliberate exceptions go in `scripts/flow-drift-allow.txt` with a reason.
-- Never weaken a check to make it pass. A new check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
+- Never weaken a check to make it pass. A new Indigo check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
+- Update CHANGELOG under `## [Unreleased]` in the same PR as a user-visible change.
 - Issues, issue titles and issue comments are written in the first person, in the owner's voice (plain British English, dry, specific: "I've found", "I want", never "This issue tracks"). End each with exactly `_Written by Claude on my behalf._` as the last line, instead of the Claude Code footer. PR descriptions keep their attribution lines.
-- Releases only through `scripts/release.sh`. `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
-- Branch protection (require `CI gate`, no direct pushes) is an owner setting; the agent cannot set it. It is tracked by a `needs-owner` issue.
-- Shared flow tooling may move to Wolfram as reusable workflows; Wolfram has none yet, so the scripts live here until it does.
+- `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
+- Branch protection is an owner setting, tracked in #18.
 
 ## 28. Current state
 

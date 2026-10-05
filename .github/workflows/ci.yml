@@ -7,10 +7,11 @@ on:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
-  # The repository flow, enforced; see CONTRIBUTING.md. The checks live in
-  # scripts/check-flow.sh and scripts/check-flow-selftest.sh proves each can fail.
-  flow:
-    name: Flow checks
+  # Indigo's own checks; see CONTRIBUTING.md. The shared branch, title, body
+  # and commit rules are flow / conventions (.github/workflows/flow.yml).
+  # scripts/check-flow-selftest.sh proves each check here can fail.
+  checks:
+    name: Indigo checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,35 +25,6 @@ jobs:
         run: python3 tools/gen_logo.py --check
       - name: No protocol code outside Wolfram
         run: scripts/check-flow.sh protocol
-      - name: Branch name
-        if: github.event_name == 'pull_request'
-        run: scripts/check-flow.sh branch "$HEAD_REF"
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-      - name: Pull request title
-        if: github.event_name == 'pull_request'
-        run: scripts/check-flow.sh title "$PR_TITLE"
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-      - name: Pull request body
-        if: github.event_name == 'pull_request'
-        run: |
-          printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/body.md"
-          scripts/check-flow.sh body "$RUNNER_TEMP/body.md"
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-      - name: No merge commits
-        if: github.event_name == 'pull_request'
-        run: scripts/check-flow.sh merges "origin/$BASE_REF..$HEAD_SHA"
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      - name: Commit subjects
-        if: github.event_name == 'pull_request'
-        run: scripts/check-flow.sh commits "origin/$BASE_REF..$HEAD_SHA"
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
   host:
     name: Host tests and warnings sweep
@@ -97,7 +69,7 @@ jobs:
   gate:
     name: CI gate
     if: always()
-    needs: [flow, host, build-3ds]
+    needs: [checks, host, build-3ds]
     runs-on: ubuntu-latest
     steps:
       - env:

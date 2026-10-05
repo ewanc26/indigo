@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# The repository flow checks. One script, so CI and a contributor run the same code.
+# Indigo's own checks. Branch, title, body, commit and merge-commit rules are
+# the shared ones in Wolfram's tools/flow-check.sh (flow / conventions); this
+# script holds what only Indigo needs. One script, so CI and a contributor run
+# the same code.
 #
-#   scripts/check-flow.sh branch <name>
-#   scripts/check-flow.sh title  <pull request title>
-#   scripts/check-flow.sh body   <file holding the pull request body>
-#   scripts/check-flow.sh commits <git range>      e.g. origin/main..HEAD
-#   scripts/check-flow.sh merges <git range>
 #   scripts/check-flow.sh drift
 #   scripts/check-flow.sh protocol
 #   scripts/check-flow.sh release <version> [<ref>]
@@ -15,52 +13,18 @@
 # violation and requires it to fail, so a check cannot rot into a no-op.
 set -uo pipefail
 
-types='feat|fix|docs|chore|ci|refactor|test|build|ui|perf|release|revert'
 rc=0
 bad() { echo "flow: $*" >&2; rc=1; }
-
-check_branch() {
-  [[ "$1" =~ ^($types)/[a-z0-9][a-z0-9._-]*$ ]] || \
-    bad "branch '$1' must look like <type>/<kebab-name>, type one of: ${types//|/, }"
-}
-
-check_title() {
-  [[ "$1" =~ ^($types)(\([a-z0-9._-]+\))?!?:\ [^[:space:]].{2,}$ ]] || \
-    bad "title '$1' must look like 'type(scope): subject', type one of: ${types//|/, }"
-  (( ${#1} <= 100 )) || bad "title is ${#1} characters; keep it to 100"
-}
-
-check_body() {
-  [[ -s "$1" ]] || { bad "pull request body is empty"; return; }
-  grep -qiE '^#{1,3} +verification' "$1" || \
-    bad "body needs a '## Verification' section saying what was run and where (host, emulator, hardware)"
-  grep -qiE '^#{1,3} +(what|summary|why)' "$1" || \
-    bad "body needs a '## Summary' (or What/Why) section"
-}
-
-check_commits() {
-  local range="$1" sha subj
-  while read -r sha subj; do
-    [[ -z "$sha" ]] && continue
-    [[ "$subj" =~ ^($types)(\([a-z0-9._-]+\))?!?:\ .+$ ]] || \
-      bad "commit ${sha:0:9} subject '$subj' must look like 'type(scope): subject'"
-    (( ${#subj} <= 100 )) || bad "commit ${sha:0:9} subject is ${#subj} characters; keep it to 100"
-  done < <(git log --no-merges --format='%H %s' "$range")
-}
-
-# Rebase-merge lands each commit as written, so a merge commit in a pull
-# request would land too, and is refused.
-check_merges() {
-  local range="$1" sha
-  while read -r sha; do
-    [[ -z "$sha" ]] && continue
-    bad "commit ${sha:0:9} is a merge commit; rebase onto main instead (see CONTRIBUTING.md)"
-  done < <(git rev-list --merges "$range")
-}
 
 # Every repository path the agent and user docs name must exist, so the docs
 # cannot keep describing files that moved. Generated or deliberately absent
 # paths are listed in scripts/flow-drift-allow.txt with the reason.
+# The canonical flow block is Wolfram's text, copied verbatim, and names
+# Wolfram's paths; it is checked by flow / drift, not here.
+strip_canon() {
+  awk '/<!-- flow:begin -->/{skip=1} !skip{print} /<!-- flow:end -->/{skip=0}' "$1"
+}
+
 check_drift() {
   local allow=scripts/flow-drift-allow.txt f p
   for f in AGENTS.md README.md CONTRIBUTING.md docs/*.md; do
@@ -69,7 +33,7 @@ check_drift() {
       [[ -e "$p" ]] && continue
       grep -qxF "$p" <(sed 's/ *#.*//' "$allow") && continue
       bad "$f names '$p', which does not exist (fix the doc, or allow-list it with a reason in $allow)"
-    done < <(grep -oE '`(src|scripts|tools|mk|docs|tests|romfs|\.github)/[A-Za-z0-9_./-]*`' "$f" | tr -d '`' | sort -u)
+    done < <(strip_canon "$f" | grep -oE '`(src|scripts|tools|mk|docs|tests|romfs|\.github)/[A-Za-z0-9_./-]*`' | tr -d '`' | sort -u)
   done
   # make targets quoted in the docs must exist in the Makefiles.
   while read -r t; do
@@ -117,14 +81,9 @@ check_release() {
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
-  branch)  check_branch "${1:-}" ;;
-  title)   check_title "${1:-}" ;;
-  body)    check_body "${1:-/dev/null}" ;;
-  commits) check_commits "${1:-origin/main..HEAD}" ;;
-  merges)  check_merges "${1:-origin/main..HEAD}" ;;
   drift)   check_drift ;;
   protocol) check_protocol ;;
   release) check_release "${1:-}" "${2:-HEAD}" ;;
-  *) echo "usage: $0 {branch|title|body|commits|merges|drift|protocol|release} ..." >&2; exit 2 ;;
+  *) echo "usage: $0 {drift|protocol|release} ..." >&2; exit 2 ;;
 esac
 exit $rc
