@@ -4150,6 +4150,7 @@ test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
     unsigned again = 0;
     int slot;
     int second;
+    uint8_t *stale;
 
     indigo_media_init(&c);
     /* The detail band asked for a portrait photograph at the height it draws
@@ -4190,7 +4191,9 @@ test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
     indigo_media_init(&c);
     CHECK(indigo_media_claim(&c, "https://cdn.example/busy@jpeg", 60, &gen) >= 0);
     indigo_media_forget(&c, "https://cdn.example/busy@jpeg");
-    CHECK(!indigo_media_publish(&c, 0, gen, fake_pixels(45, 60), 45, 60));
+    stale = fake_pixels(45, 60);
+    CHECK(!indigo_media_publish(&c, 0, gen, stale, 45, 60));
+    free(stale); /* publish refused it, so it is still the caller's */
     CHECK(c.bytes == 0);
     CHECK(c.slots[0].state == INDIGO_MEDIA_EMPTY);
 }
