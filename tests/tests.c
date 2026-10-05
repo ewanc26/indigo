@@ -8,6 +8,7 @@
 #include "util/log.h"
 #include "store/session_store.h"
 #include "store/settings_codec.h"
+#include "store/draft_store.h"
 #include "store/settings_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
@@ -1048,6 +1049,75 @@ test_settings_codec(void)
 }
 
 static void
+test_draft_store(void)
+{
+    char buf[2048];
+    char out[1024];
+    char dir[64], path[256], bad[300], cmd[300];
+    size_t len = 0;
+    const char *text = "Line one\nline two with \xc3\xa9 and \xf0\x9f\x98\x80";
+
+    /* Round trip, including newlines and multibyte text. */
+    CHECK(indigo_draft_encode(text, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_draft_decode(buf, len, out, sizeof out) == INDIGO_CODEC_OK);
+    CHECK(strcmp(out, text) == 0);
+
+    /* Every strict prefix is refused and leaves out alone. */
+    for (size_t n = 0; n < len; n++) {
+        strcpy(out, "sentinel");
+        CHECK(indigo_draft_decode(buf, n, out, sizeof out) != INDIGO_CODEC_OK);
+        CHECK(strcmp(out, "sentinel") == 0);
+    }
+    CHECK(indigo_draft_decode("indigo-draft 2\nlen=1\nx\nend\n", 27, out, sizeof out) ==
+          INDIGO_CODEC_BAD_VERSION);
+    CHECK(indigo_draft_decode("garbage that is not a draft", 27, out, sizeof out) ==
+          INDIGO_CODEC_CORRUPT);
+    /* A declared length larger than the buffer is refused, not trusted. */
+    CHECK(indigo_draft_decode("indigo-draft 1\nlen=999999\n", 27, out, 16) ==
+          INDIGO_CODEC_TOO_BIG);
+    CHECK(indigo_draft_encode("0123456789", buf, 20, &len) == INDIGO_CODEC_TOO_BIG);
+
+    snprintf(dir, sizeof dir, "build-host/draft-test");
+    snprintf(cmd, sizeof cmd, "rm -rf %s && mkdir -p %s", dir, dir);
+    CHECK(system(cmd) == 0);
+    snprintf(path, sizeof path, "%s/draft.dat", dir);
+    snprintf(bad, sizeof bad, "%s.bad", path);
+
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+    CHECK(out[0] == '\0');
+    CHECK(indigo_draft_store_save(path, text) == INDIGO_STORE_OK);
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_OK);
+    CHECK(strcmp(out, text) == 0);
+
+    /* An empty draft removes the file, and removing nothing is not an error. */
+    CHECK(indigo_draft_store_save(path, "") == INDIGO_STORE_OK);
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+    CHECK(indigo_draft_store_save(path, "") == INDIGO_STORE_OK);
+
+    /* A damaged file is moved aside, not deleted, and loads as empty. */
+    {
+        FILE *f = fopen(path, "wb");
+
+        CHECK(f != NULL);
+        if (f) {
+            fputs("indigo-draft 1\nlen=50\nshort", f);
+            fclose(f);
+        }
+    }
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_UNREADABLE);
+    CHECK(out[0] == '\0');
+    {
+        FILE *f = fopen(bad, "rb");
+
+        CHECK(f != NULL);
+        if (f) {
+            fclose(f);
+        }
+    }
+    CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+}
+
+static void
 test_settings_store(void)
 {
     static indigo_settings in, out;
@@ -1483,8 +1553,9 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the twelve app actions. */
-    CHECK(menu.count == 15);
+    /* Three facet targets, the two entries about the post, then the twelve app
+     * actions. */
+    CHECK(menu.count == 17);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1492,8 +1563,11 @@ test_facet_menu(void)
     CHECK(strcmp(menu.items[1].label, "Tag: #cats") == 0);
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
-    CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[14].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[3].kind == INDIGO_MENU_LIKED_BY);
+    CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
+    CHECK(strcmp(menu.post_uri, p.uri) == 0);
+    CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[16].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1511,7 +1585,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 15);
+    CHECK(app.menu.count == 17);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1519,6 +1593,51 @@ test_facet_menu(void)
     CHECK(app.screen == INDIGO_SCREEN_PROFILE);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE);
     CHECK(strcmp(app.request_post_uri, "did:plc:alice0000000000000000000000") == 0);
+}
+
+/* "Who liked this" and "Who reposted this": the menu opens a people list
+ * keyed by the post's URI, which is longer than a handle and must arrive whole. */
+static void
+test_liked_by_from_the_menu(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_post p = make_post("at://did:plc:alice0000000000000000000000/app.bsky.feed.post/3kabc", "hi");
+    indigo_request_kind k;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_app_sign_in_succeeded(&app, "me.example.com");
+    indigo_timeline_append(&app.timeline, &p);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+
+        in.touch_pressed = true;
+        in.touch_x = (int) (r.x + 4);
+        in.touch_y = (int) (r.y + 4);
+    }
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.items[0].kind == INDIGO_MENU_LIKED_BY);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LIKED_BY);
+    CHECK(strcmp(indigo_search_title(&app.search), "Liked by") == 0);
+    k = indigo_app_take_request(&app, &f);
+    CHECK(k == INDIGO_REQUEST_PEOPLE);
+    CHECK(app.request_people == INDIGO_SEARCH_LIKED_BY);
+    CHECK(strcmp(app.request_subject, p.uri) == 0); /* whole, not truncated */
+
+    /* B returns to the timeline the post is on, not past it. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
 }
 
 static void
@@ -1532,15 +1651,16 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 12);
-    CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.count == 14);
+    CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
+    CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
      * bounds. */
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 12);
+    CHECK(menu.count == 14);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
@@ -1571,7 +1691,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets plus the twelve app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 12);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 14);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -2050,6 +2170,57 @@ test_layout_draws_link_cards(void)
 /* Alt text is carried on the post and drawn only when the setting is on. It
  * takes the lines it needs out of the bottom of the band, so the picture gets
  * what is left -- and never nothing. */
+/* The text-size setting scales the post body and nothing else, keeps the block
+ * inside the vertical budget the embed band is positioned against, and leaves
+ * the default exactly as it was. */
+static void
+test_layout_text_scale(void)
+{
+    static const unsigned scales[] = {INDIGO_TEXT_SCALE_SMALL, INDIGO_TEXT_SCALE_NORMAL,
+                                      INDIGO_TEXT_SCALE_LARGE};
+    static const char *const body =
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word";
+    float first_scale[3] = {0};
+    unsigned lines[3] = {0};
+
+    for (unsigned k = 0; k < 3; k++) {
+        indigo_app app;
+        indigo_input in = {0};
+        indigo_canvas top;
+        indigo_canvas bottom;
+
+        indigo_app_init(&app);
+        app.screen = INDIGO_SCREEN_HOME;
+        app.timeline.count = 1;
+        indigo_copy_utf8(app.timeline.posts[0].text, sizeof app.timeline.posts[0].text,
+                         body);
+        app.settings.text_scale = (indigo_text_scale) scales[k];
+        indigo_layout_build(&app, &in, &top, &bottom);
+        for (unsigned i = 0; i < top.count; i++) {
+            const indigo_cmd *cmd = &top.cmds[i];
+
+            if (cmd->kind == INDIGO_CMD_TEXT && strstr(top.text + cmd->text_offset, "word")) {
+                if (lines[k]++ == 0) {
+                    first_scale[k] = cmd->scale;
+                }
+                /* Never past the five-line block's bottom edge. */
+                CHECK(cmd->y + cmd->h <= 98.0f + 5.0f * 19.0f + 1.0f);
+            }
+        }
+    }
+    CHECK(first_scale[0] < first_scale[1]);
+    CHECK(first_scale[1] < first_scale[2]);
+    CHECK(first_scale[1] > 0.599f && first_scale[1] < 0.601f); /* default unchanged */
+    CHECK(lines[1] == 5);
+    CHECK(lines[2] >= 1 && lines[2] <= lines[1]);
+}
+
 static void
 test_layout_draws_alt_text(void)
 {
@@ -4150,6 +4321,7 @@ test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
     unsigned again = 0;
     int slot;
     int second;
+    uint8_t *stale;
 
     indigo_media_init(&c);
     /* The detail band asked for a portrait photograph at the height it draws
@@ -4190,7 +4362,9 @@ test_media_forget_lets_the_viewer_decode_at_its_own_size(void)
     indigo_media_init(&c);
     CHECK(indigo_media_claim(&c, "https://cdn.example/busy@jpeg", 60, &gen) >= 0);
     indigo_media_forget(&c, "https://cdn.example/busy@jpeg");
-    CHECK(!indigo_media_publish(&c, 0, gen, fake_pixels(45, 60), 45, 60));
+    stale = fake_pixels(45, 60);
+    CHECK(!indigo_media_publish(&c, 0, gen, stale, 45, 60));
+    free(stale); /* publish refused it, so it is still the caller's */
     CHECK(c.bytes == 0);
     CHECK(c.slots[0].state == INDIGO_MEDIA_EMPTY);
 }
@@ -4220,6 +4394,7 @@ main(void)
     test_settings_defaults_and_clamp();
     test_settings_codec();
     test_settings_store();
+    test_draft_store();
     test_settings_reach_the_app();
     test_failures();
     test_log_file();
@@ -4234,6 +4409,7 @@ main(void)
     test_home_requests();
     test_facet_menu();
     test_facet_menu_edges();
+    test_liked_by_from_the_menu();
     test_menu_rows_on_screen();
     test_search_model();
     test_search_selection_scroll();
@@ -4277,6 +4453,7 @@ main(void)
     test_layout_draws_post_images();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();
+    test_layout_text_scale();
     test_image_viewer_opens_from_the_selected_post();
     test_image_viewer_needs_an_image();
     test_image_viewer_holds_a_copy();

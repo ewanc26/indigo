@@ -476,13 +476,27 @@ draw_avatar(indigo_canvas *c, const char *url, float x, float y, float size)
 /* Draw `text` as wrapped lines, colouring facet ranges. `max_lines` is the
  * budget the caller has: a post with an embed gives up three of its five. */
 static void
-draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines)
+draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines,
+               unsigned text_scale)
 {
     indigo_line lines[POST_TEXT_LINES];
     int truncated;
+    /* The text-size setting scales the post body only: it is the reading
+     * surface, and the chrome around it has fixed room. Normal (115) is the
+     * layout's own 0.6, so the default is unchanged. Line pitch scales with
+     * the glyphs and the block keeps its vertical budget by showing fewer
+     * lines when they are taller, so the embed band below never moves. */
+    float scale = POST_TEXT_SCALE * (float) text_scale / (float) INDIGO_TEXT_SCALE_NORMAL;
+    float pitch = (float) POST_LINE_PITCH * scale / POST_TEXT_SCALE;
+    unsigned fit = (unsigned) ((float) (POST_LINE_PITCH * max_lines) / pitch);
     unsigned units = (unsigned) ((INDIGO_TOP_WIDTH - 2 * POST_TEXT_X) /
-                                 (INDIGO_CHAR_WIDTH * POST_TEXT_SCALE));
-    unsigned n = indigo_wrap(p->text, units, lines, max_lines, &truncated);
+                                 (INDIGO_CHAR_WIDTH * scale));
+    unsigned n;
+
+    if (fit < max_lines) {
+        max_lines = fit > 0 ? fit : 1;
+    }
+    n = indigo_wrap(p->text, units, lines, max_lines, &truncated);
 
     for (unsigned i = 0; i < n; i++) {
         const char *at = p->text + lines[i].start;
@@ -490,8 +504,8 @@ draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines)
         bool last = truncated && i + 1 == n;
 
         /* %.*s keeps this to the line; the ellipsis marks cut-off text. */
-        indigo_canvas_text(c, POST_TEXT_X, POST_TEXT_Y + (float) (POST_LINE_PITCH * i),
-                           POST_TEXT_SCALE, COL_TEXT, "%.*s%s", (int) len, at,
+        indigo_canvas_text(c, POST_TEXT_X, POST_TEXT_Y + pitch * (float) i,
+                           scale, COL_TEXT, "%.*s%s", (int) len, at,
                            last ? "..." : "");
         for (unsigned f = 0; f < p->facet_count; f++) {
             unsigned s = p->facets[f].start;
@@ -635,12 +649,13 @@ draw_post_link(indigo_canvas *c, const indigo_post *p)
  * video, an attachment -- and an embed that can be drawn does not, because the
  * note would say less than the picture does. */
 static void
-draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_alt)
+draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_alt,
+               unsigned text_scale)
 {
     bool embed = post_draws_embed(p);
     float band_h = EMBED_H;
 
-    draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES);
+    draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES, text_scale);
     if (embed) {
         if (p->embed_kind != INDIGO_EMBED_IMAGE) {
             draw_post_link(c, p);
@@ -741,7 +756,7 @@ build_top_post(const indigo_app *app, indigo_canvas *c)
      * is no room to give the header a third line. */
     indigo_canvas_text(c, 44, 52, 0.75f, COL_TEXT, "%s", author_name(p));
     indigo_canvas_text(c, 44, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
-    draw_post_body(c, p, app->settings.alt_text);
+    draw_post_body(c, p, app->settings.alt_text, app->settings.text_scale);
 
     indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                        p->reply_count);
@@ -938,7 +953,7 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
                            author_name(psel));
         indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", psel->handle);
-        draw_post_body(c, psel, app->settings.alt_text);
+        draw_post_body(c, psel, app->settings.alt_text, app->settings.text_scale);
         indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                            psel->reply_count);
         indigo_canvas_text(c, 118, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u reposts",
@@ -1467,7 +1482,15 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         /* The followers and following lists have no query; the box names whose
          * list this is instead of inviting typing nothing would act on. */
         indigo_canvas_rect(c, q.x, q.y, q.w, q.h, COL_PILL);
-        indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s", s->subject);
+        if (s->kind == INDIGO_SEARCH_LIKED_BY || s->kind == INDIGO_SEARCH_REPOSTED_BY) {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "%s",
+                               s->kind == INDIGO_SEARCH_LIKED_BY
+                                   ? "People who liked this post"
+                                   : "People who reposted this post");
+        } else {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s",
+                               s->subject);
+        }
     }
     /* The search screen has no status line in its header to give up, so the
      * button simply lands in the empty middle of the bar. */

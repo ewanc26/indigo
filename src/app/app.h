@@ -107,7 +107,7 @@ typedef struct {
     indigo_graph_action request_graph;
     /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
     indigo_search_kind request_people;
-    char request_subject[INDIGO_POST_NAME_MAX];
+    char request_subject[INDIGO_POST_URI_MAX];
     /* Who INDIGO_REQUEST_AUTHOR_FEED is asking about. */
     char request_actor[INDIGO_POST_NAME_MAX];
     /* Which list INDIGO_REQUEST_LIST_MEMBERS is asking for. */

@@ -4,6 +4,7 @@
 #include "atproto/session.h"
 #include "input/input.h"
 #include "input/textinput.h"
+#include "store/draft_store.h"
 #include "store/settings_store.h"
 #include "ui/ui.h"
 #include "util/log.h"
@@ -17,6 +18,7 @@
 #define LOG_PATH DATA_DIR "/indigo.log"
 #define SESSION_PATH DATA_DIR "/session.dat"
 #define SETTINGS_PATH DATA_DIR "/settings.dat"
+#define DRAFT_PATH DATA_DIR "/draft.dat"
 #define AUTOFILL_PATH DATA_DIR "/autofill.txt"
 #define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
 
@@ -490,6 +492,17 @@ main(void)
     indigo_app_set_settings(&app, &settings);
     app.wolfram_linked = indigo_atproto_available();
 
+    /* An unsent post survives closing the app. The text is restored into the
+     * compose buffer, so the existing "Draft kept from earlier." path tells
+     * the person it is there; nothing is ever sent without their pressing it. */
+    static char saved_draft[INDIGO_DRAFT_MAX];
+
+    if (indigo_draft_store_load(DRAFT_PATH, saved_draft, sizeof saved_draft) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("draft file was unreadable; it was kept as draft.dat.bad");
+    }
+    indigo_app_set_draft(&app, saved_draft);
+
     if (indigo_session_has_saved() && indigo_session_submit_resume()) {
         indigo_app_begin_sign_in(&app, "Resuming your session...");
     }
@@ -508,6 +521,15 @@ main(void)
         indigo_app_update(&app, &input);
         handle_requests(&app);
         handle_events(&app);
+        /* Only on a change, so an idle compose screen costs no card writes.
+         * The copy is updated even when the write fails: retrying every frame
+         * would stall the loop on a full or removed card. */
+        if (strcmp(saved_draft, app.compose.text) != 0) {
+            indigo_copy_utf8(saved_draft, sizeof saved_draft, app.compose.text);
+            if (indigo_draft_store_save(DRAFT_PATH, saved_draft) == INDIGO_STORE_IO) {
+                indigo_log_warn("could not save the draft");
+            }
+        }
         indigo_ui_draw(&app, &input);
 
         gspWaitForVBlank();

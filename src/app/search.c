@@ -169,6 +169,10 @@ indigo_search_title(const indigo_search *s)
         return "Muted";
     case INDIGO_SEARCH_BLOCKED:
         return "Blocked";
+    case INDIGO_SEARCH_LIKED_BY:
+        return "Liked by";
+    case INDIGO_SEARCH_REPOSTED_BY:
+        return "Reposted by";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
