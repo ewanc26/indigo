@@ -773,6 +773,8 @@ main(int argc, char **argv)
          * with a picture and its description, and the settings row itself. */
         {"timeline-alt", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, true},
         {"settings-alt", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 5, true},
+        {"timeline-text-large", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, false},
+        {"timeline-text-small", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, false},
         /* The viewer, on the two posts the fill puts images on: the portrait
          * photo, which is the one with a description, and the 16:9 gallery of
          * four, which is the one whose picture fills the width. The second is
@@ -803,6 +805,13 @@ main(int argc, char **argv)
         app.screen = s->screen;
         app.wolfram_linked = true;
         app.settings.alt_text = s->alt_text;
+        /* The text-size scenarios say so in their names, which keeps a field
+         * that one scenario in thirty uses out of every initialiser. */
+        if (strstr(s->name, "text-large")) {
+            app.settings.text_scale = INDIGO_TEXT_SCALE_LARGE;
+        } else if (strstr(s->name, "text-small")) {
+            app.settings.text_scale = INDIGO_TEXT_SCALE_SMALL;
+        }
         if (s->screen != INDIGO_SCREEN_SIGNIN) {
             strcpy(app.signin.account, "ewancroft.uk");
         }

@@ -50,6 +50,9 @@ typedef enum {
     INDIGO_SEARCH_FEEDS,
     INDIGO_SEARCH_MUTED,
     INDIGO_SEARCH_BLOCKED,
+    /* The people who liked or reposted one post; the subject is its URI. */
+    INDIGO_SEARCH_LIKED_BY,
+    INDIGO_SEARCH_REPOSTED_BY,
 } indigo_search_kind;
 
 typedef struct {
@@ -57,7 +60,9 @@ typedef struct {
      * around one person, so they carry the subject instead of a query. */
     char query[INDIGO_SEARCH_QUERY_MAX];
     indigo_search_kind kind;
-    char subject[INDIGO_POST_NAME_MAX];
+    /* A handle for the people lists, a post's at:// URI for liked-by and
+     * reposted-by, so it is sized for the longer of the two. */
+    char subject[INDIGO_POST_URI_MAX];
     /* Only one kind is ever on screen, and a post is roughly twenty times an
      * actor (2KB of text and URIs against 300 bytes of names), so the results
      * share storage rather than costing both. */
