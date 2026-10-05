@@ -6,7 +6,7 @@ What is in place today, and what is not:
 
 | Part | State |
 |---|---|
-| Release assets the updater reads (`update.json`, `indigo-<version>.3dsx`, its `.sha256`) | made by `scripts/release.sh`, and checked by the `Release assets` workflow against what GitHub actually serves |
+| Release assets the updater reads (`update.json`, `indigo-<version>.3dsx`, its `.sha256`) | made by the `Release` workflow from the tag, and checked against what GitHub actually serves |
 | Finishing or undoing an interrupted update at start-up | in the 3DS build; the decisions are tested on the host, including losing power after every single step |
 | The screen that checks for an update, shows it and asks you to confirm | not built yet: it waits on Wolfram's shared update module (wolfram#106), so Indigo does not carry its own manifest parser |
 | A signature on the release | not yet: it needs a signing key that only the owner can make (see the issue tracker) |

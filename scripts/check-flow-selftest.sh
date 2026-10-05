@@ -52,5 +52,17 @@ printf x >> assets/icon.png
 expect fail art-hand-edited python3 tools/gen_logo.py --check
 cp "$tmp/icon.png" assets/icon.png
 
-expect fail release-no-changelog $c release 99.0.0
+expect fail release-no-changelog env RELEASE_SKIP_GATE=1 $c release 99.0.0
+top=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)
+expect pass release-notes-present scripts/release-notes.sh "$top"
+expect fail release-notes-absent scripts/release-notes.sh 99.0.0
+# A commit that is not on origin/main is refused even with a CHANGELOG section.
+r="$tmp/relrepo"; git init -q -b main "$r"; mkdir -p "$r/scripts"
+cp CHANGELOG.md "$r/"; cp scripts/release-notes.sh scripts/check-flow.sh "$r/scripts/"
+git -C "$r" add -A; git -C "$r" -c user.name=t -c user.email=t@t commit -q -m 'chore: base'
+git clone -q --bare "$r" "$tmp/relorigin.git"; git -C "$r" remote add origin "$tmp/relorigin.git"
+git -C "$r" fetch -q origin
+expect pass release-on-main env RELEASE_SKIP_GATE=1 bash -c "cd $r && scripts/check-flow.sh release $top HEAD"
+git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'fix: local only'
+expect fail release-not-on-main env RELEASE_SKIP_GATE=1 bash -c "cd $r && scripts/check-flow.sh release $top HEAD"
 exit $fails

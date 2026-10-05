@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
-# Cut an Indigo release: tag, build, GitHub release with the .3dsx attached.
+# Cut an Indigo release by tagging main. CI does the rest.
 #
-#   scripts/release.sh [--dry-run] <version>      e.g. scripts/release.sh 0.1.0
+#   scripts/release.sh [--dry-run] <version>      e.g. scripts/release.sh 0.6.0
 #
-# Refuses to run unless the working tree is clean, you are on main, and local
-# main is identical to origin/main. CHANGELOG.md must already hold a
-# "## [<version>]" section; its body becomes the release notes.
+# Refuses unless: you are on a clean main identical to origin/main, the tag
+# does not exist, CHANGELOG.md has a non-empty "## [<version>]" section (it
+# goes in through a release PR like any other change), the host checks pass,
+# and `CI gate` is green on that exact commit.
 #
-# The order is tag, build, push, publish. The tag comes first because
-# `git describe` is what stamps the binary's build identity, and building
-# before tagging stamps the artifact with the release it is about to become --
-# v0.4.0 shipped a .3dsx that reported itself as "v0.3.0-7-g423a5a7". The tag
-# is local until the build succeeds, so a failed build leaves nothing on the
-# remote; once the tag is pushed it is left alone, because from that moment it
-# is the commit other people fetch.
+# It then creates an annotated tag and pushes it. .github/workflows/release.yml
+# picks the tag up: it re-checks all of the above, builds the .3dsx from the
+# tag in the devkitARM container against the Wolfram release in wolfram.ref
+# (so `git describe` stamps the binary with the release it is), writes the
+# update assets with scripts/update-manifest.sh, publishes the GitHub release
+# with the CHANGELOG section as its notes, and verifies what GitHub serves.
+#
+# Tags are never moved or re-cut. A wrong release is fixed by a new patch.
 set -euo pipefail
 
 dry_run=0
@@ -23,7 +25,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 version="${1:-}"
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "usage: $0 [--dry-run] <MAJOR.MINOR.PATCH>" >&2
   exit 2
 fi
@@ -42,58 +44,21 @@ local_sha="$(git rev-parse main)"
 remote_sha="$(git rev-parse origin/main)"
 [[ "$local_sha" == "$remote_sha" ]] || \
   fail "local main ($local_sha) differs from origin/main ($remote_sha); sync first"
+git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "tag $tag already exists; cut a new patch instead"
 
-git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "tag $tag already exists"
-
-notes="$(awk -v v="$version" '
-  $0 ~ "^## \\[" v "\\]" {found=1; next}
-  found && /^## \[/ {exit}
-  found {print}
-' CHANGELOG.md)"
-[[ -n "${notes//[[:space:]]/}" ]] || fail "CHANGELOG.md has no '## [$version]' section with content"
+scripts/release-notes.sh "$version" >/dev/null || fail "CHANGELOG.md has no '## [$version]' section with content"
 
 echo "release: host checks"
 make test warnings
 
-echo "release: tagging $tag at $local_sha"
-git tag -a "$tag" -m "Indigo $version" "$local_sha"
-tagged=1
-
-# An EXIT trap rather than an ERR trap, because fail() ends in an explicit
-# `exit 1`, which raises no ERR: an ERR trap would leave the tag behind on
-# exactly the path that needs it removed. Once the tag is on the remote it
-# stays, because from that moment it is the commit everyone else fetches.
-cleanup() {
-  local rc=$?
-  if (( rc != 0 && tagged == 1 )) &&
-    ! git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-    echo "release: removing the local $tag; nothing was published" >&2
-    git tag -d "$tag" >/dev/null 2>&1 || true
-  fi
-}
-trap cleanup EXIT
-
-echo "release: 3DS build"
-make clean
-make
-[[ -f indigo.3dsx ]] || fail "make did not produce indigo.3dsx"
-
-# What the console's updater reads (docs/UPDATE.md): a versioned copy, its
-# checksum and update.json. indigo.3dsx stays as well, for existing links.
-echo "release: update assets"
-rm -rf build-release
-scripts/update-manifest.sh make "$version" indigo.3dsx build-release
-cp indigo.3dsx build-release/indigo.3dsx
-scripts/update-manifest.sh verify "$version" build-release
+echo "release: CI gate on ${local_sha:0:9}"
+scripts/check-flow.sh release "$version" "$local_sha" || fail "not releasable"
 
 if (( dry_run )); then
-  git tag -d "$tag" >/dev/null
-  tagged=0
-  echo "release: dry run complete; $tag was created locally and removed, nothing was pushed or published"
+  echo "release: dry run complete; $tag would be tagged at ${local_sha:0:9}, nothing was pushed"
   exit 0
 fi
 
+git tag -a "$tag" -m "Indigo $version" "$local_sha"
 git push origin "$tag"
-gh release create "$tag" build-release/indigo.3dsx "build-release/indigo-$version.3dsx" \
-  "build-release/indigo-$version.3dsx.sha256" build-release/update.json --title "Indigo $version" --notes "$notes" --verify-tag
-echo "release: published $tag"
+echo "release: pushed $tag; .github/workflows/release.yml builds and publishes it"
