@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prove every flow check can fail. Each case is a deliberate violation that
+# Prove every Indigo check can fail (the shared branch, title, body and
+# commit rules are Wolfram's, with their own self-test). Each case is a deliberate violation that
 # must be rejected, plus a conforming input that must be accepted.
 set -u
 cd "$(git rev-parse --show-toplevel)"
@@ -11,38 +12,6 @@ expect() { # expect pass|fail <label> <command...>
   if "$@" >/dev/null 2>&1; then got=pass; else got=fail; fi
   if [[ "$got" == "$want" ]]; then echo "ok   $label ($want)"; else echo "FAIL $label: wanted $want, got $got"; fails=1; fi
 }
-
-expect pass branch-good $c branch feat/image-viewer
-expect fail branch-bad  $c branch Ewan-patch-1
-expect fail branch-main $c branch main
-expect pass title-good  $c title 'fix(ui): stop clipping the status line'
-expect fail title-bad   $c title 'Updated stuff'
-expect fail title-type  $c title 'wip: half done thing'
-
-printf '## Summary\nx\n\n## Verification\nhost only: make test\n' > "$tmp/good.md"
-printf 'just a sentence\n' > "$tmp/bad.md"
-printf '## Summary\nx\n' > "$tmp/nover.md"
-: > "$tmp/empty.md"
-expect pass body-good   $c body "$tmp/good.md"
-expect fail body-prose  $c body "$tmp/bad.md"
-expect fail body-nover  $c body "$tmp/nover.md"
-expect fail body-empty  $c body "$tmp/empty.md"
-
-# Commits: build a throwaway repo so the check sees real history.
-r="$tmp/repo"; git init -q "$r"
-git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'chore: base'
-git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'fix(ui): good one'
-expect pass commits-good bash -c "cd $r && $OLDPWD/$c commits HEAD~1..HEAD"
-git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'did a thing'
-expect fail commits-bad bash -c "cd $r && $OLDPWD/$c commits HEAD~1..HEAD"
-
-# Merge commits: a merged side branch in the range must be rejected.
-expect pass merges-linear bash -c "cd $r && $OLDPWD/$c merges HEAD~2..HEAD"
-git -C "$r" checkout -q -b side HEAD~1
-git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'fix: side'
-git -C "$r" checkout -q -
-git -C "$r" -c user.name=t -c user.email=t@t merge -q --no-ff --no-edit side
-expect fail merges-merge-commit bash -c "cd $r && $OLDPWD/$c merges HEAD~3..HEAD"
 
 # Drift: a doc naming a missing path, and a missing make target, must fail.
 expect pass drift-clean $c drift

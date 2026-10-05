@@ -1,0 +1,9 @@
+name: flow
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  flow:
+    uses: ewanc26/wolfram/.github/workflows/flow-reusable.yml@main
