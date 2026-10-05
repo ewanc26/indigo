@@ -729,6 +729,22 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         say(app, it->label);
         break;
+    case INDIGO_MENU_LIKED_BY:
+    case INDIGO_MENU_REPOSTED_BY: {
+        char uri[INDIGO_POST_URI_MAX];
+
+        /* Copied first: go_back leaves the menu screen and the list is about
+         * to be rebuilt from the post, not the menu. The list is pushed so B
+         * returns to the timeline the post is on. */
+        indigo_copy_utf8(uri, sizeof uri, app->menu.post_uri);
+        go_back(app);
+        push_screen(app);
+        indigo_app_open_people(app,
+                               it->kind == INDIGO_MENU_LIKED_BY ? INDIGO_SEARCH_LIKED_BY
+                                                                : INDIGO_SEARCH_REPOSTED_BY,
+                               uri);
+        break;
+    }
     case INDIGO_MENU_COMPOSE:
         go_back(app);
         begin_compose(app, INDIGO_COMPOSE_POST, NULL);
@@ -934,6 +950,8 @@ update_search(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_SEARCH_FOLLOWERS:
         case INDIGO_SEARCH_FOLLOWING:
+        case INDIGO_SEARCH_LIKED_BY:
+        case INDIGO_SEARCH_REPOSTED_BY:
             request = INDIGO_REQUEST_PEOPLE;
             app->request_people = s->kind;
             break;

@@ -199,6 +199,11 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
         for (unsigned i = 0; i < post->facet_count; i++) {
             add_facet(m, post, &post->facets[i]);
         }
+        if (post->uri[0]) {
+            indigo_copy_utf8(m->post_uri, sizeof m->post_uri, post->uri);
+            add_item(m, INDIGO_MENU_LIKED_BY, "Who liked this", "");
+            add_item(m, INDIGO_MENU_REPOSTED_BY, "Who reposted this", "");
+        }
     }
     add_item(m, INDIGO_MENU_COMPOSE, "New post", "");
     add_item(m, INDIGO_MENU_NOTIFICATIONS, "Notifications", "");

@@ -1093,7 +1093,39 @@ do_people(const job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    if (j->people_kind == INDIGO_SEARCH_FOLLOWERS) {
+    if (j->people_kind == INDIGO_SEARCH_LIKED_BY) {
+        wf_agent_like_list likes;
+
+        memset(&likes, 0, sizeof likes);
+        st = wf_feedgen_get_likes_typed(s_agent, j->list_uri, NULL, INDIGO_SEARCH_PAGE,
+                                        cursor, &likes);
+        if (st != WF_OK) {
+            ev.failure = classify(st);
+            indigo_log_warn("liked-by failed: wolfram status %d (%s)", (int) st,
+                            indigo_failure_tag(ev.failure));
+            publish_event(&ev);
+            return;
+        }
+        if (!j->paging) {
+            s_actor_count = 0;
+        }
+        for (size_t i = 0; i < likes.like_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+            if (fill_actor(&likes.likes[i].actor, &s_actors[s_actor_count])) {
+                s_actor_count++;
+            }
+        }
+        ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+        ev.page_count = s_actor_count;
+        indigo_copy_utf8(ev.cursor, sizeof ev.cursor, likes.cursor ? likes.cursor : "");
+        wf_agent_like_list_free(&likes);
+        indigo_log_info("liked-by: %u", s_actor_count);
+        publish_event(&ev);
+        return;
+    }
+    if (j->people_kind == INDIGO_SEARCH_REPOSTED_BY) {
+        st = wf_feedgen_get_reposted_by_typed(s_agent, j->list_uri, NULL,
+                                              INDIGO_SEARCH_PAGE, cursor, &list);
+    } else if (j->people_kind == INDIGO_SEARCH_FOLLOWERS) {
         st = wf_agent_get_followers_typed(s_agent, j->actor, INDIGO_SEARCH_PAGE,
                                            cursor, &list);
     } else {
@@ -2235,7 +2267,13 @@ indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool 
         return false;
     }
     j.paging = paging;
-    indigo_copy_utf8(j.actor, sizeof j.actor, subject);
+    /* A post's URI is longer than a handle, so the two kinds that take one
+     * keep it in the URI-sized field rather than truncating it into actor. */
+    if (kind == INDIGO_SEARCH_LIKED_BY || kind == INDIGO_SEARCH_REPOSTED_BY) {
+        indigo_copy_utf8(j.list_uri, sizeof j.list_uri, subject);
+    } else {
+        indigo_copy_utf8(j.actor, sizeof j.actor, subject);
+    }
     return submit(&j);
 }
 

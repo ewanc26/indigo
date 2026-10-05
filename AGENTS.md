@@ -391,11 +391,22 @@ Two of the fields take effect at startup. `default_feed` is what
 `indigo_app_sign_in_succeeded` opens instead of the Following timeline, which is
 the single funnel to Home for both a fresh sign-in and a resumed session. It does
 not use `indigo_app_open_feed`, because that pushes a history entry and B from
-Home would then go back to sign-in. The accessibility fields are carried on the
-app but read by nothing yet: there is no settings screen, so they cannot be
-changed from inside the app and a hand-edited file is the only way to set them.
+Home would then go back to sign-in. Theme, high contrast, large touch targets, image alt text and text scale are
+read by layout (`text_scale` scales the post body only and shows fewer lines
+when they are taller, so the embed band never moves). `reduce_motion` has
+nothing to act on yet: Indigo draws no animation.
 `indigo_app_init` calls `indigo_settings_defaults` because its `memset` leaves
 `text_scale` at 0, which is not one of the valid scales.
+
+### Drafts
+
+`store/draft_store` keeps the unsent compose text in `draft.dat`: a versioned,
+length-prefixed file with an `end` marker, so a truncated write is detected
+rather than loaded as half a post. `main.c` restores it into the compose buffer
+at startup (the existing "Draft kept from earlier." note then tells the person)
+and saves whenever the text changes; an empty draft removes the file. A damaged
+file is moved to `.bad`, never deleted. Nothing is ever sent without the person
+pressing send. Only the text is persisted, not what it was replying to.
 
 ## 15. Offline behaviour
 
@@ -726,7 +737,7 @@ The current repository has:
 - a small application/navigation state machine;
 - a Wolfram adapter boundary;
 - sign-in, a bounded timeline (`app/timeline`), text wrapping (`ui/wrap`), canvas colour spans, an input abstraction (up/down/page/like/repost/refresh), and timeline/like/repost/thread/profile/notifications/publish/search jobs on the session worker;
-- threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
+- threads, profiles, notifications (marked seen), compose, the More menu, actor search, post search, a person's posts, followers and following, who liked or reposted a post (from the More menu on a selected post; the post's URI is the search subject), curated lists and their members, and the account's saved custom feeds with one feed's posts on the home screen (`app/search` serves all eight, and the feed reuses the timeline), and a profile's pinned post, and follow/unfollow, mute/unmute and block/unblock from a profile;
 - a settings screen (`INDIGO_SCREEN_SETTINGS`) accessible from the More menu, providing interactive toggling of theme, text scale, reduce motion, high contrast, large touch targets, image alt text, diagnostics logging, and startup feed selection, with a versioned codec and atomic persistence (`store/settings_codec`, `store/settings_store`), loaded at startup by `main.c`, with `diagnostics` gating the log file and `default_feed` choosing what Home opens on;
 - an image pipeline (`src/media`): a fixed-size, byte-budgeted decoded-image cache (`media.c`, pure and host-testable) and a fetch/decode worker thread (`media_loader.c`) that uses Wolfram's token-less public GET and `wf_image_decode_rgba`, plus an `INDIGO_CMD_IMAGE` canvas command whose replay uploads power-of-two citro3d textures on the main thread and draws a per-URL tinted placeholder while a URL is not yet decoded;
 - avatars on every row that has a person in it — timeline and thread rows, the selected post's header, the profile header, the notification list and its detail, and every people row in search, list members, followers, following, mutes and blocks;
