@@ -303,7 +303,12 @@ Never hard-code or commit:
 
 Use Wolfram's authentication/session functionality where available.
 
-The first usable milestone does not require OAuth. If OAuth is added later, treat it as a dedicated architecture change.
+Two sign-in flows exist and are tracked as separate rows in `docs/PARITY.md`; never describe one as covering the other.
+
+- App password: `do_login()`; service URL, handle, app password. Emulator-verified.
+- OAuth through a hosted Wolfram OAuth node: `do_oauth()`; selected by an empty password. The service URL must be the node. The console holds only the node's bearer token. Not verified on host, emulator or hardware; do not claim otherwise.
+
+The pairing client (`uk.ewancroft.oauth.begin` / `.poll`) is protocol and belongs in Wolfram (ewanc26/wolfram#101, with test vectors). Until it lands, `scripts/flow-protocol-allow.txt` allows those two strings in `src/atproto/session.c` and nothing else. Never log the pairing poll URL, the pair code's poll response, or the node token.
 
 If credentials are persisted to SDMC:
 
@@ -736,6 +741,7 @@ CONTRIBUTING.md is the written flow; these are the rules.
 - The PR body is `.github/pull_request_template.md`: `## Summary` and `## Verification`. Verification states what ran and where; say "host only" without devkitARM.
 - Update AGENTS.md, README, `docs/` and CHANGELOG in the same PR as the change.
 - Run `scripts/check-flow.sh drift` and `scripts/check-flow-selftest.sh` before pushing. `CI gate` (`.github/workflows/ci.yml`) waits on `flow`, `host` and `build-3ds`; add any new mandatory job to its `needs`.
+- Protocol guard: `scripts/check-flow.sh protocol` rejects raw `com.atproto.*`, `app.bsky.*` and `uk.ewancroft.*` method strings in `src/` unless listed with a reason in `scripts/flow-protocol-allow.txt`. Shared logic goes to Wolfram; duplication with Cobalt is tracked in #20.
 - Doc drift: every `src/`, `scripts/`, `tools/`, `mk/`, `docs/`, `tests/` path and `make` target named in backticks in the docs must exist. Deliberate exceptions go in `scripts/flow-drift-allow.txt` with a reason.
 - Never weaken a check to make it pass. A new check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
 - Releases only through `scripts/release.sh`. `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
