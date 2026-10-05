@@ -4,7 +4,7 @@ This is the flow for every change, mine or an agent's. It is the same in Wolfram
 
 ## The flow
 
-1. Open or find an issue. Anything needing hardware, credentials or money is labelled `needs-owner`.
+1. Open or find an issue. Issues are written in my voice, in the first person; one an agent wrote ends with `_Written by Claude on my behalf._`. Anything needing hardware, credentials or money is labelled `needs-owner`.
 2. Branch from a fresh `origin/main`. The name is `<type>/<kebab-name>`, for example `fix/status-line-clip`.
 3. Commit with `type(scope): subject`. The types are `feat fix docs chore ci refactor test build ui perf release revert`. Keep commits focused.
 4. Open a pull request from the template. The title follows the commit format; the body has a `## Summary` and a `## Verification` section, and the verification says exactly what ran and where (host, emulator, hardware). Without devkitARM it says "host only".

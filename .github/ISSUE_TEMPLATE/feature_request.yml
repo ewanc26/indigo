@@ -2,6 +2,10 @@ name: Feature or parity request
 description: Something Indigo should do, or a gap against Cobalt
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Write in the first person, as the owner: plain British English, dry and specific ("I've found...", "I want..."). An issue written by an agent ends with the line `_Written by Claude on my behalf._`
   - type: textarea
     id: what
     attributes:
