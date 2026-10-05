@@ -1,26 +1,50 @@
 # Changelog
 
 All notable changes to Indigo are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `scripts/release.sh`
-publishes the section matching the version you pass it.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Every pull request
+adds its entry under `## [Unreleased]`, linking itself. A release PR renames
+that section to the version, and the Release workflow publishes that section
+as the release notes.
 
 ## [Unreleased]
 
 ### Added
+- Who liked a post and who reposted it, from the post menu, as paged lists of
+  people with avatars, the same as followers. This was the one thing on
+  Cobalt's list that Indigo lacked.
+  ([#12](https://github.com/ewanc26/indigo/pull/12))
+- The draft of an unsent post survives closing Indigo, or the battery running
+  out. ([#12](https://github.com/ewanc26/indigo/pull/12))
 - A logo and a Homebrew Menu icon: an indigo bunting on a twig, in pixel art.
-  `tools/gen_logo.py` draws both from one set of shapes, the 24x24 small icon
-  at its own size rather than averaged down from the 48x48 one.
+  `tools/gen_logo.py` draws them all from one set of shapes, and draws the
+  24x24 small icon at its own size rather than letting it be averaged down from
+  the 48x48 one. ([#28](https://github.com/ewanc26/indigo/pull/28),
+  [#29](https://github.com/ewanc26/indigo/pull/29))
 - The groundwork for updating from inside Indigo (docs/UPDATE.md). Each release
   now carries `update.json`, a versioned `indigo-<version>.3dsx` and its
-  `.sha256`, and a workflow checks what GitHub serves against them. At start-up
-  Indigo finishes or undoes an update that was interrupted, keeping the old
-  build until the new one has started. The screen that offers an update is not
-  in yet; it waits on Wolfram's shared update module.
+  `.sha256`. At start-up Indigo finishes or undoes an update that was
+  interrupted, and keeps the old build until the new one has started. The
+  screen that offers an update is not in yet; it waits on Wolfram's shared
+  update module. ([#27](https://github.com/ewanc26/indigo/pull/27))
+- docs/PARITY.md, saying what Indigo does next to Cobalt and where each thing
+  has been checked, with app-password and browser sign-in as separate rows.
+  ([#21](https://github.com/ewanc26/indigo/pull/21))
 
 ### Changed
-- Pull requests are merged by rebase, so every commit lands on `main` as it
-  was written, and a pull request containing a merge commit fails the flow
-  checks.
+- The text-size setting now applies to post bodies.
+  ([#12](https://github.com/ewanc26/indigo/pull/12))
+- The settings screen says reduce motion is reserved. Indigo draws no
+  animation yet, so the toggle changes nothing, and the screen no longer
+  implies otherwise. ([#16](https://github.com/ewanc26/indigo/pull/16))
+- Releases are built and published by CI from the tag, against a pinned
+  Wolfram release (`wolfram.ref`, currently v0.26.0). `scripts/release.sh` only
+  checks and tags, so nothing is uploaded from my machine any more.
+  ([#32](https://github.com/ewanc26/indigo/pull/32))
+- Changes go through pull requests checked by the flow shared with the other
+  four projects, and are merged by rebase.
+  ([#17](https://github.com/ewanc26/indigo/pull/17),
+  [#27](https://github.com/ewanc26/indigo/pull/27),
+  [#29](https://github.com/ewanc26/indigo/pull/29))
 
 ## [0.5.0] - 2026-10-04
 
