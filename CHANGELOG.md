@@ -6,6 +6,11 @@ publishes the section matching the version you pass it.
 
 ## [Unreleased]
 
+### Changed
+- Browser sign-in now uses Wolfram's pairing client rather than Indigo's own
+  copy. The visible difference: if the sign-in node has forgotten the pairing
+  (it restarted), Indigo says so at once instead of polling for nine minutes.
+
 ### Added
 - A logo and a Homebrew Menu icon: an indigo bunting on a twig, in pixel art.
   `tools/gen_logo.py` draws both from one set of shapes, the 24x24 small icon

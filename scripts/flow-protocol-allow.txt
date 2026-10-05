@@ -1,2 +1,1 @@
 # "<file> <method-prefix>": raw lexicon method strings allowed in src/. Reason after '#'.
-src/atproto/session.c uk.ewancroft.oauth   # pairing client; moves to Wolfram with ewanc26/wolfram#101
