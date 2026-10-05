@@ -18,13 +18,13 @@ App password and OAuth are two flows with different dependencies, so they are tw
 | Flow | State | Verification | Needs |
 |---|---|---|---|
 | App password | implemented: handle, app password and a service URL (default `https://bsky.social`); follows the account's own PDS | emulator-verified in Azahar against bsky.social and a custom PDS (see README) | a Bluesky app password |
-| OAuth through a hosted node | implemented in `do_oauth()` (`src/atproto/session.c`): a handle with an empty password calls `uk.ewancroft.oauth.begin`, shows a pairing URL and code, polls `uk.ewancroft.oauth.poll`, keeps a node bearer token | **not verified anywhere**: no host test (the host build has no JSON parser and the flow is network code), no emulator run, no hardware. The only record is the PR that added it | a Wolfram OAuth node (its `oauth-node.md` page) whose URL goes in the service field. bsky.social is not a node, so the default service URL cannot do this |
+| OAuth through a hosted node | implemented: a handle with an empty password runs Wolfram's pairing driver (`wf_oauth_pair_run`), which shows a pairing URL and code, polls the node and hands back a node bearer token | the pairing contract is tested in Wolfram against shared vectors, on the host. Indigo's use of it is not verified on an emulator or hardware | a Wolfram OAuth node (its `oauth-node.md` page) whose URL goes in the service field. bsky.social is not a node, so the default service URL cannot do this |
 
 OAuth here is not the AT Protocol browser flow running on the console. The node holds the OAuth session and DPoP key; the console holds a bearer token for the node. A node outage ends the session, and the account's PDS never sees Indigo directly.
 
-The pairing contract (field names, terminal and transient failures, test vectors, no tokens in logs) is filed for Wolfram as ewanc26/wolfram#101, so the console clients stop carrying their own copies. Until that lands, `scripts/check-flow.sh protocol` keeps the two pairing method names as the only raw protocol strings in `src/`.
+The pairing contract (field names, terminal and transient failures, test vectors, no tokens in logs) is Wolfram's, from wolfram#101, and Indigo no longer carries a copy of it. `scripts/check-flow.sh protocol` now allows no raw protocol strings in `src/` at all.
 
-Known weakness: `do_oauth()` treats every failed poll as transient and keeps polling for up to nine minutes, including a 404 for an unknown pairing code (a restarted node forgets pairings). That belongs in the shared driver, not in a local patch.
+An unknown pairing code (a restarted node forgets its pairings) used to be polled for nine minutes. Wolfram's driver treats the 404 as final, so sign-in now fails straight away and says so.
 
 ## Features
 

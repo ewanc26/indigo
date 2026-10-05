@@ -9,6 +9,7 @@ as the release notes.
 ## [Unreleased]
 
 ### Changed
+- Browser sign-in now uses Wolfram's pairing client rather than Indigo's own copy, so if the sign-in node has forgotten the pairing (it restarted), Indigo says so at once instead of polling for nine minutes. Indigo now builds against Wolfram v0.27.0. ([#42](https://github.com/ewanc26/indigo/pull/42))
 - A release can be started without pushing a tag: `scripts/release.sh --dispatch` runs the Release workflow, and GitHub creates the tag itself, which I needed because tag pushes from the agents' sandbox are refused. ([#41](https://github.com/ewanc26/indigo/pull/41))
 
 ## [0.6.0] - 2026-10-06
