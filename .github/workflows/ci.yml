@@ -20,6 +20,8 @@ jobs:
         run: scripts/check-flow-selftest.sh
       - name: Docs have not drifted
         run: scripts/check-flow.sh drift
+      - name: No protocol code outside Wolfram
+        run: scripts/check-flow.sh protocol
       - name: Branch name
         if: github.event_name == 'pull_request'
         run: scripts/check-flow.sh branch "$HEAD_REF"

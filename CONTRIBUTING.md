@@ -14,7 +14,7 @@ This is the flow for every change, mine or an agent's. It is the same in Wolfram
 
 ## What CI enforces
 
-`CI gate` waits on three jobs: `Flow checks` (branch name, title, body, commit subjects, doc drift), `Host tests and warnings sweep` and `3DS build`. The flow checks are [scripts/check-flow.sh](scripts/check-flow.sh); [scripts/check-flow-selftest.sh](scripts/check-flow-selftest.sh) feeds each one a deliberate violation on every run and fails if any check lets it through. Run both locally before pushing.
+`CI gate` waits on three jobs: `Flow checks` (branch name, title, body, commit subjects, doc drift, no protocol strings outside Wolfram), `Host tests and warnings sweep` and `3DS build`. The flow checks are [scripts/check-flow.sh](scripts/check-flow.sh); [scripts/check-flow-selftest.sh](scripts/check-flow-selftest.sh) feeds each one a deliberate violation on every run and fails if any check lets it through. Run both locally before pushing.
 
 `Require CI gate` as a branch protection rule on `main` is an owner setting I cannot change from here; it is tracked in an issue labelled `needs-owner`. Until it is on, the merge rule is by convention.
 

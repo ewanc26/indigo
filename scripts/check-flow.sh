@@ -6,6 +6,7 @@
 #   scripts/check-flow.sh body   <file holding the pull request body>
 #   scripts/check-flow.sh commits <git range>      e.g. origin/main..HEAD
 #   scripts/check-flow.sh drift
+#   scripts/check-flow.sh protocol
 #   scripts/check-flow.sh release <version> [<ref>]
 #
 # Exit 0 when the check passes, 1 with a one-line reason per violation when it
@@ -73,6 +74,19 @@ check_drift() {
   fi
 }
 
+# Protocol belongs in Wolfram. A raw lexicon method string in src/ is protocol
+# knowledge; the few that exist are listed, with a reason, in
+# scripts/flow-protocol-allow.txt as "<file> <prefix>".
+check_protocol() {
+  local allow=scripts/flow-protocol-allow.txt hit file lit
+  while IFS=: read -r file lit; do
+    lit=${lit//\"/}
+    grep -qE "^$file +${lit%.*}" <(sed 's/ *#.*//' "$allow") && continue
+    grep -qE "^$file +$lit" <(sed 's/ *#.*//' "$allow") && continue
+    bad "$file holds the raw method string \"$lit\"; protocol belongs in Wolfram (or allow-list it with a reason in $allow)"
+  done < <(grep -rnoE --include='*.c' --include='*.h' '"(com\.atproto|app\.bsky|uk\.ewancroft)\.[A-Za-z.]*"' src | sed -E 's/^([^:]+):[0-9]+:/\1:/')
+}
+
 # A tag is releasable only when its version has a CHANGELOG section, it is on
 # main, and the CI jobs passed on that exact commit.
 check_release() {
@@ -97,6 +111,7 @@ case "$cmd" in
   body)    check_body "${1:-/dev/null}" ;;
   commits) check_commits "${1:-origin/main..HEAD}" ;;
   drift)   check_drift ;;
+  protocol) check_protocol ;;
   release) check_release "${1:-}" "${2:-HEAD}" ;;
   *) echo "usage: $0 {branch|title|body|commits|drift|release} ..." >&2; exit 2 ;;
 esac
