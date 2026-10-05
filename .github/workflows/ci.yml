@@ -20,6 +20,8 @@ jobs:
         run: scripts/check-flow-selftest.sh
       - name: Docs have not drifted
         run: scripts/check-flow.sh drift
+      - name: Generated art is current
+        run: python3 tools/gen_logo.py --check
       - name: No protocol code outside Wolfram
         run: scripts/check-flow.sh protocol
       - name: Branch name

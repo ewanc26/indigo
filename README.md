@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="docs/logo.svg" alt="Indigo" width="420">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ewanc26/indigo/actions/workflows/ci.yml"><img src="https://github.com/ewanc26/indigo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ewanc26/indigo/releases/latest"><img src="https://img.shields.io/github/v/release/ewanc26/indigo?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ewanc26/indigo" alt="AGPL-3.0"></a>
+  <a href="https://github.com/sponsors/ewanc26"><img src="https://img.shields.io/github/sponsors/ewanc26?logo=githubsponsors&logoColor=white&label=sponsors" alt="Sponsor"></a>
+</p>
+
 # Indigo
 
 A native Bluesky client for the Nintendo 3DS.
@@ -16,6 +27,8 @@ is deliberately different. Indigo is **not a port** of Cobalt. I am designing
 it around the 3DS's own hardware, input model and two-screen layout.
 
 The project uses [Wolfram](https://github.com/ewanc26/wolfram), my C AT Protocol SDK, for protocol functionality. Indigo is scoped to the Bluesky app, not general AT Protocol use; accounts on custom PDSes are supported.
+
+The mark is an indigo bunting on a twig, a small songbird named after the dye. It is drawn by [tools/gen_logo.py](tools/gen_logo.py), which also makes the Homebrew Menu icon from the same shapes.
 
 ## Status
 
@@ -49,13 +62,90 @@ Sign-in has two flows, and the second is not a replacement for the first. With a
 
 Updating from inside Indigo is half built: releases now carry what the updater reads, and an interrupted update is finished or undone at start-up, but the screen that offers an update waits on Wolfram. Until then, copy the new `indigo.3dsx` over the old one. The design, and what I checked to arrive at it, is in [docs/UPDATE.md](docs/UPDATE.md).
 
-Development and verification happen on the host and on an emulator; nothing here has been tested on real 3DS hardware. Sound, sleep, the HOME menu, the icon and the banner are untouched.
+Development and verification happen on the host and on an emulator; nothing here has been tested on real 3DS hardware. Sound, sleep and the HOME menu are untouched. The Homebrew Menu icon is new and has not been seen on an emulator or a console yet.
 
 ### Emulator sign-in autofill
 
 `make DEV_AUTOFILL=1` builds a binary that reads `sdmc:/3ds/indigo/autofill.txt` (`service=`, `handle=`, `password=` lines) and submits it, so the form can be exercised without the keyboard. It is for the emulator only and is never part of a normal build. Delete the file afterwards.
 
-## Requirements
+## Architecture
+
+```
+src/
+├── main.c        libctru lifecycle and frame loop
+├── app/          application state and navigation
+├── gfx/          platform-neutral display lists (canvas)
+├── ui/           layout (pure) and citro2d/citro3d backend
+├── input/        buttons, sticks and touchscreen
+├── atproto/      Wolfram-backed protocol integration
+├── media/        image cache and fetch/decode worker
+├── store/        settings, session and draft files on the SD card
+├── update/       self-update swap and recovery
+└── util/         logging and small helpers
+```
+
+The renderer is GPU-backed rather than console-only.
+
+The top screen is the primary reading surface. The bottom screen is the interaction surface. Touch is an enhancement; important actions must remain usable through physical controls. The 3DS touchscreen can only reach the bottom screen, which is why nothing is opened by tapping the picture itself: every control is on the interaction surface, and where a button has no key left for it -- the viewer, on a screen whose twelve buttons are spoken for -- it takes a New 3DS one and the touchscreen covers the rest.
+
+## 3DS platform model
+
+Indigo is a normal 3DS homebrew application, not a desktop application wrapped for the console.
+
+Platform code should use libctru for:
+
+- application lifecycle;
+- HID;
+- graphics/system services;
+- SDMC storage;
+- 3DS-specific facilities.
+
+citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the protocol implementation and, once integrated, the transport stack.
+
+Do not introduce SDL merely to make Indigo resemble Cobalt. A 3DS-specific application is the point.
+
+## Cobalt relationship
+
+Cobalt and Indigo share the same broad goal: putting native Bluesky clients on hardware that was never designed for Bluesky.
+
+They do not share an application implementation.
+
+Cobalt is built around Wii U-specific facilities such as WUT, SDL2, the GamePad and Aroma. Indigo instead uses libctru, citro2d/citro3d, the 3DS's two physical screens, buttons, Circle Pad and touchscreen.
+
+Wolfram is the shared protocol layer between them because the protocol layer should not need to know which Nintendo console is running the client.
+
+## Installing
+
+The resulting application is intended for:
+
+```
+sdmc:/3ds/indigo/indigo.3dsx
+```
+
+This is an application bundle layout understood by the 3DS Homebrew Menu. A CIA target is not part of the current project scope.
+
+For development, the Homebrew Menu's 3dslink/netloader path can also be used when the console and development machine have working network connectivity.
+
+## Using
+
+Indigo starts on the sign-in screen; [Status](#status) covers the two ways in. After that the top screen is for reading and the bottom screen is for doing, and every screen's bottom half names its own controls. The ones that mean the same thing everywhere:
+
+| Control | Does |
+|---|---|
+| D-pad up and down | move the selection |
+| L and R | a page up or down |
+| A | open or confirm |
+| B | back |
+| Y | like the selected post |
+| X | repost the selected post |
+| SELECT | reload |
+| START | quit to the Homebrew Menu |
+| ZR (New 3DS) | open the selected post's picture |
+| Touch | the buttons on the bottom screen |
+
+## Building
+
+### Requirements
 
 Indigo targets real Nintendo 3DS hardware through the normal homebrew development stack:
 
@@ -68,7 +158,6 @@ Indigo targets real Nintendo 3DS hardware through the normal homebrew developmen
 
 The official devkitPro 3DS examples and package set are useful references for keeping the project aligned with current homebrew tooling.
 
-## Building
 
 Build Wolfram for 3DS first:
 
@@ -169,60 +258,9 @@ This is a deliberate choice rather than an omission: post text, display names an
 
 The devkitPro `3ds_rules` infrastructure produces the `.3dsx` executable and embedded SMDH metadata. Indigo is intended to be launched through the Homebrew Menu.
 
-## Installing
+### Icon
 
-The resulting application is intended for:
-
-```
-sdmc:/3ds/indigo/indigo.3dsx
-```
-
-This is an application bundle layout understood by the 3DS Homebrew Menu. A CIA target is not part of the current project scope.
-
-For development, the Homebrew Menu's 3dslink/netloader path can also be used when the console and development machine have working network connectivity.
-
-## Architecture
-
-```
-src/
-├── main.c        libctru lifecycle and frame loop
-├── app/          application state and navigation
-├── gfx/          platform-neutral display lists (canvas)
-├── ui/           layout (pure) and citro2d/citro3d backend
-├── input/        buttons, sticks and touchscreen
-├── atproto/      Wolfram-backed protocol integration
-└── util/         logging and small helpers
-```
-
-The renderer is GPU-backed rather than console-only. The current UI is still intentionally a shell: it establishes the two-screen rendering model and exercises the actual 3DS input devices without pretending that the Bluesky client exists yet.
-
-The top screen is the primary reading surface. The bottom screen is the interaction surface. Touch is an enhancement; important actions must remain usable through physical controls. The 3DS touchscreen can only reach the bottom screen, which is why nothing is opened by tapping the picture itself: every control is on the interaction surface, and where a button has no key left for it -- the viewer, on a screen whose twelve buttons are spoken for -- it takes a New 3DS one and the touchscreen covers the rest.
-
-## 3DS platform model
-
-Indigo is a normal 3DS homebrew application, not a desktop application wrapped for the console.
-
-Platform code should use libctru for:
-
-- application lifecycle;
-- HID;
-- graphics/system services;
-- SDMC storage;
-- 3DS-specific facilities.
-
-citro3d/citro2d provide the GPU-backed rendering layer. Wolfram provides the protocol implementation and, once integrated, the transport stack.
-
-Do not introduce SDL merely to make Indigo resemble Cobalt. A 3DS-specific application is the point.
-
-## Cobalt relationship
-
-Cobalt and Indigo share the same broad goal: putting native Bluesky clients on hardware that was never designed for Bluesky.
-
-They do not share an application implementation.
-
-Cobalt is built around Wii U-specific facilities such as WUT, SDL2, the GamePad and Aroma. Indigo instead uses libctru, citro2d/citro3d, the 3DS's two physical screens, buttons, Circle Pad and touchscreen.
-
-Wolfram is the shared protocol layer between them because the protocol layer should not need to know which Nintendo console is running the client.
+The Homebrew Menu icon is `assets/icon.png` (48x48), and its 24x24 small icon is `assets/icon-small.png`. Both are generated, with `docs/logo.svg`, by `python3 tools/gen_logo.py`, and the CI flow checks fail if the committed files and the script disagree. The Makefile hands both to `smdhtool`, so the small icon is drawn at its own size rather than averaged down from the large one. A `.3dsx` has no banner; a banner belongs to a CIA, which Indigo does not build.
 
 ## Contributing
 
