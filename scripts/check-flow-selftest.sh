@@ -52,5 +52,21 @@ printf '#define X "app.bsky.feed.getTimeline"\n' > src/util/zz_selftest.h
 expect fail protocol-raw-nsid $c protocol
 rm -f src/util/zz_selftest.h
 
+# Update assets: a consistent set verifies; a tampered build, a manifest that
+# names another host, and a bad version must not.
+u=scripts/update-manifest.sh
+head -c 4096 /dev/urandom > "$tmp/indigo.3dsx"
+expect pass update-make $u make 1.2.3 "$tmp/indigo.3dsx" "$tmp/rel"
+cp "$tmp/indigo.3dsx" "$tmp/rel/indigo.3dsx"
+expect pass update-verify $u verify 1.2.3 "$tmp/rel"
+cp -r "$tmp/rel" "$tmp/tamper"; printf x >> "$tmp/tamper/indigo-1.2.3.3dsx"
+expect fail update-tampered-build $u verify 1.2.3 "$tmp/tamper"
+cp -r "$tmp/rel" "$tmp/host"; sed -i 's#https://github.com/#https://example.com/#g' "$tmp/host/update.json"
+expect fail update-foreign-url $u verify 1.2.3 "$tmp/host"
+cp -r "$tmp/rel" "$tmp/stale"; printf y >> "$tmp/stale/indigo.3dsx"
+expect fail update-stale-plain-asset $u verify 1.2.3 "$tmp/stale"
+expect fail update-bad-version $u make v1.2.3 "$tmp/indigo.3dsx" "$tmp/rel2"
+expect fail update-wrong-version $u verify 1.2.4 "$tmp/rel"
+
 expect fail release-no-changelog $c release 99.0.0
 exit $fails

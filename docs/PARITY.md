@@ -55,6 +55,7 @@ Known weakness: `do_oauth()` treats every failed poll as transient and keeps pol
 | On-card cache of timeline and profile data | not listed | issue: #13 | not started |
 | Settings screen | n/a | implemented: theme, text scale, alt text, diagnostics, startup feed; reduce motion and high contrast are stored and reserved | host |
 | Video, GIFs and animated media | not planned | not planned: Wolfram's decoder (`wf_image_decode_rgba`) is for still images, and nothing in the 1.5MB image budget accounts for frames | no decoder evaluation has been done, so this is a decision and not a hardware limit |
+| Auto-update | in progress, to the same wolfram#106 contract | partial: release assets (`update.json`, checksum) and start-up recovery of an interrupted swap are in; the confirm-and-download screen waits on wolfram#106 | host only; see docs/UPDATE.md. Not run on an emulator or hardware |
 | Push notifications | not planned | not planned: no push service a homebrew application can register with; notifications are fetched when the screen is opened | |
 
 ## Duplication with Cobalt

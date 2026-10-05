@@ -78,6 +78,14 @@ make clean
 make
 [[ -f indigo.3dsx ]] || fail "make did not produce indigo.3dsx"
 
+# What the console's updater reads (docs/UPDATE.md): a versioned copy, its
+# checksum and update.json. indigo.3dsx stays as well, for existing links.
+echo "release: update assets"
+rm -rf build-release
+scripts/update-manifest.sh make "$version" indigo.3dsx build-release
+cp indigo.3dsx build-release/indigo.3dsx
+scripts/update-manifest.sh verify "$version" build-release
+
 if (( dry_run )); then
   git tag -d "$tag" >/dev/null
   tagged=0
@@ -86,5 +94,6 @@ if (( dry_run )); then
 fi
 
 git push origin "$tag"
-gh release create "$tag" indigo.3dsx --title "Indigo $version" --notes "$notes" --verify-tag
+gh release create "$tag" build-release/indigo.3dsx "build-release/indigo-$version.3dsx" \
+  "build-release/indigo-$version.3dsx.sha256" build-release/update.json --title "Indigo $version" --notes "$notes" --verify-tag
 echo "release: published $tag"
