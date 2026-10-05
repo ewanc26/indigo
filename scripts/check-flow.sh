@@ -63,20 +63,29 @@ check_protocol() {
 }
 
 # A tag is releasable only when its version has a CHANGELOG section, it is on
-# main, and the CI jobs passed on that exact commit.
+# main, and `CI gate` passed on that exact commit. The check-runs API is public
+# for a public repository, so this needs no token; RELEASE_WAIT_SECONDS lets
+# the release workflow wait for a gate that is still running.
 check_release() {
-  local version="$1" ref="${2:-HEAD}"
-  grep -q "^## \[$version\]" CHANGELOG.md || bad "no CHANGELOG section for $version"
+  local version="$1" ref="${2:-HEAD}" sha repo state waited=0 wait="${RELEASE_WAIT_SECONDS:-0}"
+  scripts/release-notes.sh "$version" >/dev/null 2>&1 || bad "no CHANGELOG section with content for $version"
   git fetch -q origin main 2>/dev/null || true
-  git merge-base --is-ancestor "$(git rev-parse "$ref")" origin/main 2>/dev/null || \
-    bad "$ref is not on origin/main"
-  if [[ -n "${GITHUB_REPOSITORY:-}" && -n "${GH_TOKEN:-}" ]]; then
-    local sha n
-    sha=$(git rev-parse "$ref")
-    n=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs" \
-      --jq '[.check_runs[] | select(.name=="CI gate" and .conclusion=="success")] | length' 2>/dev/null || echo 0)
-    [[ "$n" -ge 1 ]] || bad "no successful 'CI gate' run on ${sha:0:9}"
-  fi
+  sha=$(git rev-parse "$ref^{commit}" 2>/dev/null) || { bad "$ref is not a commit"; return; }
+  git merge-base --is-ancestor "$sha" origin/main 2>/dev/null || bad "$ref is not on origin/main"
+  [[ "${RELEASE_SKIP_GATE:-0}" == 1 ]] && return
+  repo="${GITHUB_REPOSITORY:-ewanc26/indigo}"
+  while :; do
+    state=$(curl -fsS -H "Accept: application/vnd.github+json" \
+      ${GH_TOKEN:+-H "Authorization: Bearer $GH_TOKEN"} \
+      "https://api.github.com/repos/$repo/commits/$sha/check-runs?check_name=CI%20gate" 2>/dev/null |
+      python3 -c 'import json,sys
+runs=json.load(sys.stdin).get("check_runs",[])
+print("success" if any(r.get("conclusion")=="success" for r in runs) else ("pending" if any(r.get("status")!="completed" for r in runs) or not runs else "failure"))' 2>/dev/null || echo unknown)
+    [[ "$state" == success ]] && return
+    if [[ "$state" != failure ]] && (( waited < wait )); then sleep 20; waited=$((waited + 20)); continue; fi
+    bad "CI gate on ${sha:0:9} is $state, not success"
+    return
+  done
 }
 
 cmd="${1:-}"; shift || true

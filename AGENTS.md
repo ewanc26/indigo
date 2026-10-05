@@ -517,7 +517,7 @@ The icon goes through the standard `APP_ICON`/SMDH path: `ICON := assets/icon.pn
 - `indigo_update_sd_recover()` runs in `main()` before `romfsInit()`. Recovery must never rename the file the running build was launched from (copy it), never delete the last copy of a build, and keep the backup until the new build has started from the target.
 - Any change to the swap or recovery needs a case in `test_update_survives_power_loss_anywhere`. Copies on the card go through a temporary and a rename, so the swap never sees half a `.3dsx`.
 - Log steps and versions only. No URL with a query string, no response body, nothing from the session.
-- `scripts/release.sh` produces the assets through `scripts/update-manifest.sh make`; `.github/workflows/release-assets.yml` verifies what GitHub serves. Keep the asset names stable.
+- `.github/workflows/release.yml` produces the assets through `scripts/update-manifest.sh make` and verifies what GitHub serves; `release-assets.yml` re-verifies on demand. Keep the asset names stable: `indigo.3dsx` is also what Universal-DB lists.
 - A signature needs the owner's key. Never generate or commit a signing key.
 
 ## 20. Debugging
@@ -779,7 +779,10 @@ Indigo-specific rules:
 - Never weaken a check to make it pass. A new Indigo check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
 - Update CHANGELOG under `## [Unreleased]` in the same PR as a user-visible change.
 - Issues, issue titles and issue comments are written in the first person, in the owner's voice (plain British English, dry, specific: "I've found", "I want", never "This issue tracks"). End each with exactly `_Written by Claude on my behalf._` as the last line, instead of the Claude Code footer. PR descriptions keep their attribution lines.
-- `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
+- Releases: when a merged, green set of user-visible changes (or a Wolfram pin bump that changes behaviour) is on `main`, open a `release/vX.Y.Z` PR that renames `## [Unreleased]` to `## [X.Y.Z] - <date>` and updates the README version line, then run `scripts/release.sh X.Y.Z` on `main` after it merges. Semver: breaking bumps minor while 0.x (major after), a feature bumps minor, a fix bumps patch. The notes say plainly what was host/CI-verified and what was emulator or hardware.
+- `scripts/release.sh` only checks and pushes the tag. `.github/workflows/release.yml` re-checks (`scripts/check-flow.sh release`, which waits for `CI gate` on the tagged commit), builds against `wolfram.ref`, publishes, and verifies. Never build or upload a release by hand. Never move or re-cut a tag.
+- `wolfram.ref` pins the Wolfram release CI and releases build against. Bump it by PR, only to a Wolfram release.
+- Every PR adds a CHANGELOG entry under `## [Unreleased]` (Added / Changed / Fixed / Removed / Security), in the owner's voice, linking the PR.
 - Branch protection is an owner setting, tracked in #18.
 
 ## 28. Current state
