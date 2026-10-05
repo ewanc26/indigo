@@ -10,7 +10,7 @@ rasterised, so the artwork is this file and nobody places a rectangle by hand.
   coloured #15803d in light and #4ade80 in dark.
 - assets/icon.png (48x48) and assets/icon-small.png (24x24) are the SMDH
   icons the Homebrew Menu shows. The same shapes are sampled on a square grid,
-  the mark in #4ade80 on a dark green tile. The small icon is drawn at its own
+  the mark in #15803d on white, as Wolfram's docs/house-style.md requires. The small icon is drawn at its own
   size rather than left to smdhtool, whose fallback averages 2x2 blocks of the
   large one into a blur.
 
@@ -125,8 +125,10 @@ def png(width, height, rgb_rows):
 
 
 def icon(size=48):
-    bg = (0x05, 0x2E, 0x16)     # green-950
-    fg = (0x4A, 0xDE, 0x80)     # the dark-mode mark colour
+    # Wolfram docs/house-style.md: icons are the mark in #15803d on white,
+    # never a new colour.
+    bg = (0xFF, 0xFF, 0xFF)
+    fg = (0x15, 0x80, 0x3D)
     # Fit the design box (0..294, 18..196 is the drawn extent) into the tile
     # with a margin, keeping it square-pixelled.
     x0, x1, y0, y1 = 22.0, 278.0, 12.0, 210.0
