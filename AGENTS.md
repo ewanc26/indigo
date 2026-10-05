@@ -760,6 +760,7 @@ CONTRIBUTING.md is the written flow; these are the rules.
 - Protocol guard: `scripts/check-flow.sh protocol` rejects raw `com.atproto.*`, `app.bsky.*` and `uk.ewancroft.*` method strings in `src/` unless listed with a reason in `scripts/flow-protocol-allow.txt`. Shared logic goes to Wolfram; duplication with Cobalt is tracked in #20.
 - Doc drift: every `src/`, `scripts/`, `tools/`, `mk/`, `docs/`, `tests/` path and `make` target named in backticks in the docs must exist. Deliberate exceptions go in `scripts/flow-drift-allow.txt` with a reason.
 - Never weaken a check to make it pass. A new check needs a deliberate-violation case in `scripts/check-flow-selftest.sh`.
+- Issues, issue titles and issue comments are written in the first person, in the owner's voice (plain British English, dry, specific: "I've found", "I want", never "This issue tracks"). End each with exactly `_Written by Claude on my behalf._` as the last line, instead of the Claude Code footer. PR descriptions keep their attribution lines.
 - Releases only through `scripts/release.sh`. `.github/workflows/release-check.yml` rejects a `v*` tag with no CHANGELOG section, not on `main`, or without a green `CI gate` on its commit.
 - Branch protection (require `CI gate`, no direct pushes) is an owner setting; the agent cannot set it. It is tracked by a `needs-owner` issue.
 - Shared flow tooling may move to Wolfram as reusable workflows; Wolfram has none yet, so the scripts live here until it does.
