@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/ewanc26/indigo/actions/workflows/ci.yml"><img src="https://github.com/ewanc26/indigo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ewanc26/indigo/releases/latest"><img src="https://img.shields.io/github/v/release/ewanc26/indigo?sort=semver" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/ewanc26/indigo" alt="AGPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ewanc26/indigo?label=licence" alt="AGPL-3.0"></a>
   <a href="https://github.com/sponsors/ewanc26"><img src="https://img.shields.io/github/sponsors/ewanc26?logo=githubsponsors&logoColor=white&label=sponsors" alt="Sponsor"></a>
 </p>
 
