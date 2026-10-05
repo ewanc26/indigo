@@ -391,9 +391,10 @@ Two of the fields take effect at startup. `default_feed` is what
 `indigo_app_sign_in_succeeded` opens instead of the Following timeline, which is
 the single funnel to Home for both a fresh sign-in and a resumed session. It does
 not use `indigo_app_open_feed`, because that pushes a history entry and B from
-Home would then go back to sign-in. The accessibility fields are carried on the
-app but read by nothing yet: there is no settings screen, so they cannot be
-changed from inside the app and a hand-edited file is the only way to set them.
+Home would then go back to sign-in. Theme, high contrast, large touch targets, image alt text and text scale are
+read by layout (`text_scale` scales the post body only and shows fewer lines
+when they are taller, so the embed band never moves). `reduce_motion` has
+nothing to act on yet: Indigo draws no animation.
 `indigo_app_init` calls `indigo_settings_defaults` because its `memset` leaves
 `text_scale` at 0, which is not one of the valid scales.
 

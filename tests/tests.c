@@ -2050,6 +2050,57 @@ test_layout_draws_link_cards(void)
 /* Alt text is carried on the post and drawn only when the setting is on. It
  * takes the lines it needs out of the bottom of the band, so the picture gets
  * what is left -- and never nothing. */
+/* The text-size setting scales the post body and nothing else, keeps the block
+ * inside the vertical budget the embed band is positioned against, and leaves
+ * the default exactly as it was. */
+static void
+test_layout_text_scale(void)
+{
+    static const unsigned scales[] = {INDIGO_TEXT_SCALE_SMALL, INDIGO_TEXT_SCALE_NORMAL,
+                                      INDIGO_TEXT_SCALE_LARGE};
+    static const char *const body =
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word "
+        "word word word word word word word word word word word word word word";
+    float first_scale[3] = {0};
+    unsigned lines[3] = {0};
+
+    for (unsigned k = 0; k < 3; k++) {
+        indigo_app app;
+        indigo_input in = {0};
+        indigo_canvas top;
+        indigo_canvas bottom;
+
+        indigo_app_init(&app);
+        app.screen = INDIGO_SCREEN_HOME;
+        app.timeline.count = 1;
+        indigo_copy_utf8(app.timeline.posts[0].text, sizeof app.timeline.posts[0].text,
+                         body);
+        app.settings.text_scale = (indigo_text_scale) scales[k];
+        indigo_layout_build(&app, &in, &top, &bottom);
+        for (unsigned i = 0; i < top.count; i++) {
+            const indigo_cmd *cmd = &top.cmds[i];
+
+            if (cmd->kind == INDIGO_CMD_TEXT && strstr(top.text + cmd->text_offset, "word")) {
+                if (lines[k]++ == 0) {
+                    first_scale[k] = cmd->scale;
+                }
+                /* Never past the five-line block's bottom edge. */
+                CHECK(cmd->y + cmd->h <= 98.0f + 5.0f * 19.0f + 1.0f);
+            }
+        }
+    }
+    CHECK(first_scale[0] < first_scale[1]);
+    CHECK(first_scale[1] < first_scale[2]);
+    CHECK(first_scale[1] > 0.599f && first_scale[1] < 0.601f); /* default unchanged */
+    CHECK(lines[1] == 5);
+    CHECK(lines[2] >= 1 && lines[2] <= lines[1]);
+}
+
 static void
 test_layout_draws_alt_text(void)
 {
@@ -4280,6 +4331,7 @@ main(void)
     test_layout_draws_post_images();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();
+    test_layout_text_scale();
     test_image_viewer_opens_from_the_selected_post();
     test_image_viewer_needs_an_image();
     test_image_viewer_holds_a_copy();
