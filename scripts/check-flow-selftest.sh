@@ -46,5 +46,11 @@ echo 'Run `make nonexistent-target`.' >> AGENTS.md
 expect fail drift-make $c drift
 cp "$tmp/AGENTS.md.bak" AGENTS.md
 
+# Protocol guard: a raw lexicon method in src/ must be rejected.
+expect pass protocol-clean $c protocol
+printf '#define X "app.bsky.feed.getTimeline"\n' > src/util/zz_selftest.h
+expect fail protocol-raw-nsid $c protocol
+rm -f src/util/zz_selftest.h
+
 expect fail release-no-changelog $c release 99.0.0
 exit $fails
