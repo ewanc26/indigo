@@ -7,6 +7,9 @@ publishes the section matching the version you pass it.
 ## [Unreleased]
 
 ### Added
+- A logo and a Homebrew Menu icon: an indigo bunting on a twig, in pixel art.
+  `tools/gen_logo.py` draws both from one set of shapes, the 24x24 small icon
+  at its own size rather than averaged down from the 48x48 one.
 - The groundwork for updating from inside Indigo (docs/UPDATE.md). Each release
   now carries `update.json`, a versioned `indigo-<version>.3dsx` and its
   `.sha256`, and a workflow checks what GitHub serves against them. At start-up

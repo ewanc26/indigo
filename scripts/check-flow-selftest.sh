@@ -76,5 +76,12 @@ expect fail update-stale-plain-asset $u verify 1.2.3 "$tmp/stale"
 expect fail update-bad-version $u make v1.2.3 "$tmp/indigo.3dsx" "$tmp/rel2"
 expect fail update-wrong-version $u verify 1.2.4 "$tmp/rel"
 
+# Generated art: an edited icon must be caught.
+expect pass art-current python3 tools/gen_logo.py --check
+cp assets/icon.png "$tmp/icon.png"
+printf x >> assets/icon.png
+expect fail art-hand-edited python3 tools/gen_logo.py --check
+cp "$tmp/icon.png" assets/icon.png
+
 expect fail release-no-changelog $c release 99.0.0
 exit $fails
