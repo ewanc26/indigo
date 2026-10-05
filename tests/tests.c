@@ -1553,8 +1553,9 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets first, then the twelve app actions. */
-    CHECK(menu.count == 15);
+    /* Three facet targets, the two entries about the post, then the twelve app
+     * actions. */
+    CHECK(menu.count == 17);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1562,8 +1563,11 @@ test_facet_menu(void)
     CHECK(strcmp(menu.items[1].label, "Tag: #cats") == 0);
     CHECK(menu.items[2].kind == INDIGO_MENU_SHOW_LINK);
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
-    CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[14].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[3].kind == INDIGO_MENU_LIKED_BY);
+    CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
+    CHECK(strcmp(menu.post_uri, p.uri) == 0);
+    CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[16].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1581,7 +1585,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 15);
+    CHECK(app.menu.count == 17);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1589,6 +1593,51 @@ test_facet_menu(void)
     CHECK(app.screen == INDIGO_SCREEN_PROFILE);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE);
     CHECK(strcmp(app.request_post_uri, "did:plc:alice0000000000000000000000") == 0);
+}
+
+/* "Who liked this" and "Who reposted this": the menu opens a people list
+ * keyed by the post's URI, which is longer than a handle and must arrive whole. */
+static void
+test_liked_by_from_the_menu(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_post p = make_post("at://did:plc:alice0000000000000000000000/app.bsky.feed.post/3kabc", "hi");
+    indigo_request_kind k;
+    indigo_field f;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_app_sign_in_succeeded(&app, "me.example.com");
+    indigo_timeline_append(&app.timeline, &p);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MENU);
+
+        in.touch_pressed = true;
+        in.touch_x = (int) (r.x + 4);
+        in.touch_y = (int) (r.y + 4);
+    }
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.items[0].kind == INDIGO_MENU_LIKED_BY);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_SEARCH);
+    CHECK(app.search.kind == INDIGO_SEARCH_LIKED_BY);
+    CHECK(strcmp(indigo_search_title(&app.search), "Liked by") == 0);
+    k = indigo_app_take_request(&app, &f);
+    CHECK(k == INDIGO_REQUEST_PEOPLE);
+    CHECK(app.request_people == INDIGO_SEARCH_LIKED_BY);
+    CHECK(strcmp(app.request_subject, p.uri) == 0); /* whole, not truncated */
+
+    /* B returns to the timeline the post is on, not past it. */
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
 }
 
 static void
@@ -1602,15 +1651,16 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 12);
-    CHECK(menu.items[0].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.count == 14);
+    CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
+    CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
      * bounds. */
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 12);
+    CHECK(menu.count == 14);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
@@ -1641,7 +1691,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets plus the twelve app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 12);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 14);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -4359,6 +4409,7 @@ main(void)
     test_home_requests();
     test_facet_menu();
     test_facet_menu_edges();
+    test_liked_by_from_the_menu();
     test_menu_rows_on_screen();
     test_search_model();
     test_search_selection_scroll();

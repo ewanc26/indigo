@@ -1482,7 +1482,15 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         /* The followers and following lists have no query; the box names whose
          * list this is instead of inviting typing nothing would act on. */
         indigo_canvas_rect(c, q.x, q.y, q.w, q.h, COL_PILL);
-        indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s", s->subject);
+        if (s->kind == INDIGO_SEARCH_LIKED_BY || s->kind == INDIGO_SEARCH_REPOSTED_BY) {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "%s",
+                               s->kind == INDIGO_SEARCH_LIKED_BY
+                                   ? "People who liked this post"
+                                   : "People who reposted this post");
+        } else {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s",
+                               s->subject);
+        }
     }
     /* The search screen has no status line in its header to give up, so the
      * button simply lands in the empty middle of the bar. */
