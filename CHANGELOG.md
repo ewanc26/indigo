@@ -8,6 +8,13 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Browser sign-in now uses Wolfram's pairing client rather than Indigo's own
+  copy. The visible difference: if the sign-in node has forgotten the pairing
+  (it restarted), Indigo says so at once instead of polling for nine minutes.
+  Indigo now builds against Wolfram v0.27.0.
+  ([#40](https://github.com/ewanc26/indigo/pull/40))
+
 ## [0.6.0] - 2026-10-06
 
 What has and has not been run, plainly: everything here passes the host tests
