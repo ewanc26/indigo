@@ -308,7 +308,7 @@ Two sign-in flows exist and are tracked as separate rows in `docs/PARITY.md`; ne
 - App password: `do_login()`; service URL, handle, app password. Emulator-verified.
 - OAuth through a hosted Wolfram OAuth node: `do_oauth()`; selected by an empty password. The service URL must be the node. The console holds only the node's bearer token. Not verified on host, emulator or hardware; do not claim otherwise.
 
-The pairing client (`uk.ewancroft.oauth.begin` / `.poll`) is protocol and belongs in Wolfram (ewanc26/wolfram#101, with test vectors). Until it lands, `scripts/flow-protocol-allow.txt` allows those two strings in `src/atproto/session.c` and nothing else. Never log the pairing poll URL, the pair code's poll response, or the node token.
+The pairing client is Wolfram's `wf_oauth_pair_run()` (`wolfram/oauth_pairing.h`, wolfram#101). `do_oauth()` supplies only the hooks (`pair_on_code`, `pair_sleep`), which run on the session worker. Never parse pairing responses or name the `uk.ewancroft.oauth.*` methods in Indigo; `scripts/flow-protocol-allow.txt` is empty and must stay so. Wipe the poll result with `wf_oauth_pair_poll_wipe()` on every path. Never log the pair code, a poll URL or the node token; the node's `message` is human text and may be logged.
 
 If credentials are persisted to SDMC:
 
