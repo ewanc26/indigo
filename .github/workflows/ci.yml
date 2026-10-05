@@ -4,8 +4,46 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
+  # The repository flow, enforced; see CONTRIBUTING.md. The checks live in
+  # scripts/check-flow.sh and scripts/check-flow-selftest.sh proves each can fail.
+  flow:
+    name: Flow checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checks can fail
+        run: scripts/check-flow-selftest.sh
+      - name: Docs have not drifted
+        run: scripts/check-flow.sh drift
+      - name: Branch name
+        if: github.event_name == 'pull_request'
+        run: scripts/check-flow.sh branch "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+      - name: Pull request title
+        if: github.event_name == 'pull_request'
+        run: scripts/check-flow.sh title "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+      - name: Pull request body
+        if: github.event_name == 'pull_request'
+        run: |
+          printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/body.md"
+          scripts/check-flow.sh body "$RUNNER_TEMP/body.md"
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+      - name: Commit subjects
+        if: github.event_name == 'pull_request'
+        run: scripts/check-flow.sh commits "origin/$BASE_REF..$HEAD_SHA"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
   host:
     name: Host tests and warnings sweep
     runs-on: ubuntu-latest
@@ -42,3 +80,18 @@ jobs:
         with:
           name: indigo-3dsx
           path: indigo/indigo.3dsx
+
+  # The one status branch protection should require. It fails if any job it
+  # waits on failed or was cancelled, so adding a job to `needs` is how a new
+  # check becomes mandatory without touching repository settings.
+  gate:
+    name: CI gate
+    if: always()
+    needs: [flow, host, build-3ds]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needs: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*|*" skipped "*) exit 1;; esac

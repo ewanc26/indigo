@@ -222,6 +222,10 @@ Cobalt is built around Wii U-specific facilities such as WUT, SDL2, the GamePad 
 
 Wolfram is the shared protocol layer between them because the protocol layer should not need to know which Nintendo console is running the client.
 
+## Contributing
+
+Changes go through a branch and a pull request, and `main` is never pushed to directly. The flow, and the checks that enforce it, are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Licence
 
 Indigo is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).

@@ -1,0 +1,10 @@
+name: Feature or parity request
+description: Something Indigo should do, or a gap against Cobalt
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should it do, and how would it work on a 3DS?
+      description: Say what the right interaction is on two screens, not just what another client does.
+    validations: {required: true}
