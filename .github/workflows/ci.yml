@@ -39,6 +39,12 @@ jobs:
           scripts/check-flow.sh body "$RUNNER_TEMP/body.md"
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+      - name: No merge commits
+        if: github.event_name == 'pull_request'
+        run: scripts/check-flow.sh merges "origin/$BASE_REF..$HEAD_SHA"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - name: Commit subjects
         if: github.event_name == 'pull_request'
         run: scripts/check-flow.sh commits "origin/$BASE_REF..$HEAD_SHA"

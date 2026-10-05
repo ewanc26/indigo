@@ -750,7 +750,9 @@ Prefer focused commits.
 
 CONTRIBUTING.md is the written flow; these are the rules.
 
-- Never push to `main`. Branch from a fresh `origin/main` as `<type>/<kebab-name>`, open a pull request, merge with squash only when `CI gate` is green.
+- Never push to `main`. Branch from a fresh `origin/main` as `<type>/<kebab-name>`, open a pull request, merge with **rebase** (`merge_method: rebase`) only when `CI gate` is green.
+- Every commit lands on `main` unchanged: each must be a standalone conventional commit that builds and passes `make test`. Write review fixes as new `fix(scope): ...` commits.
+- Never merge `main` into a PR branch; `scripts/check-flow.sh merges` fails a PR containing a merge commit. If a PR cannot be rebased cleanly, cut a fresh branch from `origin/main`, cherry-pick, open a new PR linking the old one, and close the old one with a comment. Never force-push.
 - Types: `feat fix docs chore ci refactor test build ui perf release revert`. Commit subjects and PR titles are `type(scope): subject`, 100 characters at most.
 - The PR body is `.github/pull_request_template.md`: `## Summary` and `## Verification`. Verification states what ran and where; say "host only" without devkitARM.
 - Update AGENTS.md, README, `docs/` and CHANGELOG in the same PR as the change.

@@ -14,6 +14,11 @@ publishes the section matching the version you pass it.
   build until the new one has started. The screen that offers an update is not
   in yet; it waits on Wolfram's shared update module.
 
+### Changed
+- Pull requests are merged by rebase, so every commit lands on `main` as it
+  was written, and a pull request containing a merge commit fails the flow
+  checks.
+
 ## [0.5.0] - 2026-10-04
 
 ### Added

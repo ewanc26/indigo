@@ -36,6 +36,14 @@ expect pass commits-good bash -c "cd $r && $OLDPWD/$c commits HEAD~1..HEAD"
 git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'did a thing'
 expect fail commits-bad bash -c "cd $r && $OLDPWD/$c commits HEAD~1..HEAD"
 
+# Merge commits: a merged side branch in the range must be rejected.
+expect pass merges-linear bash -c "cd $r && $OLDPWD/$c merges HEAD~2..HEAD"
+git -C "$r" checkout -q -b side HEAD~1
+git -C "$r" -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'fix: side'
+git -C "$r" checkout -q -
+git -C "$r" -c user.name=t -c user.email=t@t merge -q --no-ff --no-edit side
+expect fail merges-merge-commit bash -c "cd $r && $OLDPWD/$c merges HEAD~3..HEAD"
+
 # Drift: a doc naming a missing path, and a missing make target, must fail.
 expect pass drift-clean $c drift
 cp AGENTS.md "$tmp/AGENTS.md.bak"

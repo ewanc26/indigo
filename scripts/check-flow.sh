@@ -5,6 +5,7 @@
 #   scripts/check-flow.sh title  <pull request title>
 #   scripts/check-flow.sh body   <file holding the pull request body>
 #   scripts/check-flow.sh commits <git range>      e.g. origin/main..HEAD
+#   scripts/check-flow.sh merges <git range>
 #   scripts/check-flow.sh drift
 #   scripts/check-flow.sh protocol
 #   scripts/check-flow.sh release <version> [<ref>]
@@ -45,6 +46,16 @@ check_commits() {
       bad "commit ${sha:0:9} subject '$subj' must look like 'type(scope): subject'"
     (( ${#subj} <= 100 )) || bad "commit ${sha:0:9} subject is ${#subj} characters; keep it to 100"
   done < <(git log --no-merges --format='%H %s' "$range")
+}
+
+# Rebase-merge lands each commit as written, so a merge commit in a pull
+# request would land too, and is refused.
+check_merges() {
+  local range="$1" sha
+  while read -r sha; do
+    [[ -z "$sha" ]] && continue
+    bad "commit ${sha:0:9} is a merge commit; rebase onto main instead (see CONTRIBUTING.md)"
+  done < <(git rev-list --merges "$range")
 }
 
 # Every repository path the agent and user docs name must exist, so the docs
@@ -110,9 +121,10 @@ case "$cmd" in
   title)   check_title "${1:-}" ;;
   body)    check_body "${1:-/dev/null}" ;;
   commits) check_commits "${1:-origin/main..HEAD}" ;;
+  merges)  check_merges "${1:-origin/main..HEAD}" ;;
   drift)   check_drift ;;
   protocol) check_protocol ;;
   release) check_release "${1:-}" "${2:-HEAD}" ;;
-  *) echo "usage: $0 {branch|title|body|commits|drift|release} ..." >&2; exit 2 ;;
+  *) echo "usage: $0 {branch|title|body|commits|merges|drift|protocol|release} ..." >&2; exit 2 ;;
 esac
 exit $rc
