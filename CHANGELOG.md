@@ -30,6 +30,11 @@ as the release notes.
   has been checked, with app-password and browser sign-in as separate rows.
   ([#21](https://github.com/ewanc26/indigo/pull/21))
 
+- Everything a Universal-DB listing needs, generated: the entry, a 256x128
+  banner, and screenshots rendered from the layout code, plus
+  `scripts/udb-submit.sh` to open the pull request in my name.
+  (docs/UNIVERSAL-DB.md, [#36](https://github.com/ewanc26/indigo/pull/36))
+
 ### Changed
 - The text-size setting now applies to post bodies.
   ([#12](https://github.com/ewanc26/indigo/pull/12))

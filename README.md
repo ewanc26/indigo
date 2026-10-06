@@ -116,6 +116,8 @@ Wolfram is the shared protocol layer between them because the protocol layer sho
 
 ## Installing
 
+Indigo is not on Universal-DB yet, so Universal-Updater cannot install it; [docs/UNIVERSAL-DB.md](docs/UNIVERSAL-DB.md) covers what that will take. Until then, copy `indigo.3dsx` from the [latest release](https://github.com/ewanc26/indigo/releases/latest) to the SD card.
+
 The resulting application is intended for:
 
 ```
