@@ -258,7 +258,7 @@ This is a deliberate choice rather than an omission: post text, display names an
 
 ### Releases
 
-`scripts/release.sh [--dry-run] <version>` checks and tags; it does not build or upload anything. It refuses to run unless I am on a clean `main` that equals `origin/main`, there is a non-empty `CHANGELOG.md` section for the version, the host tests pass, and `CI gate` is green on that commit. The tag starts `.github/workflows/release.yml`, which checks all of that again, builds the `.3dsx` from the tag against the Wolfram release in `wolfram.ref`, writes the update assets, publishes the release with the changelog section as its notes, and checks what GitHub then serves. A tag is never moved; a wrong release gets a new patch.
+`scripts/release.sh [--dry-run] <version>` checks and tags; it does not build or upload anything. It refuses to run unless I am on a clean `main` that equals `origin/main`, there is a non-empty `CHANGELOG.md` section for the version, the host tests pass, and `CI gate` is green on that commit. With `--dispatch` it starts the same workflow through the REST API instead of pushing a tag, and GitHub makes the tag; that is the route where a tag push is refused. The workflow which checks all of that again, builds the `.3dsx` from the tag against the Wolfram release in `wolfram.ref`, writes the update assets, publishes the release with the changelog section as its notes, and checks what GitHub then serves. A tag is never moved; a wrong release gets a new patch.
 
 The devkitPro `3ds_rules` infrastructure produces the `.3dsx` executable and embedded SMDH metadata. Indigo is intended to be launched through the Homebrew Menu.
 

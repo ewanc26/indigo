@@ -1,11 +1,22 @@
 name: Release
 
-# A v* tag, pushed by scripts/release.sh, becomes a GitHub release. Every step
-# a release needs is here, so nothing is built or uploaded from anyone's
-# machine. The tag is never moved: a wrong release is fixed by a new patch.
+# A release is made here, never on anyone's machine. Two ways in, the same
+# steps after:
+#   - workflow_dispatch with a version, for a release commit already on main
+#     (scripts/release.sh --dispatch X.Y.Z does the checks and the dispatch).
+#     GitHub creates the tag with this workflow's own token, because an agent's
+#     sandbox may not push tags;
+#   - a v* tag pushed by hand with scripts/release.sh X.Y.Z.
+# The tag is never moved: a wrong release is fixed by a new patch.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (x.y.z); its CHANGELOG section must be on main
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,16 +25,33 @@ jobs:
   check:
     name: Release check
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Tag is releasable
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+      - name: Work out what is being released
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            version="$INPUT_VERSION"
+            git rev-parse -q --verify "refs/tags/v$version" >/dev/null && { echo "v$version already exists; cut a new patch instead"; exit 1; }
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Commit is releasable
         env:
           GH_TOKEN: ${{ github.token }}
-          # The tag and main's own CI run start together; wait for the gate.
+          # main's own CI run may still be going; wait for the gate.
           RELEASE_WAIT_SECONDS: "1500"
-        run: scripts/check-flow.sh release "${GITHUB_REF_NAME#v}" "$GITHUB_SHA"
+        run: scripts/check-flow.sh release "${{ steps.v.outputs.version }}" "${{ steps.v.outputs.sha }}"
 
   build:
     name: Build release assets
@@ -35,6 +63,15 @@ jobs:
         with:
           path: indigo
           fetch-depth: 0
+          ref: ${{ needs.check.outputs.sha }}
+      # `git describe` stamps the binary. On a dispatch the tag does not exist
+      # yet, so make a local one for the build only; the real tag is created
+      # by the publish job, at this same commit.
+      - name: Name the build
+        working-directory: indigo
+        run: |
+          git config --global --add safe.directory "$PWD"
+          git -c user.name=ci -c user.email=ci@invalid tag -a "v${{ needs.check.outputs.version }}" -m "Indigo ${{ needs.check.outputs.version }}" || true
       - name: Wolfram pin
         id: wolfram
         run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
@@ -55,7 +92,7 @@ jobs:
       - name: Update assets
         working-directory: indigo
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${{ needs.check.outputs.version }}"
           scripts/update-manifest.sh make "$v" indigo.3dsx release
           cp indigo.3dsx release/indigo.3dsx
           scripts/update-manifest.sh verify "$v" release
@@ -66,12 +103,14 @@ jobs:
 
   publish:
     name: Publish
-    needs: build
+    needs: [check, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           name: release
@@ -80,9 +119,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${{ needs.check.outputs.version }}"
           scripts/release-notes.sh "$v" > "$RUNNER_TEMP/notes.md"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Indigo $v" \
+          # --target makes GitHub create the annotated-or-lightweight tag v$v at
+          # the checked commit; on a tag push the tag already exists and
+          # --target is ignored.
+          gh release create "v$v" --target "${{ needs.check.outputs.sha }}" --title "Indigo $v" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json
       - name: Verify what GitHub serves
@@ -90,5 +132,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir served
-          gh release download "$GITHUB_REF_NAME" --dir served
-          scripts/update-manifest.sh verify "${GITHUB_REF_NAME#v}" served
+          gh release download "v${{ needs.check.outputs.version }}" --dir served
+          scripts/update-manifest.sh verify "${{ needs.check.outputs.version }}" served
