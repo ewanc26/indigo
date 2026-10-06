@@ -9,7 +9,7 @@ as the release notes.
 ## [Unreleased]
 
 ### Changed
-- Indigo now builds against Wolfram v0.28.0 (was v0.27.0).
+- Indigo now builds against Wolfram v0.28.0 (was v0.27.0). ([#46](https://github.com/ewanc26/indigo/pull/46))
 
 ### Added
 - Updates are signed. Each release's `update.json` gets a detached Ed25519 signature, `update.json.sig`, made by the Release workflow with a key that exists only as a repository secret. Indigo checks it against the public key built in before it reads the manifest, and refuses a release that has no signature or the wrong one, so a replaced release no longer passes on its SHA-256 alone. Wolfram's `wf_update_verify_signature` does the check. Releases up to 0.7.0 are unsigned. None of it has run on an emulator or a console ([#24](https://github.com/ewanc26/indigo/issues/24)).
