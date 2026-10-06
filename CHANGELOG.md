@@ -8,6 +8,14 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-06
+
+What has and has not been run, plainly: everything here passes the host tests
+(3941 checks under AddressSanitizer and UBSan) and builds and links for the 3DS
+in CI against Wolfram v0.27.0. None of it has been run on an emulator or a
+real 3DS: not the update screen, not browser sign-in through the new pairing
+client, and not the icon.
+
 ### Added
 - Indigo can update itself. More, then "Check for updates", asks GitHub for the latest release and shows its version, and nothing is downloaded until I press Install. The download is checked against the size and SHA-256 the release states, written to the card, read back and checked again, and only then swapped in, keeping the old build until the new one has started. A build that is not a plain release, or was not started from a `.3dsx` on the SD card, says it cannot update and why. It is not signed, so it does not prove a release is mine, and none of it has run on an emulator or a console. ([#43](https://github.com/ewanc26/indigo/pull/43))
 
