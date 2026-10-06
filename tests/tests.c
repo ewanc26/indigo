@@ -17,6 +17,7 @@
 #include "util/buildinfo.h"
 #include "util/timefmt.h"
 #include "update/update.h"
+#include "update/updater.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -740,19 +741,20 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 12);
+    CHECK(app.menu.count == 13);
     CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
     CHECK(app.menu.items[6].kind == INDIGO_MENU_MUTED);
     CHECK(app.menu.items[7].kind == INDIGO_MENU_BLOCKED);
     CHECK(app.menu.items[9].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[10].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(app.menu.items[10].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[11].kind == INDIGO_MENU_SIGN_OUT);
     CHECK(strcmp(app.menu.items[8].label, "My profile") == 0);
 
-    /* Sign out is the eleventh item, so it sits below the window until the
+    /* Sign out is the twelfth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 10; i++) {
+    for (unsigned i = 0; i < 11; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1556,7 +1558,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the two entries about the post, then the twelve app
      * actions. */
-    CHECK(menu.count == 17);
+    CHECK(menu.count == 18);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -1568,7 +1570,7 @@ test_facet_menu(void)
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[16].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[17].kind == INDIGO_MENU_CLOSE);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -1586,7 +1588,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 17);
+    CHECK(app.menu.count == 18);
 
     in = (indigo_input) {0};
     in.confirm = true;
@@ -1652,7 +1654,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 14);
+    CHECK(menu.count == 15);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
@@ -1661,11 +1663,11 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 14);
+    CHECK(menu.count == 15);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 12);
+    CHECK(menu.count == 13);
     CHECK(strcmp(menu.items[8].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
@@ -1692,7 +1694,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets plus the twelve app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 14);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 15);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -1816,7 +1818,8 @@ test_no_duplicate_back_hints(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,  INDIGO_SCREEN_HOME,       INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE, INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH,     INDIGO_SCREEN_SETTINGS};
+        INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH,     INDIGO_SCREEN_SETTINGS,
+        INDIGO_SCREEN_UPDATE};
     indigo_app app;
     indigo_input in = {0};
 
@@ -2343,7 +2346,8 @@ test_shapes_stay_on_screen(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS};
+        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS,
+        INDIGO_SCREEN_UPDATE};
     static const char *const url =
         "https://cdn.bsky.app/img/avatar/plain/did:plc:rhiannon/avatar@jpeg";
     indigo_app app;
@@ -2377,7 +2381,8 @@ test_text_stays_on_screen(void)
     static const indigo_screen screens[] = {
         INDIGO_SCREEN_SIGNIN,     INDIGO_SCREEN_HOME,      INDIGO_SCREEN_THREAD,
         INDIGO_SCREEN_PROFILE,    INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
-        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS};
+        INDIGO_SCREEN_COMPOSE,    INDIGO_SCREEN_SEARCH,    INDIGO_SCREEN_SETTINGS,
+        INDIGO_SCREEN_UPDATE};
     /* A feed name is the only title a person writes, and the bar beside it
      * holds a hint and the post counter, so its lengths are measured too: a
      * short one leaves the hint where every other screen keeps it, a long one
@@ -2400,6 +2405,9 @@ test_text_stays_on_screen(void)
                      "at://did:plc:example/app.bsky.feed.xyz");
     for (unsigned n = 0; n < sizeof feed_names / sizeof feed_names[0]; n++) {
         indigo_copy_utf8(app.feed_name, sizeof app.feed_name, feed_names[n]);
+        /* A feed's name titles the home screen; say so rather than relying on
+         * whichever screen the loop above happened to end on. */
+        app.screen = INDIGO_SCREEN_HOME;
         check_text_on_screen(&app, &in, INDIGO_SCREEN_HOME);
     }
 }
@@ -4813,6 +4821,177 @@ test_update_recover_without_a_journal(void)
     CHECK(indigo_update_recover(&fs, &p, NULL, p.target) == INDIGO_RECOVER_NOTHING);
 }
 
+/* ---- The update screen -------------------------------------------------- */
+
+static void
+test_update_asset_ok(void)
+{
+    const char *good_url = "https://github.com/ewanc26/indigo/releases/download/v0.7.0/indigo-0.7.0.3dsx";
+
+    CHECK(indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx", good_url));
+    /* A different file name, a different release's URL, a different host, and
+     * a query string tacked on: each is refused. */
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo.3dsx", good_url));
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
+                                  "https://github.com/ewanc26/indigo/releases/download/v0.6.0/indigo-0.7.0.3dsx"));
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
+                                  "https://example.com/ewanc26/indigo/releases/download/v0.7.0/indigo-0.7.0.3dsx"));
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
+                                  "https://github.com/ewanc26/indigo/releases/download/v0.7.0/indigo-0.7.0.3dsx?x=1"));
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
+                                  "http://github.com/ewanc26/indigo/releases/download/v0.7.0/indigo-0.7.0.3dsx"));
+    CHECK(!indigo_update_asset_ok("0.7.0-rc.1", "indigo-0.7.0-rc.1.3dsx", good_url));
+    CHECK(!indigo_update_asset_ok(NULL, "indigo-0.7.0.3dsx", good_url));
+    CHECK(!indigo_update_asset_ok("0.7.0", NULL, good_url));
+}
+
+static void
+test_updater_eligibility(void)
+{
+    indigo_updater u;
+
+    indigo_updater_init(&u, "v0.6.0", true);
+    CHECK(u.state == INDIGO_UPDATER_IDLE && !strcmp(u.current, "0.6.0"));
+    /* Not launched from a .3dsx on the card, past its tag, dirty, or with no
+     * release to name: never offered an update, with a reason. */
+    indigo_updater_init(&u, "v0.6.0", false);
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE && u.message[0]);
+    indigo_updater_init(&u, "v0.6.0-3-gabc1234", true);
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE && u.message[0]);
+    indigo_updater_init(&u, "v0.6.0-dirty", true);
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE);
+    indigo_updater_init(&u, "abc1234", true);
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE && u.current[0] == '\0');
+    indigo_updater_init(&u, NULL, true);
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE);
+    CHECK(indigo_updater_action_for(&u) == INDIGO_UPDATER_ACT_NONE);
+}
+
+static void
+test_updater_transitions(void)
+{
+    indigo_updater u;
+    char label[48];
+
+    indigo_updater_init(&u, "v0.6.0", true);
+    CHECK(indigo_updater_action_for(&u) == INDIGO_UPDATER_ACT_CHECK);
+    CHECK(!strcmp(indigo_updater_button_label(&u, label, sizeof label), "Check for updates"));
+
+    /* An install cannot be started before an update has been shown. */
+    indigo_updater_begin_install(&u);
+    CHECK(u.state == INDIGO_UPDATER_IDLE);
+    indigo_updater_staged(&u);
+    indigo_updater_installed(&u);
+    CHECK(u.state == INDIGO_UPDATER_IDLE);
+
+    indigo_updater_begin_check(&u);
+    CHECK(u.state == INDIGO_UPDATER_CHECKING);
+    CHECK(indigo_updater_action_for(&u) == INDIGO_UPDATER_ACT_NONE);
+    CHECK(indigo_updater_button_label(&u, label, sizeof label)[0] == '\0');
+    indigo_updater_check_done(&u, "0.6.0", 100, false);
+    CHECK(u.state == INDIGO_UPDATER_UP_TO_DATE);
+
+    indigo_updater_begin_check(&u);
+    indigo_updater_check_done(&u, "0.7.0", 1442404, true);
+    CHECK(u.state == INDIGO_UPDATER_AVAILABLE && !strcmp(u.latest, "0.7.0") && u.size == 1442404);
+    CHECK(indigo_updater_action_for(&u) == INDIGO_UPDATER_ACT_INSTALL);
+    CHECK(!strcmp(indigo_updater_button_label(&u, label, sizeof label), "Install 0.7.0"));
+
+    indigo_updater_begin_install(&u);
+    CHECK(u.state == INDIGO_UPDATER_DOWNLOADING);
+    CHECK(indigo_updater_action_for(&u) == INDIGO_UPDATER_ACT_NONE);
+    /* A late "checked" from an earlier request cannot move it. */
+    indigo_updater_check_done(&u, "0.9.9", 1, true);
+    CHECK(u.state == INDIGO_UPDATER_DOWNLOADING && !strcmp(u.latest, "0.7.0"));
+    indigo_updater_staged(&u);
+    CHECK(u.state == INDIGO_UPDATER_READY);
+    indigo_updater_installed(&u);
+    CHECK(u.state == INDIGO_UPDATER_INSTALLED);
+    /* Once swapped, nothing can reopen the question. */
+    indigo_updater_fail(&u, "late failure");
+    indigo_updater_begin_check(&u);
+    CHECK(u.state == INDIGO_UPDATER_INSTALLED);
+
+    /* A failure keeps the message, offers a retry, and a retry clears it. */
+    indigo_updater_init(&u, "v0.6.0", true);
+    indigo_updater_begin_check(&u);
+    indigo_updater_fail(&u, "Could not reach GitHub.");
+    CHECK(u.state == INDIGO_UPDATER_FAILED && !strcmp(u.message, "Could not reach GitHub."));
+    CHECK(!strcmp(indigo_updater_button_label(&u, label, sizeof label), "Try again"));
+    indigo_updater_begin_check(&u);
+    CHECK(u.state == INDIGO_UPDATER_CHECKING && u.message[0] == '\0');
+
+    /* An unavailable build stays unavailable whatever it is told. */
+    indigo_updater_init(&u, "v0.6.0", false);
+    indigo_updater_begin_check(&u);
+    indigo_updater_fail(&u, "x");
+    CHECK(u.state == INDIGO_UPDATER_UNAVAILABLE);
+}
+
+static void
+test_update_screen_asks_before_it_installs(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+
+    indigo_app_init(&app);
+    indigo_app_set_updater(&app, "v0.6.0", true);
+    indigo_app_open_update(&app);
+    CHECK(app.screen == INDIGO_SCREEN_UPDATE);
+
+    /* Opening the screen asks for nothing; A on it asks to check. */
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, NULL) == INDIGO_REQUEST_UPDATE_CHECK);
+    CHECK(app.updater.state == INDIGO_UPDATER_CHECKING);
+    /* While it is checking, A does nothing. */
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+
+    indigo_updater_check_done(&app.updater, "0.7.0", 1000, true);
+    /* The version is shown first: nothing has been requested yet. */
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(bottom.count > 0);
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, NULL) == INDIGO_REQUEST_UPDATE_INSTALL);
+    CHECK(app.updater.state == INDIGO_UPDATER_DOWNLOADING);
+
+    /* The button is touchable on its own rectangle, and B goes back. */
+    indigo_app_init(&app);
+    indigo_app_set_updater(&app, "v0.6.0", true);
+    indigo_app_open_update(&app);
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_UPDATE);
+        indigo_input touch = {0};
+
+        touch.touch_pressed = true;
+        touch.touch_x = (int) (r.x + r.w / 2);
+        touch.touch_y = (int) (r.y + r.h / 2);
+        indigo_app_update(&app, &touch);
+        CHECK(indigo_app_take_request(&app, NULL) == INDIGO_REQUEST_UPDATE_CHECK);
+    }
+    {
+        indigo_input back = {0};
+
+        back.back = true;
+        indigo_app_update(&app, &back);
+        CHECK(app.screen != INDIGO_SCREEN_UPDATE);
+    }
+
+    /* A development build offers no button at all. */
+    indigo_app_init(&app);
+    indigo_app_set_updater(&app, "v0.6.0-2-gabc1234", true);
+    indigo_app_open_update(&app);
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+}
+
 int
 main(void)
 {
@@ -4917,6 +5096,10 @@ main(void)
     test_update_stage_verifies_from_disk();
     test_update_install_happy_path();
     test_update_survives_power_loss_anywhere();
+    test_update_asset_ok();
+    test_updater_eligibility();
+    test_updater_transitions();
+    test_update_screen_asks_before_it_installs();
     test_update_recover_rejects_a_damaged_staged_file();
     test_update_recover_without_a_journal();
 

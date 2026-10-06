@@ -147,6 +147,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_back_button;
     case INDIGO_ACTION_IMAGE:
         return s_image_button;
+    case INDIGO_ACTION_UPDATE:
+        return (indigo_rect) {SETTINGS_ROW_X, 150, SETTINGS_ROW_W, 40};
     case INDIGO_ACTION_MENU0:
     case INDIGO_ACTION_MENU1:
     case INDIGO_ACTION_MENU2:
@@ -290,6 +292,7 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_SETTINGS_ROW4, INDIGO_ACTION_SETTINGS_ROW5,
         INDIGO_ACTION_SETTINGS_ROW6, INDIGO_ACTION_SETTINGS_ROW7,
         INDIGO_ACTION_BACK};
+    static const indigo_action update_actions[] = {INDIGO_ACTION_UPDATE, INDIGO_ACTION_BACK};
     const indigo_action *list = signin_actions;
     unsigned count = 0;
 
@@ -324,6 +327,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_IMAGE:
         USE(image_actions);
+        break;
+    case INDIGO_SCREEN_UPDATE:
+        USE(update_actions);
         break;
     }
 #undef USE
@@ -1073,6 +1079,69 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
                        INDIGO_BUILD_COMMIT, INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
 }
 
+/* The update screen, top screen: which build this is, and what the updater
+ * knows. Every state says in plain words what happens next, and the one that
+ * offers an update says what it is checked against and what that does not
+ * prove, because "verified" is a word that should not outrun the check. */
+static void
+build_top_update(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_updater *u = &app->updater;
+    const char *state;
+    uint32_t colour = COL_TEXT_SOFT;
+    float y;
+
+    top_title(c, "Update", "");
+    indigo_canvas_text(c, 18, 44, 0.65f, COL_TEXT, "This build: %s",
+                       u->current[0] ? u->current : "unknown");
+    indigo_canvas_text(c, 18, 62, 0.5f, COL_TEXT_DIM, "%s (build %d, %s)", INDIGO_BUILD_COMMIT,
+                       INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
+
+    switch (u->state) {
+    case INDIGO_UPDATER_UNAVAILABLE:
+        state = u->message;
+        break;
+    case INDIGO_UPDATER_IDLE:
+        state = "I have not asked GitHub yet. Updates come only from the releases of ewanc26/indigo.";
+        break;
+    case INDIGO_UPDATER_CHECKING:
+        state = "Asking GitHub for the latest release...";
+        break;
+    case INDIGO_UPDATER_UP_TO_DATE:
+        state = "You have the latest release.";
+        break;
+    case INDIGO_UPDATER_AVAILABLE:
+        state = "A newer release is available. Nothing has been downloaded.";
+        break;
+    case INDIGO_UPDATER_DOWNLOADING:
+        state = "Downloading, then checking the size and SHA-256 before anything on the card changes...";
+        break;
+    case INDIGO_UPDATER_READY:
+        state = "Downloaded and checked. Putting it in place...";
+        break;
+    case INDIGO_UPDATER_INSTALLED:
+        state = "Done. Press START, then open Indigo again from the Homebrew Menu.";
+        break;
+    case INDIGO_UPDATER_FAILED:
+    default:
+        state = u->message;
+        colour = COL_ERROR;
+        break;
+    }
+    y = top_paragraph(c, 18, 90, 0.6f, colour, 4, state);
+    if (u->state == INDIGO_UPDATER_AVAILABLE) {
+        indigo_canvas_text(c, 18, y + 6, 0.7f, COL_TEXT, "Available: %s (%lu KB)", u->latest,
+                           (u->size + 1023) / 1024);
+        top_paragraph(c, 18, y + 30, 0.5f, COL_TEXT_DIM, 4,
+                      "The check is a SHA-256 published in the same release. It catches a bad "
+                      "download; it does not prove the release is mine, because it is not signed.");
+    } else if (u->state == INDIGO_UPDATER_DOWNLOADING || u->state == INDIGO_UPDATER_READY ||
+               u->state == INDIGO_UPDATER_INSTALLED) {
+        indigo_canvas_text(c, 18, y + 6, 0.55f, COL_TEXT_DIM,
+                           "The old build is kept as indigo-previous.3dsx until the new one starts.");
+    }
+}
+
 /* The full-size viewer, top screen: the picture and nothing else.
  *
  * The surround is a fixed near-black rather than the theme's background, which
@@ -1149,6 +1218,9 @@ build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_IMAGE:
         build_top_image(app, c);
+        return;
+    case INDIGO_SCREEN_UPDATE:
+        build_top_update(app, c);
         return;
     default:
         break;
@@ -1614,6 +1686,28 @@ build_bottom_settings(const indigo_app *app, indigo_canvas *c)
     }
 }
 
+/* The update screen, bottom screen: Back and the one button, whose label
+ * follows the state. No button is drawn while there is nothing to press, so a
+ * touch during a download is not a press of something that looks available. */
+static void
+build_bottom_update(const indigo_app *app, indigo_canvas *c)
+{
+    char label[64];
+
+    indigo_canvas_text(c, 14, 10, 0.9f, COL_TEXT, "Update");
+    back_button(c, INDIGO_ACTION_BACK, "Back");
+    indigo_updater_button_label(&app->updater, label, sizeof label);
+    if (label[0]) {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_UPDATE);
+
+        indigo_canvas_rect(c, r.x, r.y, r.w, r.h, COL_PILL_ACTIVE);
+        indigo_canvas_text(c, r.x + 12, r.y + 11, 0.7f, COL_TEXT, "A  %s", label);
+    }
+    paragraph(c, 14, 60, (float) INDIGO_BOTTOM_WIDTH, 0.55f, COL_TEXT_SOFT, 4,
+              "Indigo replaces its own .3dsx, and only when you ask. If anything goes wrong "
+              "the old build is kept.");
+}
+
 /* The viewer, bottom screen: the controls, and the description of the picture
  * rather than a caption over it. The top screen is where the picture is, and
  * text on top of a photograph reads as part of the photograph; here there is
@@ -1688,6 +1782,9 @@ build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
         break;
     case INDIGO_SCREEN_IMAGE:
         build_bottom_image(app, c);
+        break;
+    case INDIGO_SCREEN_UPDATE:
+        build_bottom_update(app, c);
         break;
     }
 }

@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+- Indigo can update itself. More, then "Check for updates", asks GitHub for the latest release and shows its version, and nothing is downloaded until I press Install. The download is checked against the size and SHA-256 the release states, written to the card, read back and checked again, and only then swapped in, keeping the old build until the new one has started. A build that is not a plain release, or was not started from a `.3dsx` on the SD card, says it cannot update and why. It is not signed, so it does not prove a release is mine, and none of it has run on an emulator or a console. ([#43](https://github.com/ewanc26/indigo/pull/43))
+
 ### Changed
 - Browser sign-in now uses Wolfram's pairing client rather than Indigo's own copy, so if the sign-in node has forgotten the pairing (it restarted), Indigo says so at once instead of polling for nine minutes. Indigo now builds against Wolfram v0.27.0. ([#42](https://github.com/ewanc26/indigo/pull/42))
 - A release can be started without pushing a tag: `scripts/release.sh --dispatch` runs the Release workflow, and GitHub creates the tag itself, which I needed because tag pushes from the agents' sandbox are refused. ([#41](https://github.com/ewanc26/indigo/pull/41))

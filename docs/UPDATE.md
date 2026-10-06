@@ -8,10 +8,10 @@ What is in place today, and what is not:
 |---|---|
 | Release assets the updater reads (`update.json`, `indigo-<version>.3dsx`, its `.sha256`) | made by the `Release` workflow from the tag, and checked against what GitHub actually serves |
 | Finishing or undoing an interrupted update at start-up | in the 3DS build; the decisions are tested on the host, including losing power after every single step |
-| The screen that checks for an update, shows it and asks you to confirm | not built yet: it waits on Wolfram's shared update module (wolfram#106), so Indigo does not carry its own manifest parser |
+| The screen that checks for an update, shows it and asks you to confirm | in the 3DS build, under More, "Check for updates". Parsing the manifest, comparing versions and checking the SHA-256 are Wolfram's (`wolfram/update.h`, v0.27.0), so Indigo carries no copy. The screen's states and the pinned URLs are tested on the host; the network, the card and the swap have never run on an emulator or a console |
 | A signature on the release | not yet: it needs a signing key that only the owner can make (see the issue tracker) |
 
-Until that screen exists, update the way you installed it: download `indigo.3dsx` from the [latest release](https://github.com/ewanc26/indigo/releases/latest) and copy it over the old one in `sdmc:/3ds/`.
+If the screen says it cannot update this build, or anything about it looks wrong to you, update the way you installed it: download `indigo.3dsx` from the [latest release](https://github.com/ewanc26/indigo/releases/latest) and copy it over the old one in `sdmc:/3ds/`. A build that is past its last release (a development build), has no release number, or was not started from a `.3dsx` on the SD card does not offer to update at all, and says why.
 
 ## How it works
 
