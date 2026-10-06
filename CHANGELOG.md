@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- A release can be started without pushing a tag: `scripts/release.sh --dispatch` runs the Release workflow, and GitHub creates the tag itself, which I needed because tag pushes from the agents' sandbox are refused. ([#41](https://github.com/ewanc26/indigo/pull/41))
+
 ## [0.6.0] - 2026-10-06
 
 What has and has not been run, plainly: everything here passes the host tests
@@ -42,10 +45,6 @@ who liked or reposted a post, and the start-up update recovery.
   (docs/UNIVERSAL-DB.md, [#36](https://github.com/ewanc26/indigo/pull/36))
 
 ### Changed
-- A release can be started without pushing a tag: `scripts/release.sh --dispatch`
-  runs the Release workflow, and GitHub creates the tag itself. I needed this
-  because tag pushes from the agents' sandbox are refused.
-  ([#41](https://github.com/ewanc26/indigo/pull/41))
 - The text-size setting now applies to post bodies.
   ([#12](https://github.com/ewanc26/indigo/pull/12))
 - The settings screen says reduce motion is reserved. Indigo draws no
