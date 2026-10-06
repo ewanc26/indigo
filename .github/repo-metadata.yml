@@ -15,4 +15,4 @@ repo:
   description: "A Bluesky client for the Nintendo 3DS."
   homepage: ""
   topics: [nintendo, nintendo-3ds, retrocomputing, social-networking, 3ds-homebrew, libctru, citro2d, devkitpro]
-  enforce_live: false
+  enforce_live: true
