@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Indigo now builds against Wolfram v0.28.0 (was v0.27.0).
+
 ## [0.7.0] - 2026-10-06
 
 What has and has not been run, plainly: everything here passes the host tests
