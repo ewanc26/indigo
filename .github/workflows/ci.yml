@@ -33,15 +33,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: indigo
+      # The update-signature test calls Wolfram's verifier, so it needs the
+      # Wolfram release named in wolfram.ref beside this checkout.
+      - name: Wolfram pin
+        id: wolfram
+        run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: ewanc26/wolfram
+          ref: ${{ steps.wolfram.outputs.ref }}
+          path: wolfram
       - run: make test
+        working-directory: indigo
       - run: make warnings
+        working-directory: indigo
       - run: make snapshots
+        working-directory: indigo
       - name: Universal-DB submission builds
         run: scripts/udb-submit.sh --dry-run
+        working-directory: indigo
       - uses: actions/upload-artifact@v4
         with:
           name: layout-snapshots
-          path: build-host/snapshots/*.png
+          path: indigo/build-host/snapshots/*.png
 
   build-3ds:
     name: 3DS build (devkitARM)

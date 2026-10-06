@@ -17,6 +17,9 @@
 #include "util/buildinfo.h"
 #include "util/timefmt.h"
 #include "update/update.h"
+#ifdef INDIGO_HOST_WOLFRAM
+#include "update/update_sig.h"
+#endif
 #include "update/updater.h"
 
 #include <math.h>
@@ -4845,6 +4848,62 @@ test_update_asset_ok(void)
     CHECK(!indigo_update_asset_ok("0.7.0", NULL, good_url));
 }
 
+#ifdef INDIGO_HOST_WOLFRAM
+/* A throwaway key made for this test: its private half was deleted after it signed the
+ * manifest below, so no key material is in the repository. Indigo's real key is never
+ * used to sign anything here. */
+#define TEST_PUBKEY_HEX "5e6d1c7414f43fa333140dd15fb370a945157e50be2c49840006aa2aa0e93785"
+#define TEST_MANIFEST \
+    "{\"schema\":1,\"app\":\"indigo\",\"version\":\"9.9.9\",\"notes\":\"n\",\"asset\":{\"name\":\"indigo-9.9.9.3dsx\",\"url\":\"https://github.com/ewanc26/indigo/releases/download/v9.9.9/indigo-9.9.9.3dsx\",\"size\":3,\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"},\"signature\":null}"
+#define TEST_SIG \
+    "25874955062ebfe1cf8a79e2724ba3e0f15f7ac84e010ad33fd702804885d64c" \
+    "fb85677a41e0921d5418892668529e5869d1abcbecbc6d3aef9b54a9040f280b"
+
+static void
+test_update_signature_gate(void)
+{
+    unsigned char test_pk[INDIGO_UPDATE_PUBLIC_KEY_LEN];
+    unsigned char real_pk[INDIGO_UPDATE_PUBLIC_KEY_LEN];
+    const char *test_hex = TEST_PUBKEY_HEX;
+    char tampered[sizeof TEST_MANIFEST];
+    char sig[sizeof TEST_SIG + 1];
+    const char *m = TEST_MANIFEST;
+    const size_t mlen = strlen(m);
+    size_t i;
+
+    for (i = 0; i < sizeof test_pk; i++) {
+        unsigned v;
+        CHECK(sscanf(&test_hex[2 * i], "%2x", &v) == 1);
+        test_pk[i] = (unsigned char) v;
+    }
+    CHECK(indigo_update_public_key(real_pk));
+    CHECK(memcmp(real_pk, test_pk, sizeof real_pk) != 0);
+
+    CHECK(indigo_update_verify_manifest(m, mlen, TEST_SIG, strlen(TEST_SIG), test_pk));
+    /* A signature file as a shell redirect leaves it, with its newline. */
+    snprintf(sig, sizeof sig, "%s\n", TEST_SIG);
+    CHECK(indigo_update_verify_manifest(m, mlen, sig, strlen(sig), test_pk));
+
+    /* Refused: no signature, a short one, one changed digit, one changed byte of the
+     * manifest, and the right signature under Indigo's real key (which did not sign it). */
+    CHECK(!indigo_update_verify_manifest(m, mlen, NULL, 0, test_pk));
+    CHECK(!indigo_update_verify_manifest(m, mlen, "", 0, test_pk));
+    CHECK(!indigo_update_verify_manifest(m, mlen, TEST_SIG, strlen(TEST_SIG) - 2, test_pk));
+    snprintf(sig, sizeof sig, "%s", TEST_SIG);
+    sig[7] = sig[7] == '0' ? '1' : '0';
+    CHECK(!indigo_update_verify_manifest(m, mlen, sig, strlen(sig), test_pk));
+    snprintf(tampered, sizeof tampered, "%s", m);
+    tampered[mlen - 10] = 'x';
+    CHECK(!indigo_update_verify_manifest(tampered, mlen, TEST_SIG, strlen(TEST_SIG), test_pk));
+    CHECK(!indigo_update_verify_manifest(m, mlen, TEST_SIG, strlen(TEST_SIG), real_pk));
+    CHECK(!indigo_update_verify_manifest(NULL, 0, TEST_SIG, strlen(TEST_SIG), test_pk));
+
+    /* The pinned signature URL sits beside the manifest's. */
+    CHECK(strcmp(INDIGO_UPDATE_SIGNATURE_URL,
+                 "https://github.com/ewanc26/indigo/releases/latest/download/update.json.sig") == 0);
+}
+#endif
+
 static void
 test_updater_eligibility(void)
 {
@@ -5097,6 +5156,9 @@ main(void)
     test_update_install_happy_path();
     test_update_survives_power_loss_anywhere();
     test_update_asset_ok();
+#ifdef INDIGO_HOST_WOLFRAM
+    test_update_signature_gate();
+#endif
     test_updater_eligibility();
     test_updater_transitions();
     test_update_screen_asks_before_it_installs();
