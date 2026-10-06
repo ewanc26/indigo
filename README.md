@@ -13,7 +13,7 @@
 
 A native Bluesky client for the Nintendo 3DS.
 
-**Version 0.5.0**
+**Version 0.6.0**
 
 Indigo exists because apparently making a Wii U post to Bluesky was not enough.
 
@@ -32,9 +32,11 @@ The mark is an indigo bunting on a twig, a small songbird named after the dye. I
 
 ## Status
 
-**0.5.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.5.0)) adds a full-size image viewer, muted words, and paged search. An `Image` button appears in the header bar of the timeline, the thread and a post in the search results whenever the selected post has a picture on it, and ZR does the same on a New 3DS. The picture fills the top screen at the shape the server declared, its description is on the bottom screen where there is room for a sentence, and `B`, `ZR` or `Close` goes back to the screen it was opened from. The account's saved muted words and hide-reposts are honoured in the home timeline and custom feeds, fetched once per sign-in, with the same matching rules Cobalt uses. Search results now page in -- actor search, post search, a profile's posts, followers and following, lists, list members, mutes and blocks all grow more results as you scroll, up to sixty entries.
+**0.6.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.6.0)) adds who liked or reposted a post (from the post menu), keeps an unsent draft across restarts, makes the text-size setting apply to post bodies, and gives Indigo its own Homebrew Menu icon. Releases now carry what the coming in-app updater reads, and Indigo already finishes or undoes an interrupted update when it starts. None of 0.6.0 has been run on an emulator or a console yet.
 
-On top of **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
+On top of **0.5.0**'s full-size image viewer (the `Image` button, or ZR on a New 3DS), muted words and hide-reposts in the home timeline and custom feeds, and search results that page in as you scroll, up to sixty entries.
+
+And **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
 
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
