@@ -51,6 +51,13 @@ bool indigo_update_release_of(const char *describe, char *out, size_t cap, bool 
  * cannot point the console at another host. */
 bool indigo_update_asset_prefix(const char *version, char *out, size_t cap);
 
+/* Whether a manifest's asset is the one for release `version` and nothing
+ * else: the name is exactly indigo-<version>.3dsx and the URL is exactly the
+ * prefix above plus that name. Wolfram's parser enforces a prefix of the
+ * caller's choosing before the version is known; this is the second, exact
+ * check once it is. */
+bool indigo_update_asset_ok(const char *version, const char *name, const char *url);
+
 /* ---- The swap ---------------------------------------------------------- */
 
 typedef struct {

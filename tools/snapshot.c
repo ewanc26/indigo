@@ -724,6 +724,31 @@ fill_social(indigo_app *app, const scenario *s)
             indigo_copy_utf8(c->text, sizeof c->text,
                              "Thanks! More screens are coming: threads, profiles and notifications.");
         }
+    } else if (s->screen == INDIGO_SCREEN_UPDATE) {
+        /* `select` is the updater's state, reached through the transitions a
+         * session would make rather than by writing the struct. */
+        indigo_updater *u = &app->updater;
+
+        indigo_updater_init(u, "v0.6.0", s->select != 6);
+        if (s->select >= 1 && s->select != 6) {
+            indigo_updater_begin_check(u);
+        }
+        if (s->select == 2) {
+            indigo_updater_check_done(u, "0.6.0", 1442404, false);
+        } else if (s->select >= 3 && s->select != 6) {
+            indigo_updater_check_done(u, "0.7.0", 1442404, true);
+        }
+        if (s->select == 4 || s->select == 5 || s->select == 7) {
+            indigo_updater_begin_install(u);
+        }
+        if (s->select == 5) {
+            indigo_updater_staged(u);
+            indigo_updater_installed(u);
+        }
+        if (s->select == 7) {
+            indigo_updater_fail(u, "The download was the right size but its SHA-256 was not the one "
+                                   "in the release, so I threw it away. Nothing on the card changed.");
+        }
     } else if (s->screen == INDIGO_SCREEN_MENU) {
         /* The menu is built from the post being read; `select` walks down it. */
         indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
@@ -769,6 +794,15 @@ main(int argc, char **argv)
         {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0, false},
         {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0, false},
         {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0, false},
+        /* The update screen; `select` is the state, see fill_social. */
+        {"update-idle", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 0, false},
+        {"update-checking", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 1, false},
+        {"update-current", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 2, false},
+        {"update-available", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 3, false},
+        {"update-downloading", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 4, false},
+        {"update-installed", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 5, false},
+        {"update-unavailable", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 6, false},
+        {"update-failed", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 7, false},
         /* The two scenarios that exist only for the alt-text setting: a post
          * with a picture and its description, and the settings row itself. */
         {"timeline-alt", INDIGO_SCREEN_HOME, false, 0, 0, 1, 1, true},
