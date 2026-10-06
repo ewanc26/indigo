@@ -8,6 +8,10 @@
 const indigo_update_fs *indigo_update_sd_fs(void);
 #endif
 
+/* Write `len` bytes to `path` through a temporary file and a rename, so the
+ * file is either absent or whole. False in builds without the console. */
+bool indigo_update_sd_write_file(const char *path, const void *data, size_t len);
+
 /* Finish or undo an interrupted update. Call once at start-up, before
  * romfsInit(), with argv[0]. A no-op when the build was not launched from a
  * .3dsx on the SD card, and in builds without Wolfram. */

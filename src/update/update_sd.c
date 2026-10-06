@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wolfram/crypto.h>
+#include <wolfram/update.h>
 
 static bool
 sd_exists(void *ctx, const char *path)
@@ -92,6 +92,12 @@ write_whole(const char *path, const void *data, size_t len)
     return rename(tmp, path) == 0;
 }
 
+bool
+indigo_update_sd_write_file(const char *path, const void *data, size_t len)
+{
+    return write_whole(path, data, len);
+}
+
 static bool
 sd_copy(void *ctx, const char *from, const char *to)
 {
@@ -119,8 +125,9 @@ sd_sha256(void *ctx, const char *path, unsigned char out[32])
     if (!buf) {
         return false;
     }
-    ok = wf_crypto_sha256(buf, len, out) == WF_OK;
+    wf_sha256_buffer(buf, len, out);
     free(buf);
+    ok = true;
     return ok;
 }
 
@@ -185,6 +192,15 @@ indigo_update_sd_recover(const char *argv0, const char *state_path)
 }
 
 #else
+
+bool
+indigo_update_sd_write_file(const char *path, const void *data, size_t len)
+{
+    (void) path;
+    (void) data;
+    (void) len;
+    return false;
+}
 
 void
 indigo_update_sd_recover(const char *argv0, const char *state_path)

@@ -8,6 +8,7 @@
 #include "app/social.h"
 #include "app/timeline.h"
 #include "store/settings_codec.h"
+#include "update/updater.h"
 
 typedef struct indigo_input indigo_input;
 
@@ -28,6 +29,7 @@ typedef enum {
     INDIGO_SCREEN_SEARCH,
     INDIGO_SCREEN_SETTINGS,
     INDIGO_SCREEN_IMAGE,
+    INDIGO_SCREEN_UPDATE,
 } indigo_screen;
 
 typedef enum {
@@ -73,6 +75,8 @@ typedef enum {
     INDIGO_REQUEST_MUTES,
     INDIGO_REQUEST_BLOCKS,
     INDIGO_REQUEST_SAVE_SETTINGS,
+    INDIGO_REQUEST_UPDATE_CHECK,
+    INDIGO_REQUEST_UPDATE_INSTALL,
 } indigo_request_kind;
 
 typedef struct {
@@ -136,6 +140,8 @@ typedef struct {
     indigo_search search;
     /* The image the viewer is showing, and the screen it was opened from. */
     indigo_image image;
+    /* The self-update screen's state (docs/UPDATE.md). */
+    indigo_updater updater;
     /* Where B goes back to; a short stack so thread -> profile -> back works. */
     indigo_screen history[6];
     unsigned history_count;
@@ -210,6 +216,11 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
 void indigo_app_open_settings(indigo_app *app);
+/* The update screen. `describe` is the build's git-describe stamp and
+ * `can_swap` whether it was launched from a .3dsx on the SD card; call once,
+ * after init. Opening the screen never touches the network: the button asks. */
+void indigo_app_set_updater(indigo_app *app, const char *describe, bool can_swap);
+void indigo_app_open_update(indigo_app *app);
 void indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned count,
                              const char *next_cursor);
 /* Post search results, which are posts rather than people. Kept separate from

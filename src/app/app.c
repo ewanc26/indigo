@@ -785,6 +785,10 @@ menu_choose(indigo_app *app, unsigned item)
         go_back(app);
         indigo_app_open_settings(app);
         break;
+    case INDIGO_MENU_UPDATE:
+        go_back(app);
+        indigo_app_open_update(app);
+        break;
     case INDIGO_MENU_SIGN_OUT:
         app->request = INDIGO_REQUEST_SIGN_OUT;
         break;
@@ -1121,6 +1125,48 @@ update_settings(indigo_app *app, const indigo_input *input)
     }
 }
 
+/* The update screen has one button, and what it does depends on where the
+ * update is: check, or -- only once the person has been shown the version --
+ * install. The state machine says which; this only asks it. */
+static void
+press_update(indigo_app *app)
+{
+    switch (indigo_updater_action_for(&app->updater)) {
+    case INDIGO_UPDATER_ACT_CHECK:
+        indigo_updater_begin_check(&app->updater);
+        app->request = INDIGO_REQUEST_UPDATE_CHECK;
+        break;
+    case INDIGO_UPDATER_ACT_INSTALL:
+        indigo_updater_begin_install(&app->updater);
+        app->request = INDIGO_REQUEST_UPDATE_INSTALL;
+        break;
+    case INDIGO_UPDATER_ACT_NONE:
+        break;
+    }
+}
+
+static void
+update_update(indigo_app *app, const indigo_input *input)
+{
+    if (input->back) {
+        go_back(app);
+        return;
+    }
+    if (input->confirm) {
+        press_update(app);
+        return;
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        if (a == INDIGO_ACTION_BACK) {
+            go_back(app);
+        } else if (a == INDIGO_ACTION_UPDATE) {
+            press_update(app);
+        }
+    }
+}
+
 /* The viewer has no state of its own to change: B and the Close button both
  * leave, and nothing on either screen can be pressed. ZR is the shortcut for
  * the same thing, because it is the shortcut that opened it. */
@@ -1174,6 +1220,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_SETTINGS:
         update_settings(app, input);
+        break;
+    case INDIGO_SCREEN_UPDATE:
+        update_update(app, input);
         break;
     }
 }
@@ -1743,6 +1792,19 @@ indigo_app_publish_failed(indigo_app *app, const char *message)
     c->sending = false;
     indigo_copy_utf8(c->status, sizeof c->status, message);
     c->status_is_error = true;
+}
+
+void
+indigo_app_set_updater(indigo_app *app, const char *describe, bool can_swap)
+{
+    indigo_updater_init(&app->updater, describe, can_swap);
+}
+
+void
+indigo_app_open_update(indigo_app *app)
+{
+    push_screen(app);
+    app->screen = INDIGO_SCREEN_UPDATE;
 }
 
 void

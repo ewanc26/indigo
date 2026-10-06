@@ -8,6 +8,8 @@
 #include "store/settings_store.h"
 #include "ui/ui.h"
 #include "update/update_sd.h"
+#include "update/update_worker.h"
+#include "util/buildinfo.h"
 #include "util/log.h"
 
 #include <3ds.h>
@@ -136,7 +138,8 @@ handle_requests(indigo_app *app)
     indigo_request_kind kind = indigo_app_peek_request(app);
 
     /* Network work waits its turn: one job at a time on the worker. */
-    if (kind >= INDIGO_REQUEST_TIMELINE_REFRESH && indigo_session_busy()) {
+    if (kind >= INDIGO_REQUEST_TIMELINE_REFRESH && kind != INDIGO_REQUEST_UPDATE_CHECK &&
+        kind != INDIGO_REQUEST_UPDATE_INSTALL && indigo_session_busy()) {
         return;
     }
     switch (indigo_app_take_request(app, &f)) {
@@ -277,8 +280,62 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_SAVE_SETTINGS:
         indigo_settings_store_save(SETTINGS_PATH, &app->settings);
         break;
+    case INDIGO_REQUEST_UPDATE_CHECK:
+        if (!indigo_update_worker_check()) {
+            indigo_updater_fail(&app->updater, "Could not start the check.");
+        }
+        break;
+    case INDIGO_REQUEST_UPDATE_INSTALL:
+        if (!indigo_update_worker_download()) {
+            indigo_updater_fail(&app->updater, "Could not start the download.");
+        }
+        break;
     case INDIGO_REQUEST_NONE:
         break;
+    }
+}
+
+/* Update results arrive on the main thread, and so does the swap: it needs
+ * RomFS closed, which a worker must not do. After it, the file the app was
+ * launched from is the backup, so the screen says to restart and nothing else
+ * touches the card. */
+static bool s_romfs_open = true;
+
+static void
+handle_update(indigo_app *app)
+{
+    indigo_update_event ev;
+
+    if (app->updater.state == INDIGO_UPDATER_READY) {
+        /* The frame that drew "putting it in place" came between the event and
+         * this, because the event is polled after this check. */
+        romfsExit();
+        s_romfs_open = false;
+        if (indigo_update_worker_install()) {
+            indigo_updater_installed(&app->updater);
+            indigo_log_info("update: %s is in place", app->updater.latest);
+        } else {
+            indigo_updater_fail(&app->updater,
+                                "Could not put the new build in place. The old one is untouched or "
+                                "restored the next time Indigo starts.");
+        }
+        /* RomFS stays closed either way: the trust store is gone, so the
+         * screen does no more network work this run. */
+    }
+    while (indigo_update_worker_poll(&ev)) {
+        switch (ev.kind) {
+        case INDIGO_UPDATE_EVENT_CHECKED:
+            indigo_updater_check_done(&app->updater, ev.version, ev.size, ev.is_update);
+            break;
+        case INDIGO_UPDATE_EVENT_STAGED:
+            indigo_updater_staged(&app->updater);
+            break;
+        case INDIGO_UPDATE_EVENT_FAILED:
+            indigo_updater_fail(&app->updater, ev.message);
+            break;
+        case INDIGO_UPDATE_EVENT_NONE:
+            break;
+        }
     }
 }
 
@@ -496,6 +553,13 @@ main(int argc, char **argv)
     static indigo_app app; /* about 370KB, mostly posts: keep it off the stack */
     indigo_app_init(&app);
     indigo_app_set_settings(&app, &settings);
+    {
+        indigo_update_paths probe;
+        bool can_swap = argc > 0 && indigo_update_paths_from(argv[0], UPDATE_STATE_PATH, &probe);
+
+        indigo_update_worker_init(argc > 0 ? argv[0] : NULL, UPDATE_STATE_PATH);
+        indigo_app_set_updater(&app, INDIGO_BUILD_COMMIT, can_swap);
+    }
     app.wolfram_linked = indigo_atproto_available();
 
     /* An unsent post survives closing the app. The text is restored into the
@@ -527,6 +591,7 @@ main(int argc, char **argv)
         indigo_app_update(&app, &input);
         handle_requests(&app);
         handle_events(&app);
+        handle_update(&app);
         /* Only on a change, so an idle compose screen costs no card writes.
          * The copy is updated even when the write fails: retrying every frame
          * would stall the loop on a full or removed card. */
@@ -542,11 +607,14 @@ main(int argc, char **argv)
     }
 
     indigo_app_shutdown(&app);
+    indigo_update_worker_stop();
     indigo_session_stop();
     indigo_input_shutdown(&input);
     indigo_atproto_shutdown();
     indigo_ui_shutdown();
-    romfsExit();
+    if (s_romfs_open) {
+        romfsExit();
+    }
     gfxExit();
     indigo_log_shutdown();
 

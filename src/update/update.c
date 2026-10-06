@@ -111,6 +111,21 @@ indigo_update_asset_prefix(const char *version, char *out, size_t cap)
     return n > 0 && (size_t) n < cap;
 }
 
+bool
+indigo_update_asset_ok(const char *version, const char *name, const char *url)
+{
+    char prefix[INDIGO_UPDATE_URL_MAX];
+    char want_name[INDIGO_UPDATE_VERSION_MAX + 16];
+    char want_url[INDIGO_UPDATE_URL_MAX + 64];
+
+    if (!name || !url || !indigo_update_asset_prefix(version, prefix, sizeof prefix)) {
+        return false;
+    }
+    snprintf(want_name, sizeof want_name, "indigo-%s.3dsx", version);
+    snprintf(want_url, sizeof want_url, "%s%s", prefix, want_name);
+    return strcmp(name, want_name) == 0 && strcmp(url, want_url) == 0;
+}
+
 /* ---- Hex ---------------------------------------------------------------- */
 
 static int
