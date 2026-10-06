@@ -8,6 +8,14 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
+What has and has not been run, plainly: everything here passes the host tests
+(3983 checks under AddressSanitizer and UBSan) and builds and links for the 3DS
+in CI against Wolfram v0.28.0. The signature check has not been run on an
+emulator or a real 3DS. This is the first release whose `update.json` is signed,
+so an Indigo that predates the check still takes releases on the SHA-256 alone.
+
 ### Changed
 - Indigo now builds against Wolfram v0.28.0 (was v0.27.0). ([#46](https://github.com/ewanc26/indigo/pull/46))
 
