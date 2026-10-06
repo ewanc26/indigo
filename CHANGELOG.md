@@ -13,8 +13,7 @@ as the release notes.
 What has and has not been run, plainly: everything here passes the host tests
 (3957 checks under AddressSanitizer and UBSan) and builds for the 3DS in CI.
 None of it has been run on an emulator or a real 3DS, including the new icon,
-who liked or reposted a post, and the start-up update recovery. The last
-emulator runs were on 0.4.0's features.
+who liked or reposted a post, and the start-up update recovery.
 
 ### Added
 - Who liked a post and who reposted it, from the post menu, as paged lists of
