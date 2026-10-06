@@ -13,7 +13,7 @@
 
 A native Bluesky client for the Nintendo 3DS.
 
-**Version 0.6.0**
+**Version 0.7.0**
 
 Indigo exists because apparently making a Wii U post to Bluesky was not enough.
 
@@ -32,7 +32,9 @@ The mark is an indigo bunting on a twig, a small songbird named after the dye. I
 
 ## Status
 
-**0.6.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.6.0)) adds who liked or reposted a post (from the post menu), keeps an unsent draft across restarts, makes the text-size setting apply to post bodies, and gives Indigo its own Homebrew Menu icon. Releases now carry what the coming in-app updater reads, and Indigo already finishes or undoes an interrupted update when it starts. None of 0.6.0 has been run on an emulator or a console yet.
+**0.7.0** ([tag](https://github.com/ewanc26/indigo/releases/tag/v0.7.0)) lets Indigo update itself: More, then "Check for updates" (see below), and browser sign-in now goes through Wolfram's pairing client, so a sign-in node that has forgotten the pairing is reported at once rather than after nine minutes. It builds against Wolfram v0.27.0. None of 0.7.0 has been run on an emulator or a console yet.
+
+**0.6.0** added who liked or reposted a post (from the post menu), kept an unsent draft across restarts, made the text-size setting apply to post bodies, and gave Indigo its own Homebrew Menu icon.
 
 On top of **0.5.0**'s full-size image viewer (the `Image` button, or ZR on a New 3DS), muted words and hide-reposts in the home timeline and custom feeds, and search results that page in as you scroll, up to sixty entries.
 
