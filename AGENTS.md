@@ -518,7 +518,7 @@ The icon goes through the standard `APP_ICON`/SMDH path: `ICON := assets/icon.pn
 - Any change to the swap or recovery needs a case in `test_update_survives_power_loss_anywhere`. Copies on the card go through a temporary and a rename, so the swap never sees half a `.3dsx`.
 - Log steps and versions only. No URL with a query string, no response body, nothing from the session.
 - `.github/workflows/release.yml` produces the assets through `scripts/update-manifest.sh make` and verifies what GitHub serves; `release-assets.yml` re-verifies on demand. Keep the asset names stable: `indigo.3dsx` is also what Universal-DB lists.
-- A signature needs the owner's key. Never generate or commit a signing key.
+- Releases are signed: `release.yml` runs `scripts/sign-manifest.sh sign` with the secret `UPDATE_SIGNING_KEY` and publishes `update.json.sig`; `update_worker.c` fetches it and `indigo_update_verify_manifest` (Wolfram's `wf_update_verify_signature` against `update_key.h`) must pass BEFORE the manifest is parsed. Never commit a private key, tests included: the host test uses a throwaway public key and a signature made with a private key that was deleted. The test needs a Wolfram checkout beside Indigo; `make test` says so if there is none.
 
 ### Universal-DB
 
