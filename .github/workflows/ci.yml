@@ -23,6 +23,8 @@ jobs:
         run: scripts/check-flow.sh drift
       - name: Generated art is current
         run: python3 tools/gen_logo.py --check
+      - name: Universal-DB listing is current
+        run: python3 scripts/udb-listing.py --check
       - name: No protocol code outside Wolfram
         run: scripts/check-flow.sh protocol
 
@@ -34,6 +36,8 @@ jobs:
       - run: make test
       - run: make warnings
       - run: make snapshots
+      - name: Universal-DB submission builds
+        run: scripts/udb-submit.sh --dry-run
       - uses: actions/upload-artifact@v4
         with:
           name: layout-snapshots

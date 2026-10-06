@@ -52,6 +52,18 @@ printf x >> assets/icon.png
 expect fail art-hand-edited python3 tools/gen_logo.py --check
 cp "$tmp/icon.png" assets/icon.png
 
+# Universal-DB listing: a hand edit, and a filter that would offer the
+# versioned asset to Universal-Updater, must both fail.
+expect pass udb-current python3 scripts/udb-listing.py --check
+cp meta/universal-db/indigo.json "$tmp/udb.json"
+sed -i 's/"app"/"game"/' meta/universal-db/indigo.json
+expect fail udb-hand-edited python3 scripts/udb-listing.py --check
+cp "$tmp/udb.json" meta/universal-db/indigo.json
+cp scripts/udb-listing.py "$tmp/udb-listing.py"
+sed -i 's|^DOWNLOAD_FILTER = .*|DOWNLOAD_FILTER = r"\\.3dsx$"|' scripts/udb-listing.py
+expect fail udb-filter-too-wide python3 scripts/udb-listing.py --check
+cp "$tmp/udb-listing.py" scripts/udb-listing.py
+
 expect fail release-no-changelog env RELEASE_SKIP_GATE=1 $c release 99.0.0
 top=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)
 expect pass release-notes-present scripts/release-notes.sh "$top"
