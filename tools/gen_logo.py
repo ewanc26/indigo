@@ -13,6 +13,7 @@ rasterised, so the artwork is this file and nobody places a rectangle by hand.
   the mark in #15803d on white, as Wolfram's docs/house-style.md requires. The small icon is drawn at its own
   size rather than left to smdhtool, whose fallback averages 2x2 blocks of the
   large one into a blur.
+- assets/banner.png (256x128) is the banner Universal-DB shows on its site.
 
 Standard library only. Usage: python3 tools/gen_logo.py [--check]
 --check exits 1 if the committed files differ from what this would write.
@@ -124,6 +125,30 @@ def png(width, height, rgb_rows):
             + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
+def banner(width=256, height=128):
+    """The 256x128 banner Universal-DB shows on its website: the mark, in the
+    house colours, centred with room around it."""
+    bg = (0xFF, 0xFF, 0xFF)
+    fg = (0x15, 0x80, 0x3D)
+    x0, x1, y0, y1 = 22.0, 278.0, 12.0, 210.0
+    scale = (height - 24) / (y1 - y0)
+    ox = (width - (x1 - x0) * scale) / 2
+    oy = (height - (y1 - y0) * scale) / 2
+    rows = []
+    for py in range(height):
+        row = []
+        for px in range(width):
+            hits = 0
+            for sy in range(2):
+                for sx in range(2):
+                    dx = x0 + (px + (sx + 0.5) / 2 - ox) / scale
+                    dy = y0 + (py + (sy + 0.5) / 2 - oy) / scale
+                    hits += bunting(dx, dy)
+            row.extend(fg if hits >= 2 else bg)
+        rows.append(row)
+    return png(width, height, rows)
+
+
 def icon(size=48):
     # Wolfram docs/house-style.md: icons are the mark in #15803d on white,
     # never a new colour.
@@ -158,6 +183,7 @@ def main():
         os.path.join(ROOT, "docs", "logo.svg"): svg().encode(),
         os.path.join(ROOT, "assets", "icon.png"): icon(48),
         os.path.join(ROOT, "assets", "icon-small.png"): icon(24),
+        os.path.join(ROOT, "assets", "banner.png"): banner(),
     }
     check = "--check" in sys.argv[1:]
     stale = []
