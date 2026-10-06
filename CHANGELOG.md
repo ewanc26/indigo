@@ -8,6 +8,14 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-06
+
+What has and has not been run, plainly: everything here passes the host tests
+(3957 checks under AddressSanitizer and UBSan) and builds for the 3DS in CI.
+None of it has been run on an emulator or a real 3DS, including the new icon,
+who liked or reposted a post, and the start-up update recovery. The last
+emulator runs were on 0.4.0's features.
+
 ### Added
 - Who liked a post and who reposted it, from the post menu, as paged lists of
   people with avatars, the same as followers. This was the one thing on
@@ -29,7 +37,6 @@ as the release notes.
 - docs/PARITY.md, saying what Indigo does next to Cobalt and where each thing
   has been checked, with app-password and browser sign-in as separate rows.
   ([#21](https://github.com/ewanc26/indigo/pull/21))
-
 - Everything a Universal-DB listing needs, generated: the entry, a 256x128
   banner, and screenshots rendered from the layout code, plus
   `scripts/udb-submit.sh` to open the pull request in my name.
