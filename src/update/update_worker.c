@@ -6,6 +6,7 @@
 
 #include "atproto/atproto.h"
 #include "update/update_sd.h"
+#include "update/update_sig.h"
 #include "util/buildinfo.h"
 
 #include <3ds.h>
@@ -68,6 +69,8 @@ do_check(void)
                                             "/releases/download/"};
     wf_xrpc_client *client = new_client();
     wf_response resp = {0};
+    wf_response sig = {0};
+    unsigned char pk[INDIGO_UPDATE_PUBLIC_KEY_LEN];
     wf_update_manifest m;
     char current[INDIGO_UPDATE_VERSION_MAX];
     bool dev = true;
@@ -85,7 +88,26 @@ do_check(void)
         fail("Could not get the latest release from GitHub. Is the console online?");
         return;
     }
+    /* The signature is checked on the bytes as downloaded, before anything is
+     * parsed. A release with no signature is refused, not trusted on its SHA-256. */
+    if (wf_http_get_public(client, INDIGO_UPDATE_SIGNATURE_URL, INDIGO_UPDATE_SIGNATURE_MAX,
+                           &sig) != WF_OK ||
+        sig.status != 200 || !sig.body) {
+        wf_response_free(&resp);
+        wf_response_free(&sig);
+        wf_xrpc_client_free(client);
+        fail("The latest release is not signed, so I did not use it.");
+        return;
+    }
     wf_xrpc_client_free(client);
+    if (!indigo_update_public_key(pk) ||
+        !indigo_update_verify_manifest(resp.body, resp.body_len, sig.body, sig.body_len, pk)) {
+        wf_response_free(&resp);
+        wf_response_free(&sig);
+        fail("The latest release is not signed with my key, so I did not use it.");
+        return;
+    }
+    wf_response_free(&sig);
     if (wf_update_parse_manifest(resp.body, resp.body_len, &policy, &m) != WF_OK ||
         !indigo_update_asset_ok(m.version, m.asset.name, m.asset.url)) {
         wf_response_free(&resp);

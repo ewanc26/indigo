@@ -115,6 +115,14 @@ jobs:
         with:
           name: release
           path: release
+      # The manifest is signed before the release exists, so there is never a
+      # published release without update.json.sig. The key is the repository
+      # secret UPDATE_SIGNING_KEY; scripts/sign-manifest.sh never prints it and
+      # checks its own signature against src/update/update_key.h first.
+      - name: Sign update.json
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: scripts/sign-manifest.sh sign release/update.json release/update.json.sig
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,7 +134,7 @@ jobs:
           # --target is ignored.
           gh release create "v$v" --target "${{ needs.check.outputs.sha }}" --title "Indigo $v" \
             --notes-file "$RUNNER_TEMP/notes.md" \
-            release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json
+            release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json release/update.json.sig
       - name: Verify what GitHub serves
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,3 +142,4 @@ jobs:
           mkdir served
           gh release download "v${{ needs.check.outputs.version }}" --dir served
           scripts/update-manifest.sh verify "${{ needs.check.outputs.version }}" served
+          scripts/sign-manifest.sh verify served/update.json served/update.json.sig

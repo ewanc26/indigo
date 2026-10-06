@@ -26,6 +26,9 @@
 /* GitHub's documented "latest release asset" redirect. */
 #define INDIGO_UPDATE_MANIFEST_URL \
     "https://github.com/" INDIGO_UPDATE_REPO "/releases/latest/download/" INDIGO_UPDATE_MANIFEST_ASSET
+/* Its detached Ed25519 signature; see update_sig.h. */
+#define INDIGO_UPDATE_SIGNATURE_URL \
+    "https://github.com/" INDIGO_UPDATE_REPO "/releases/latest/download/update.json.sig"
 /* The 0.5.0 .3dsx is 1.4MB; this is a ceiling for a sane build, not a target. */
 #define INDIGO_UPDATE_MAX_BYTES (8u * 1024u * 1024u)
 #define INDIGO_UPDATE_URL_MAX 160u
