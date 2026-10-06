@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Cut an Indigo release by tagging main. CI does the rest.
 #
-#   scripts/release.sh [--dry-run] <version>      e.g. scripts/release.sh 0.6.0
+#   scripts/release.sh [--dry-run] [--dispatch] <version>   e.g. scripts/release.sh 0.6.0
+#
+# With --dispatch the script does not push a tag: it starts the Release
+# workflow through the REST API, and GitHub creates the tag with the
+# workflow's own token. Use that where tags cannot be pushed (the agents'
+# sandbox). The checks and the result are the same.
 #
 # Refuses unless: you are on a clean main identical to origin/main, the tag
 # does not exist, CHANGELOG.md has a non-empty "## [<version>]" section (it
@@ -19,14 +24,19 @@
 set -euo pipefail
 
 dry_run=0
-if [[ "${1:-}" == "--dry-run" ]]; then
-  dry_run=1
+dispatch=0
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --dry-run) dry_run=1 ;;
+    --dispatch) dispatch=1 ;;
+    *) echo "unknown option $1" >&2; exit 2 ;;
+  esac
   shift
-fi
+done
 
 version="${1:-}"
 if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-  echo "usage: $0 [--dry-run] <MAJOR.MINOR.PATCH>" >&2
+  echo "usage: $0 [--dry-run] [--dispatch] <MAJOR.MINOR.PATCH>" >&2
   exit 2
 fi
 tag="v$version"
@@ -56,6 +66,13 @@ scripts/check-flow.sh release "$version" "$local_sha" || fail "not releasable"
 
 if (( dry_run )); then
   echo "release: dry run complete; $tag would be tagged at ${local_sha:0:9}, nothing was pushed"
+  exit 0
+fi
+
+if (( dispatch )); then
+  gh api -X POST "repos/ewanc26/indigo/actions/workflows/release.yml/dispatches" \
+    -f ref=main -f "inputs[version]=$version" >/dev/null
+  echo "release: started the Release workflow for $version; it creates $tag at ${local_sha:0:9} when it publishes"
   exit 0
 fi
 
