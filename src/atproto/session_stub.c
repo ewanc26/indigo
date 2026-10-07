@@ -200,12 +200,12 @@ indigo_session_submit_post_search(const char *query, bool paging)
     return false;
 }
 
-bool
-indigo_session_submit_author_feed(const char *actor, bool paging)
-{
-    (void) actor;
-    (void) paging;
-    return false;
+bool indigo_session_submit_author_feed(const char *actor, int tab,
+                                       bool paging) {
+  (void)actor;
+  (void)tab;
+  (void)paging;
+  return false;
 }
 
 bool

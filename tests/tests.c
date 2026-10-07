@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <wolfram/profile_tab.h>
 
 static int s_checks;
 static int s_failures;
@@ -3377,6 +3378,35 @@ test_author_posts(void)
     indigo_app_open_author_posts(&app, "someone.else.example");
     CHECK(app.search.count == 0);
     CHECK(strcmp(app.search.subject, "someone.else.example") == 0);
+
+    /* A tap on the header box moves to the next tab and refetches. Someone
+     * else's tabs skip likes; the signed-in account's do not. */
+    indigo_app_take_request(&app, &f);
+    app.search.loading = false;
+    CHECK(app.search.tab == WF_PROFILE_TAB_POSTS);
+    indigo_app_next_author_tab(&app);
+    CHECK(app.search.tab == WF_PROFILE_TAB_REPLIES);
+    CHECK(strcmp(indigo_search_title(&app.search), "Replies") == 0);
+    CHECK(app.search.loading);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_AUTHOR_FEED);
+    app.search.loading = false;
+    indigo_app_next_author_tab(&app);
+    CHECK(app.search.tab == WF_PROFILE_TAB_MEDIA);
+    app.search.loading = false;
+    indigo_app_next_author_tab(&app);
+    CHECK(app.search.tab == WF_PROFILE_TAB_POSTS);
+
+    snprintf(app.signin.account, sizeof app.signin.account, "Me.Example");
+    indigo_app_open_author_posts(&app, "me.example");
+    app.search.tab = WF_PROFILE_TAB_MEDIA;
+    app.search.loading = false;
+    indigo_app_next_author_tab(&app);
+    CHECK(app.search.tab == WF_PROFILE_TAB_LIKES);
+    CHECK(strcmp(indigo_search_title(&app.search), "Likes") == 0);
+
+    /* Opening a person afresh starts on their posts again. */
+    indigo_app_open_author_posts(&app, "someone.else.example");
+    CHECK(app.search.tab == WF_PROFILE_TAB_POSTS);
 }
 
 /* The pinned post costs no request: getProfile already returned the URI, and

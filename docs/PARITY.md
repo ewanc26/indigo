@@ -39,7 +39,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
 | Followers, following | yes | implemented, paged | host |
-| Profile tabs | yes | partial: a person's posts only (`INDIGO_SEARCH_AUTHOR`) | host; no replies, media or likes tab (#56) |
+| Profile tabs | yes | yes: posts, replies, media and likes (likes on the signed-in account only), cycled by tapping the header box on a person's posts (`INDIGO_SEARCH_AUTHOR`) | host tests; not run on a 3DS or Azahar |
 | Pinned posts | yes | implemented | host |
 | Avatars | yes | implemented | host, and Azahar: fetched as 128 px JPEG thumbnails, decoded and drawn on the timeline; not on hardware |
 | Images on posts, replies and quotes, with alt text | yes | implemented for viewing, behind an alt-text setting | host only |

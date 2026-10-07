@@ -140,7 +140,7 @@ bool indigo_session_submit_search(const char *query, bool paging);
 bool indigo_session_submit_post_search(const char *query, bool paging);
 /* One person's posts. Shares post search's result array and event, the way the
  * people lists share the actor search's. */
-bool indigo_session_submit_author_feed(const char *actor, bool paging);
+bool indigo_session_submit_author_feed(const char *actor, int tab, bool paging);
 /* The signed-in account's curated lists, then one list's members. The members
  * reuse the actor search's result array and events, the way the people lists
  * do; the lists themselves have their own. */

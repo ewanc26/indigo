@@ -255,10 +255,11 @@ handle_requests(indigo_app *app)
         }
         break;
     case INDIGO_REQUEST_AUTHOR_FEED:
-        if (!indigo_session_submit_author_feed(app->request_actor,
-                                               app->search.cursor[0] != '\0')) {
-            indigo_app_search_failed(app, "Could not start the request.");
-        }
+      if (!indigo_session_submit_author_feed(app->request_actor,
+                                             app->search.tab,
+                                             app->search.cursor[0] != '\0')) {
+        indigo_app_search_failed(app, "Could not start the request.");
+      }
         break;
     case INDIGO_REQUEST_LISTS:
         if (!indigo_session_submit_lists(app->search.cursor[0] != '\0')) {

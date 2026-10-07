@@ -218,12 +218,8 @@ indigo_session_do_author_feed(const indigo_job *j)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_get_author_feed_typed(g_session.agent, j->actor, INDIGO_SEARCH_PAGE, cursor,
-                                        /* No filter: posts_with_replies would mix
-                                         * replies into a person's own posts, and
-                                         * replies_filter removes everything but
-                                         * them. The bare call is their posts. */
-                                        NULL, &list);
+    st = wf_agent_get_profile_tab_typed(g_session.agent, j->actor, j->tab,
+                                        INDIGO_SEARCH_PAGE, cursor, &list);
     if (st != WF_OK) {
         indigo_session_publish_failure(&ev, "author feed", st);
         return;
@@ -423,17 +419,17 @@ indigo_session_submit_post_search(const char *query, bool paging)
     return indigo_session_enqueue(&j);
 }
 
-bool
-indigo_session_submit_author_feed(const char *actor, bool paging)
-{
-    indigo_job j = {.kind = JOB_AUTHOR_FEED};
+bool indigo_session_submit_author_feed(const char *actor, int tab,
+                                       bool paging) {
+  indigo_job j = {.kind = JOB_AUTHOR_FEED};
 
-    if (!actor || !actor[0]) {
-        return false;
-    }
-    j.paging = paging;
-    indigo_copy_utf8(j.actor, sizeof j.actor, actor);
-    return indigo_session_enqueue(&j);
+  if (!actor || !actor[0]) {
+    return false;
+  }
+  j.paging = paging;
+  j.tab = tab;
+  indigo_copy_utf8(j.actor, sizeof j.actor, actor);
+  return indigo_session_enqueue(&j);
 }
 
 bool

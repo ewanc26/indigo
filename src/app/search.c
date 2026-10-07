@@ -1,6 +1,7 @@
 #include "app/search.h"
 
 #include <string.h>
+#include <wolfram/profile_tab.h>
 
 static void
 keep_visible(unsigned *scroll, unsigned selected, unsigned rows)
@@ -158,7 +159,7 @@ indigo_search_title(const indigo_search *s)
     case INDIGO_SEARCH_POSTS:
         return "Post search";
     case INDIGO_SEARCH_AUTHOR:
-        return "Posts";
+      return wf_profile_tab_name(s->tab);
     case INDIGO_SEARCH_LISTS:
         return "Lists";
     case INDIGO_SEARCH_LIST_MEMBERS:

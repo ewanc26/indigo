@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- A person's posts screen has replies, media and (on your own account) likes tabs: tap the header box to move to the next one. The tabs, their filters and the fetch are Wolfram v0.36's `wolfram/profile_tab.h`. ([#67](https://github.com/ewanc26/indigo/pull/67))
+
 ## [0.10.0] - 2026-10-07
 
 What has and has not been run, plainly: the host tests pass (4019 checks under AddressSanitizer and UBSan), all 148 snapshots render, and the 3DS build links in CI against Wolfram v0.35.0. The new image attachment (picker, alt text, upload) has been run on the host only, not on an emulator or a real 3DS, and the upload has never reached a server from Indigo. The code moved into smaller files in this release; its layout renders byte-identically to 0.9.0 but the worker thread and touch handling were not re-run on a console.
