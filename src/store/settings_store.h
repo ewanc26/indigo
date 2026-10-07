@@ -13,6 +13,5 @@ indigo_store_status indigo_settings_store_save(const char *path,
  * unreadable, so the caller never has to initialise it first. */
 indigo_store_status indigo_settings_store_load(const char *path,
                                                indigo_settings *out);
-indigo_store_status indigo_settings_store_clear(const char *path);
 
 #endif

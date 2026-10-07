@@ -1365,9 +1365,9 @@ test_settings_store(void)
     CHECK(out.high_contrast);
     CHECK(strcmp(out.default_feed, in.default_feed) == 0);
 
-    CHECK(indigo_settings_store_clear(path) == INDIGO_STORE_OK);
+    CHECK(indigo_file_remove(path) == INDIGO_STORE_OK);
     CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
-    CHECK(indigo_settings_store_clear(path) == INDIGO_STORE_OK); /* idempotent */
+    CHECK(indigo_file_remove(path) == INDIGO_STORE_OK); /* idempotent */
 
     /* A damaged file is kept aside rather than destroyed, and the app still
      * gets usable defaults instead of failing to boot. */
