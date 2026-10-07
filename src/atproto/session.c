@@ -31,6 +31,7 @@
 #include <wolfram/post_display.h>
 #include <wolfram/post_view_typed.h>
 #include <wolfram/thread_typed.h>
+#include <wolfram/threadgate_postgate.h>
 
 #define WORKER_STACK 0x20000
 
@@ -1757,37 +1758,18 @@ do_publish(const job *j)
         indigo_log_info("published (mode %d)", (int) j->mode);
         /* Reply gate, new top-level posts only: a threadgate attaches to the
          * post it names, and gating a reply separately from its thread is not
-         * something the official client offers either. Gate 0 writes nothing,
-         * since no threadgate at all already means everyone may reply.
+         * something the official client offers either. The rules are Wolfram's.
          *
          * A failure here does not roll the post back. It exists, ungated,
          * which is the safer outcome than dropping something the user can see
          * themselves have posted. */
         if (j->mode == INDIGO_COMPOSE_POST && j->reply_gate > 0 && res.uri && res.uri[0]) {
-            /* Indexed by reply_gate: 1 allows follows and mentions, 2 is an
-             * empty rule set, so nobody may reply. */
-            static const char *const allow[] = {
-                NULL,
-                "[{\"$type\":\"app.bsky.feed.threadgate#followingRule\"},"
-                "{\"$type\":\"app.bsky.feed.threadgate#mentionRule\"}]",
-                "[]",
-            };
-            const int gate = j->reply_gate;
+            wf_status gst = wf_agent_set_reply_gate(s_agent, res.uri, (wf_reply_gate) j->reply_gate);
 
-            if (gate < (int) (sizeof allow / sizeof allow[0])) {
-                wf_agent_post_result gated = {0};
-                wf_status gst =
-                    wf_agent_create_threadgate(s_agent, res.uri, allow[gate], NULL, 0, &gated);
-
-                if (gst != WF_OK) {
-                    indigo_log_warn("reply gate failed (wolfram status %d) for %s", (int) gst,
-                                    res.uri);
-                } else {
-                    indigo_log_info("reply gate set on %s", res.uri);
-                }
-                wf_agent_post_result_free(&gated);
+            if (gst != WF_OK) {
+                indigo_log_warn("reply gate failed (wolfram status %d) for %s", (int) gst, res.uri);
             } else {
-                indigo_log_warn("reply gate %d out of range, posted ungated", gate);
+                indigo_log_info("reply gate set on %s", res.uri);
             }
         }
     } else {
