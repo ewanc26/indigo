@@ -195,7 +195,7 @@ libctru exposes the actual 3DS input hardware. The Indigo input abstraction curr
 
 Keep raw libctru key constants inside `input/` where possible.
 
-Lists scroll three ways, all through `indigo_input`: up and down (D-pad or Circle Pad, repeating while held), L and R for a page (the C-Stick too), and a touch drag that begins on one of the list's rows. The drag is Wolfram's `wf_drag` (`wolfram/drag.h`), fed in `src/input/input.c` and read by `drag_rows` in `src/app/app.c`; do not re-grow your own tap-versus-drag logic. Core navigation must work on Old 3DS hardware. New 3DS-only inputs such as C-Stick and ZL/ZR can enhance the experience but cannot be required for basic operation.
+Lists scroll three ways, all through `indigo_input`: up and down (D-pad or Circle Pad, repeating while held), L and R for a page (the C-Stick too), and a touch drag that begins on one of the list's rows. The drag is Wolfram's `wf_drag` (`wolfram/drag.h`), fed in `src/input/input.c` and read by `indigo_app_drag_rows` in `src/app/app_posts.c`; do not re-grow your own tap-versus-drag logic. Core navigation must work on Old 3DS hardware. New 3DS-only inputs such as C-Stick and ZL/ZR can enhance the experience but cannot be required for basic operation.
 
 When adding a gesture or touchscreen-only interaction, provide a physical-control equivalent when the operation is important.
 
@@ -259,7 +259,7 @@ romfs/            cacert.pem, curated by tools/make_cabundle.py
 
 Keep modules responsibility-focused.
 
-Avoid turning `app.c` or `ui.c` into a catch-all.
+Avoid turning `app.c` or `ui.c` into a catch-all: `app.c` is the spine (init, history, requests, dispatch), `app_posts.c` and `app_screens.c` handle input, `app_results.c` takes the results, and `app_internal.h` is what they share.
 
 The flat VPATH used by the devkitPro Makefile means same-named source files can become ambiguous object names. Prefer descriptive filenames when two directories would otherwise both contain something such as `profile.c`.
 
