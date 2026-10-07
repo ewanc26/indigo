@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+- A release whose version number is too long to show is now refused as unreadable instead of being cut short in the update screen. ([#60](https://github.com/ewanc26/indigo/pull/60))
+
 ### Added
 - I can attach one picture to a post, reply or quote: SELECT, or the "Add an image" button in compose, opens a list of the JPEG and PNG files in `sdmc:/3ds/indigo/images` (under 950 KB), then asks for alt text. Wolfram does the filtering and the upload. The upload has not been run on an emulator or a 3DS. ([#58](https://github.com/ewanc26/indigo/pull/58))
 

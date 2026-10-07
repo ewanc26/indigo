@@ -124,6 +124,12 @@ do_check(void)
         fail("The latest release has a version number I cannot read.");
         return;
     }
+    /* A version that does not fit the event is not one I can show or compare
+     * safely: refuse the release instead of cutting it short. */
+    if (strlen(m.version) >= sizeof s_event.version) {
+        fail("The latest release has a version number I cannot read.");
+        return;
+    }
     LightLock_Lock(&s_lock);
     s_manifest = m;
     s_have_manifest = cmp > 0;
