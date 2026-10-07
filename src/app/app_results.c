@@ -2,6 +2,9 @@
 
 #include "app/app_internal.h"
 
+#include <strings.h>
+#include <wolfram/profile_tab.h>
+
 void
 indigo_app_begin_sign_in(indigo_app *app, const char *status)
 {
@@ -183,18 +186,38 @@ indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *sub
     app->request = INDIGO_REQUEST_PEOPLE;
 }
 
-void
-indigo_app_open_author_posts(indigo_app *app, const char *actor)
-{
-    if (!actor || !actor[0]) {
-        return;
-    }
-    app->screen = INDIGO_SCREEN_SEARCH;
-    app->search.kind = INDIGO_SEARCH_AUTHOR;
-    indigo_search_begin_page(&app->search, false);
-    indigo_copy_utf8(app->search.subject, sizeof app->search.subject, actor);
-    indigo_copy_utf8(app->request_actor, sizeof app->request_actor, actor);
-    app->request = INDIGO_REQUEST_AUTHOR_FEED;
+static void begin_author_tab(indigo_app *app, const char *actor, int tab) {
+  app->screen = INDIGO_SCREEN_SEARCH;
+  app->search.kind = INDIGO_SEARCH_AUTHOR;
+  indigo_search_begin_page(&app->search, false);
+  app->search.tab = tab;
+  indigo_copy_utf8(app->search.subject, sizeof app->search.subject, actor);
+  indigo_copy_utf8(app->request_actor, sizeof app->request_actor, actor);
+  app->request = INDIGO_REQUEST_AUTHOR_FEED;
+}
+
+void indigo_app_open_author_posts(indigo_app *app, const char *actor) {
+  if (actor && actor[0]) {
+    begin_author_tab(app, actor, WF_PROFILE_TAB_POSTS);
+  }
+}
+
+/* The tab after the one on screen. The likes tab is only offered for the
+ * signed-in account, so the cycle skips it for anyone else. */
+int indigo_app_author_tab_after(const indigo_app *app) {
+  bool self = strcasecmp(app->search.subject, app->signin.account) == 0;
+
+  return wf_profile_tab_next(app->search.tab, self);
+}
+
+void indigo_app_next_author_tab(indigo_app *app) {
+  char actor[INDIGO_POST_NAME_MAX];
+
+  if (app->search.kind != INDIGO_SEARCH_AUTHOR || app->search.loading) {
+    return;
+  }
+  indigo_copy_utf8(actor, sizeof actor, app->request_actor);
+  begin_author_tab(app, actor, indigo_app_author_tab_after(app));
 }
 
 void
