@@ -416,6 +416,21 @@ fill_timeline(indigo_timeline *t, int kind, unsigned select)
         indigo_timeline_fail_fetch(t, "Could not reach the network.");
         return;
     }
+    if (kind == 4) {
+        /* One video post: its poster, shaped 16:9 the way the server declares
+         * it, and the line saying it cannot play. The host has no pixels, so
+         * the poster is the placeholder, which is the layout that matters. */
+        indigo_post *p;
+
+        add_post(t, "Video", "video.example", "A clip from the river walk.", "", 3, false, false);
+        p = &t->posts[0];
+        p->embed_kind = INDIGO_EMBED_VIDEO;
+        snprintf(p->embed_thumb, sizeof p->embed_thumb,
+                 "https://video.bsky.app/watch/did:plc:fake/bafyvideo/thumbnail.jpg");
+        p->embed_w = 16;
+        p->embed_h = 9;
+        return;
+    }
     if (kind == 13) {
         /* Posts and a failure at the same time, which is the state the header
          * bar's status text and the viewer button have to share. */
@@ -795,6 +810,7 @@ main(int argc, char **argv)
         {"timeline-scrolled", INDIGO_SCREEN_HOME, false, 0, 0, 1, 4, false},
         {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0, false},
         {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0, false},
+        {"timeline-video", INDIGO_SCREEN_HOME, false, 0, 0, 4, 0, false},
         {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1, false},
         {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0, false},
         {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0, false},
