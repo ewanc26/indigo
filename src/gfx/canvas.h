@@ -14,7 +14,7 @@
  * whether the decoded pixels are there yet. Deduped by URL, so the same avatar
  * on three rows costs one entry. */
 #define INDIGO_CANVAS_MAX_IMAGES 24
-#define INDIGO_CANVAS_IMAGE_URL_MAX 128
+#define INDIGO_CANVAS_IMAGE_URL_MAX 160
 
 /* Colours are packed 0xRRGGBBAA, independent of any backend. */
 #define INDIGO_RGBA(r, g, b, a) \
