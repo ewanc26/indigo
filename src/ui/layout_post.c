@@ -267,7 +267,11 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
                         : app->feed_uri[0] ? "B  Feeds   SEL  Reload"
                         : "B  Menu   SEL  Reload   START  Exit";
     float hint_x = 18.0f + (float) strlen(title) * INDIGO_CHAR_WIDTH * 0.8f + 12.0f;
-    float hint_end = 326.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.5f;
+    /* The hint is drawn at HINT_SCALE, and its end is kept clear of the counter
+     * at x=330. Measured in Azahar, the hint runs about 8 px a character at 0.5,
+     * wider than the layout's estimate, so the hint is drawn smaller to keep it
+     * clear of the counter. */
+    float hint_end = 326.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.45f;
     unsigned units;
 
     if (hint_x < 116.0f) {
@@ -294,7 +298,7 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, hint_x, 12, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
                            "%.60s", t->status);
     } else {
-        indigo_canvas_text(c, hint_x, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
+        indigo_canvas_text(c, hint_x, 12, 0.45f, COL_TEXT_DIM, "%s", hint);
     }
     if (p) {
         indigo_canvas_text(c, 330, 12, 0.6f, COL_TEXT_DIM, "%u / %u%s", t->selected + 1,

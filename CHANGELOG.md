@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- The timeline header's button hints are drawn smaller, so "START Exit" no longer runs into the post counter on the top screen (seen in Azahar). The layout's character-width estimate is too narrow for the system font; this is the minimum change, not a font change. ([#71](https://github.com/ewanc26/indigo/pull/71))
+
 ## [0.12.0] - 2026-10-07
 
 What has and has not been run, plainly: the host tests pass (4035 checks), the warnings sweep is clean, and the 3DS build links against Wolfram v0.37.0. The video poster has not been seen on a 3DS or in Azahar; the snapshot harness renders it with a stand-in font, so the widths there are approximate.
