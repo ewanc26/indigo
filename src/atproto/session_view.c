@@ -50,6 +50,26 @@ indigo_session_count_of(int v)
     return v > 0 ? (unsigned) v : 0;
 }
 
+/* The declared aspect ratio, halved until each side fits a byte. */
+static void
+set_embed_shape(indigo_post *out, int width, int height)
+{
+    unsigned w;
+    unsigned h;
+
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    w = (unsigned) width;
+    h = (unsigned) height;
+    while (w > 255 || h > 255) {
+        w /= 2;
+        h /= 2;
+    }
+    out->embed_w = (unsigned char) (w ? w : 1);
+    out->embed_h = (unsigned char) (h ? h : 1);
+}
+
 /* Carry the embed onto the post, for the screens that draw it. The
  * display helper owns the safe text/facet view; the typed embed reader supplies
  * image metadata that the display summary deliberately keeps bounded to a count. */
@@ -77,16 +97,7 @@ fill_embed(const wf_post_display *d, const cJSON *raw_embed, indigo_post *out)
                 indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, img->thumb, INDIGO_CDN_THUMBNAIL);
                 indigo_copy_utf8(out->embed_alt, sizeof out->embed_alt,
                                  img->alt ? img->alt : "");
-                if (img->width > 0 && img->height > 0) {
-                    unsigned w = (unsigned) img->width;
-                    unsigned h = (unsigned) img->height;
-                    while (w > 255 || h > 255) {
-                        w /= 2;
-                        h /= 2;
-                    }
-                    out->embed_w = (unsigned char) (w ? w : 1);
-                    out->embed_h = (unsigned char) (h ? h : 1);
-                }
+                set_embed_shape(out, img->width, img->height);
                 break;
             }
         }
@@ -100,6 +111,16 @@ fill_embed(const wf_post_display *d, const cJSON *raw_embed, indigo_post *out)
         indigo_copy_utf8(out->embed_uri, sizeof out->embed_uri, embed.external_uri);
         indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, embed.external_thumb,
                              INDIGO_CDN_THUMBNAIL);
+    }
+
+    /* A video's poster frame is a picture of the right shape; the video itself
+     * is not played, and the layout says so. */
+    if (out->embed_kind == INDIGO_EMBED_NONE && embed.video_thumb &&
+        embed.video_thumb[0]) {
+        out->embed_kind = INDIGO_EMBED_VIDEO;
+        indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, embed.video_thumb,
+                             INDIGO_CDN_THUMBNAIL);
+        set_embed_shape(out, embed.video_width, embed.video_height);
     }
 
     wf_post_embed_free(&embed);
