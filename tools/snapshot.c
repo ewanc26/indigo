@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define TEXT_SCALE_BASE 1.25f
 #define COMPOSITE_GAP 8
@@ -723,6 +724,12 @@ fill_social(indigo_app *app, const scenario *s)
             c->target = app->timeline.posts[0];
             indigo_copy_utf8(c->text, sizeof c->text,
                              "Thanks! More screens are coming: threads, profiles and notifications.");
+        } else if (s->timeline == 2) {
+            /* A new post with a picture attached and described. */
+            c->mode = INDIGO_COMPOSE_POST;
+            indigo_copy_utf8(c->text, sizeof c->text, "Look what I found on a walk this morning.");
+            indigo_copy_utf8(c->image, sizeof c->image, INDIGO_IMAGES_DIR "/heron-by-the-river.jpg");
+            indigo_copy_utf8(c->image_alt, sizeof c->image_alt, "A grey heron standing in shallow water.");
         }
     } else if (s->screen == INDIGO_SCREEN_UPDATE) {
         /* `select` is the updater's state, reached through the transitions a
@@ -751,8 +758,28 @@ fill_social(indigo_app *app, const scenario *s)
         }
     } else if (s->screen == INDIGO_SCREEN_MENU) {
         /* The menu is built from the post being read; `select` walks down it. */
-        indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
-                          app->signin.account);
+        if (s->timeline == 2) {
+            /* The attachment picker, over a folder made for the purpose. */
+            static const char *const files[] = {"heron-by-the-river.jpg", "kitchen-table.png",
+                                                "notes.txt"};
+            char path[256];
+
+            mkdir("build-host/snapshots/pictures", 0777);
+            for (unsigned i = 0; i < sizeof files / sizeof files[0]; i++) {
+                FILE *f;
+
+                snprintf(path, sizeof path, "build-host/snapshots/pictures/%s", files[i]);
+                f = fopen(path, "wb");
+                if (f) {
+                    fputs("x", f);
+                    fclose(f);
+                }
+            }
+            indigo_menu_build_images(&app->menu, "build-host/snapshots/pictures");
+        } else {
+            indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
+                              app->signin.account);
+        }
         for (unsigned i = 0; i < s->select; i++) {
             indigo_menu_move(&app->menu, 1, INDIGO_MENU_ROWS);
         }
@@ -780,6 +807,8 @@ main(int argc, char **argv)
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},
         {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0, false},
         {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0, false},
+        {"compose-image", INDIGO_SCREEN_COMPOSE, false, 0, 0, 2, 0, false},
+        {"attach-picker", INDIGO_SCREEN_MENU, false, 0, 0, 2, 1, false},
         {"search", INDIGO_SCREEN_SEARCH, false, 0, 0, 0, 0, false},
         {"search-results", INDIGO_SCREEN_SEARCH, false, 0, 0, 1, 1, false},
         {"search-none", INDIGO_SCREEN_SEARCH, false, 0, 0, 2, 0, false},

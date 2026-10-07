@@ -56,6 +56,7 @@ typedef enum {
     INDIGO_ACTION_SETTINGS_ROW7,
     INDIGO_ACTION_IMAGE,
     INDIGO_ACTION_UPDATE,
+    INDIGO_ACTION_ATTACH,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

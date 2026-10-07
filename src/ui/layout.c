@@ -6,6 +6,8 @@
 #include "ui/wrap.h"
 #include "util/buildinfo.h"
 
+#include <wolfram/attach.h>
+
 #include <stdio.h>
 #include <string.h>
 
@@ -62,10 +64,12 @@ static const indigo_rect s_image_button = {104, 4, 92, 34};
 #define MENU_Y0 50
 #define MENU_STEP 38
 
-/* Compose: the draft box, the Reply/Quote switch and Post. */
-static const indigo_rect s_edit_button = {14, 52, 292, 84};
-static const indigo_rect s_toggle_button = {14, 144, 292, 36};
-static const indigo_rect s_send_button = {14, 188, 292, 40};
+/* Compose: the draft box, the image attach control, the Reply/Quote switch and
+ * Post, 8px apart so a thumb never lands on two. */
+static const indigo_rect s_edit_button = {14, 52, 292, 56};
+static const indigo_rect s_attach_button = {14, 116, 292, 32};
+static const indigo_rect s_toggle_button = {14, 156, 292, 32};
+static const indigo_rect s_send_button = {14, 196, 292, 38};
 
 /* Sign-in form: 8px between rows so a thumb never lands on two. */
 static const indigo_rect s_field_service = {14, 52, 292, 38};
@@ -174,6 +178,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_posts_button;
     case INDIGO_ACTION_PINNED:
         return s_pinned_button;
+    case INDIGO_ACTION_ATTACH:
+        return s_attach_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -279,7 +285,8 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_MENU0, INDIGO_ACTION_MENU1, INDIGO_ACTION_MENU2, INDIGO_ACTION_MENU3,
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
     static const indigo_action compose_actions[] = {
-        INDIGO_ACTION_EDIT, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_EDIT, INDIGO_ACTION_ATTACH, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND,
+        INDIGO_ACTION_BACK};
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
         INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK, INDIGO_ACTION_IMAGE};
@@ -978,6 +985,19 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
 static void
 build_top_menu(const indigo_app *app, indigo_canvas *c)
 {
+    char note[200];
+
+    if (app->menu.picking_image) {
+        top_title(c, "Add image", "B  Close");
+        indigo_canvas_text(c, 18, 56, 0.6f, COL_TEXT_SOFT, "Choose a picture from");
+        indigo_canvas_text(c, 18, 78, 0.6f, COL_TEXT, "%s", INDIGO_IMAGES_DIR);
+        snprintf(note, sizeof note,
+                 "Copy .jpg or .png files there from a computer; each must be under %d KB. "
+                 "You can describe the picture for people who cannot see it after choosing it.",
+                 WF_ATTACH_MAX_BYTES / 1000);
+        top_paragraph(c, 18, 110, 0.55f, COL_TEXT_DIM, 5, note);
+        return;
+    }
     top_title(c, "Menu", "B  Close");
     indigo_canvas_text(c, 18, 64, 0.7f, COL_TEXT_SOFT, "Signed in as");
     indigo_canvas_text(c, 18, 90, 0.8f, COL_TEXT, "%s", app->signin.account);
@@ -1032,6 +1052,10 @@ build_top_compose(const indigo_app *app, indigo_canvas *c)
     if (indigo_compose_can_gate(d)) {
         indigo_canvas_text(c, 18, 188, 0.6f, COL_TEXT_DIM, "Replies: %s",
                            indigo_compose_gate_label(d));
+    }
+    if (indigo_compose_has_image(d)) {
+        indigo_canvas_text(c, 18, 170, 0.6f, COL_TEXT_DIM, "Image: %.30s%s", indigo_compose_image_name(d),
+                           d->image_alt[0] ? " (alt text set)" : " (no alt text)");
     }
     if (d->status[0]) {
         indigo_canvas_text(c, 120, 214, 0.55f, d->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
@@ -1467,7 +1491,7 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
 
-    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Menu");
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "%s", app->menu.title);
     back_button(c, INDIGO_ACTION_BACK, "Close");
 
     snprintf(position, sizeof position, "%u of %u", app->menu.selected + 1, app->menu.count);
@@ -1491,6 +1515,7 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_compose *d = &app->compose;
     indigo_rect e = indigo_layout_button_rect(INDIGO_ACTION_EDIT);
+    indigo_rect a = indigo_layout_button_rect(INDIGO_ACTION_ATTACH);
     indigo_rect t = indigo_layout_button_rect(INDIGO_ACTION_TOGGLE);
     indigo_rect s = indigo_layout_button_rect(INDIGO_ACTION_SEND);
     bool can_toggle = indigo_compose_can_toggle(d);
@@ -1500,10 +1525,10 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
 
     indigo_canvas_rect(c, e.x, e.y, e.w, e.h, COL_PILL);
     if (d->text[0]) {
-        indigo_line lines[3];
+        indigo_line lines[2];
         int cut;
         unsigned units = (unsigned) ((e.w - 20) / (INDIGO_CHAR_WIDTH * 0.6f));
-        unsigned n = indigo_wrap(d->text, units, lines, 3, &cut);
+        unsigned n = indigo_wrap(d->text, units, lines, 2, &cut);
 
         for (unsigned i = 0; i < n; i++) {
             indigo_canvas_text(c, e.x + 10, e.y + 8 + 22 * (float) i, 0.6f, COL_TEXT, "%.*s%s",
@@ -1512,6 +1537,14 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
         }
     } else {
         indigo_canvas_text(c, e.x + 10, e.y + 30, 0.7f, COL_TEXT_DIM, "Tap to write");
+    }
+
+    /* One picture can be attached; the same control takes it off again. */
+    indigo_canvas_rect(c, a.x, a.y, a.w, a.h, indigo_compose_has_image(d) ? COL_PILL_ACTIVE : COL_PILL);
+    if (indigo_compose_has_image(d)) {
+        indigo_canvas_text(c, a.x + 14, a.y + 7, 0.6f, COL_TEXT, "Remove the image - Select");
+    } else {
+        indigo_canvas_text(c, a.x + 14, a.y + 7, 0.6f, COL_TEXT, "Add an image - Select");
     }
 
     /* With no target there is no reply/quote to switch, so the pill carries the

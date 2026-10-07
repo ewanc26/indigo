@@ -122,11 +122,15 @@ bool indigo_session_submit_notifications(void);
  * is ignored unless `mode` is INDIGO_COMPOSE_POST. Any value other than 0
  * writes a threadgate record just after the post succeeds; a failure there is
  * logged but does not undo the post, which then exists ungated rather than
- * silently vanishing. 0 everyone, 1 followed/mentioned, 2 nobody. */
+ * silently vanishing. 0 everyone, 1 followed/mentioned, 2 nobody.
+ *
+ * `image_path` (NULL or "" for none) is uploaded and attached with `image_alt`;
+ * if the upload fails nothing is posted. */
 bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *target_uri, const char *target_cid,
                                    const char *root_uri, const char *root_cid,
-                                   int reply_gate);
+                                   int reply_gate, const char *image_path,
+                                   const char *image_alt);
 /* Find people by name or handle. One page at a time; `paging` asks for the
  * next page of the last search rather than a fresh one, and the event's
  * cursor carries the one after that (empty when there is no more). */

@@ -8,10 +8,11 @@ as the release notes.
 
 ## [Unreleased]
 
-### Changed
-- What kind of failure a call was (wrong credentials, no network, a slow service, a TLS problem, a rate limit, a server fault, a reply I could not read) is Wolfram's `wf_failure_classify` and `wf_failure_tag` now, instead of a copy of them in `session.c` and `errors.c`; only the wording stays here. Nothing you would see changes ([#56](https://github.com/ewanc26/indigo/pull/56), [#20](https://github.com/ewanc26/indigo/issues/20)).
+### Added
+- I can attach one picture to a post, reply or quote: SELECT, or the "Add an image" button in compose, opens a list of the JPEG and PNG files in `sdmc:/3ds/indigo/images` (under 950 KB), then asks for alt text. Wolfram does the filtering and the upload. The upload has not been run on an emulator or a 3DS. ([#58](https://github.com/ewanc26/indigo/pull/58))
 
 ### Changed
+- What kind of failure a call was (wrong credentials, no network, a slow service, a TLS problem, a rate limit, a server fault, a reply I could not read) is Wolfram's `wf_failure_classify` and `wf_failure_tag` now, instead of a copy of them in `session.c` and `errors.c`; only the wording stays here. Nothing you would see changes ([#56](https://github.com/ewanc26/indigo/pull/56), [#20](https://github.com/ewanc26/indigo/issues/20)).
 - Muted-word matching and the RFC 3339 timestamp code are Wolfram's now, not copies of Cobalt's: the matcher is `wf_muted_words_match` and the clock-free parsing and formatting are `wolfram/time.h`. A mute's expiry is checked at match time with Wolfram's parser, which also reads numeric offsets (the old one refused them). My copies, about 250 lines, are deleted. The host build now needs a Wolfram checkout and cJSON's headers ([#54](https://github.com/ewanc26/indigo/pull/54), [#20](https://github.com/ewanc26/indigo/issues/20)).
 
 ## [0.9.0] - 2026-10-07
