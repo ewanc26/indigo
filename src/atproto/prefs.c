@@ -1,8 +1,7 @@
 #include "atproto/prefs.h"
 
-#include <wolfram/muted_words.h>
+#include "util/log.h"
 
-#include <stdio.h>
 #include <string.h>
 
 void
@@ -13,57 +12,38 @@ indigo_prefs_clear(indigo_prefs *prefs)
     }
 }
 
-bool
-indigo_prefs_add_word(indigo_prefs *prefs, const char *value, bool content,
-                      bool tag, const char *expires_at)
+void
+indigo_prefs_from_wolfram(indigo_prefs *prefs, const wf_actor_preferences *src,
+                          long long now)
 {
-    if (!prefs || !value || !value[0] || prefs->count >= INDIGO_PREFS_WORDS_MAX) {
-        return false;
+    if (!prefs) {
+        return;
     }
-    indigo_muted_word *w = &prefs->words[prefs->count++];
+    indigo_prefs_clear(prefs);
+    if (!src) {
+        return;
+    }
+    for (size_t i = 0; i < src->feed_view_count; i++) {
+        const wf_actor_pref_feed_view *fv = &src->feed_views[i];
 
-    snprintf(w->value, sizeof w->value, "%s", value);
-    w->content = content || !tag;
-    w->tag = tag;
-    snprintf(w->expires_at, sizeof w->expires_at, "%s", expires_at ? expires_at : "");
-    return true;
+        if (fv->feed && strcmp(fv->feed, "home") == 0 && fv->has_hide_reposts) {
+            prefs->hide_reposts = fv->hide_reposts;
+        }
+    }
+    wf_muted_list_from_prefs(&prefs->muted, src, (int64_t) now);
+    indigo_log_info("prefs: %u muted word(s), hide reposts %s", (unsigned) prefs->muted.count,
+                    prefs->hide_reposts ? "on" : "off");
 }
 
 bool
 indigo_prefs_text_is_muted(const indigo_prefs *prefs, const char *text,
                            const char *const *tags, int tag_count)
 {
-    wf_actor_pref_muted_word words[INDIGO_PREFS_WORDS_MAX];
-    char *targets[INDIGO_PREFS_WORDS_MAX][2];
-    char content_target[] = "content";
-    char tag_target[] = "tag";
-    char values[INDIGO_PREFS_WORDS_MAX][INDIGO_PREFS_WORD_MAX];
-    char expires[INDIGO_PREFS_WORDS_MAX][INDIGO_PREFS_EXPIRES_MAX];
-
-    if (!prefs || prefs->count == 0) {
+    if (!prefs) {
         return false;
     }
-    memset(words, 0, sizeof words);
-    for (unsigned i = 0; i < prefs->count; i++) {
-        const indigo_muted_word *w = &prefs->words[i];
-        /* A tag mute may be written with or without the leading #. */
-        const char *v = (w->tag && !w->content && w->value[0] == '#') ? w->value + 1 : w->value;
-
-        snprintf(values[i], sizeof values[i], "%s", v);
-        snprintf(expires[i], sizeof expires[i], "%s", w->expires_at);
-        words[i].value = values[i];
-        words[i].expires_at = expires[i][0] ? expires[i] : NULL;
-        if (w->content) {
-            targets[i][words[i].target_count++] = content_target;
-        }
-        if (w->tag) {
-            targets[i][words[i].target_count++] = tag_target;
-        }
-        words[i].targets = targets[i];
-    }
-    return wf_muted_words_match(words, prefs->count, text, tags,
-                                tags && tag_count > 0 ? (size_t) tag_count : 0, false,
-                                prefs->now);
+    return wf_muted_list_match(&prefs->muted, text, tags,
+                               tags && tag_count > 0 ? (size_t) tag_count : 0, false);
 }
 
 bool
@@ -76,7 +56,7 @@ indigo_prefs_post_is_hidden(const indigo_prefs *prefs, const indigo_post *post,
     if (home && prefs->hide_reposts && post->reposted_by[0]) {
         return true;
     }
-    if (prefs->count == 0) {
+    if (prefs->muted.count == 0) {
         return false;
     }
     const char *tags[INDIGO_POST_FACETS_MAX];

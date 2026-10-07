@@ -138,34 +138,8 @@ static indigo_list s_feeds[INDIGO_SEARCH_MAX];
 static unsigned s_list_count;
 static unsigned s_feed_count;
 
-static indigo_failure
-classify(wf_status st)
-{
-    switch (st) {
-    case WF_ERR_AUTH:
-        return INDIGO_FAIL_BAD_CREDENTIALS;
-    case WF_ERR_TIMEOUT:
-        return INDIGO_FAIL_TIMEOUT;
-    case WF_ERR_CRYPTO:
-    case WF_ERR_CONFIG:
-        return INDIGO_FAIL_TLS;
-    case WF_ERR_RATE_LIMIT:
-        return INDIGO_FAIL_RATE_LIMIT;
-    case WF_ERR_NETWORK:
-    case WF_ERR_DID_RESOLVE:
-    case WF_ERR_HANDLE_RESOLVE:
-        return INDIGO_FAIL_NETWORK;
-    case WF_ERR_PARSE:
-        return INDIGO_FAIL_BAD_RESPONSE;
-    case WF_ERR_HTTP:
-        return INDIGO_FAIL_SERVER;
-    default:
-        return INDIGO_FAIL_OTHER;
-    }
-}
-
 static void
-publish(indigo_session_event_kind kind, indigo_failure failure, const char *account)
+publish(indigo_session_event_kind kind, wf_failure_kind failure, const char *account)
 {
     LightLock_Lock(&s_lock);
     memset(&s_event, 0, sizeof s_event);
@@ -330,7 +304,7 @@ do_oauth(const job *j)
     wf_status st;
 
     if (!client) {
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TLS, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_TLS, NULL);
         return;
     }
     wf_xrpc_client_set_ca_bundle(client, INDIGO_CA_BUNDLE_PATH);
@@ -350,12 +324,12 @@ do_oauth(const job *j)
             s_node_session = true;
             remember(result.service);
             wf_oauth_pair_poll_wipe(&result);
-            publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, handle);
+            publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, handle);
             return;
         }
         drop_agent();
         wf_oauth_pair_poll_wipe(&result);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_OTHER, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_OTHER, NULL);
         return;
     }
     if (st == WF_ERR_AUTH) {
@@ -364,15 +338,12 @@ do_oauth(const job *j)
         indigo_log_warn("OAuth sign-in failed: %s",
                         result.message[0] ? result.message : "unknown");
         wf_oauth_pair_poll_wipe(&result);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_SERVER, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_SERVER, NULL);
         return;
     }
     wf_oauth_pair_poll_wipe(&result);
     publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED,
-            st == WF_ERR_TIMEOUT ? INDIGO_FAIL_TIMEOUT
-            : st == WF_ERR_PARSE ? INDIGO_FAIL_BAD_RESPONSE
-                                 : classify(st),
-            NULL);
+            wf_failure_classify(st, 0, NULL), NULL);
 }
 
 static void
@@ -385,17 +356,17 @@ do_login(const job *j)
     drop_agent();
     s_agent = new_agent(j->service);
     if (!s_agent) {
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TLS, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_TLS, NULL);
         return;
     }
 
     indigo_log_info("sign-in: contacting %s", j->service);
     st = wf_agent_login(s_agent, j->identifier, j->password);
     if (st != WF_OK) {
-        indigo_failure f = classify(st);
+        wf_failure_kind f = wf_failure_classify(st, 0, NULL);
 
         indigo_log_warn("sign-in failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(f));
+                        wf_failure_tag(f));
         drop_agent();
         publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, f, NULL);
         return;
@@ -404,7 +375,7 @@ do_login(const job *j)
     remember(j->service);
     who = wf_agent_get_handle(s_agent);
     indigo_log_info("signed in as %s", who ? who : "(unknown)");
-    publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, who);
+    publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
 }
 
 static void
@@ -416,12 +387,12 @@ do_resume(void)
     const char *who;
 
     if (ss == INDIGO_STORE_MISSING) {
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_NONE, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_NONE, NULL);
         return;
     }
     if (ss != INDIGO_STORE_OK) {
         indigo_log_warn("saved session unreadable; kept as .bad");
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_NONE, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_NONE, NULL);
         return;
     }
 
@@ -429,7 +400,7 @@ do_resume(void)
     s_agent = new_agent(s_saved.service);
     if (!s_agent) {
         indigo_session_wipe(&s_saved);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_TLS, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_TLS, NULL);
         return;
     }
 
@@ -448,13 +419,13 @@ do_resume(void)
                 drop_agent();
                 indigo_session_wipe(&s_saved);
                 indigo_session_store_clear(s_path);
-                publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_BAD_CREDENTIALS, NULL);
+                publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_BAD_CREDENTIALS, NULL);
                 return;
             }
             s_node_session = true;
             cJSON_Delete(saved);
             who = wf_agent_get_handle(s_agent);
-            publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, who);
+            publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
             return;
         }
         cJSON_Delete(saved);
@@ -467,7 +438,7 @@ do_resume(void)
         drop_agent();
         indigo_session_wipe(&s_saved);
         indigo_session_store_clear(s_path);
-        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, INDIGO_FAIL_NONE, NULL);
+        publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, WF_FAIL_NONE, NULL);
         return;
     }
 
@@ -478,11 +449,11 @@ do_resume(void)
         st = wf_agent_get_session(s_agent);
     }
     if (st != WF_OK) {
-        indigo_failure f = classify(st);
-        indigo_log_warn("resume failed: wolfram status %d (%s)", (int) st, indigo_failure_tag(f));
+        wf_failure_kind f = wf_failure_classify(st, 0, NULL);
+        indigo_log_warn("resume failed: wolfram status %d (%s)", (int) st, wf_failure_tag(f));
         drop_agent();
         indigo_session_wipe(&s_saved);
-        if (f == INDIGO_FAIL_BAD_CREDENTIALS) {
+        if (f == WF_FAIL_BAD_CREDENTIALS) {
             indigo_session_store_clear(s_path);
         }
         publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, f, NULL);
@@ -497,7 +468,7 @@ do_resume(void)
     }
     who = wf_agent_get_handle(s_agent);
     indigo_log_info("resumed session for %s", who ? who : "(unknown)");
-    publish(INDIGO_SESSION_EVENT_SIGNED_IN, INDIGO_FAIL_NONE, who);
+    publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
 }
 
 static void
@@ -510,7 +481,7 @@ do_logout(void)
     }
     indigo_session_store_clear(s_path);
     indigo_log_info("signed out");
-    publish(INDIGO_SESSION_EVENT_SIGNED_OUT, INDIGO_FAIL_NONE, NULL);
+    publish(INDIGO_SESSION_EVENT_SIGNED_OUT, WF_FAIL_NONE, NULL);
 }
 
 static void
@@ -718,7 +689,7 @@ do_timeline(const job *j)
     wf_status st;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -727,9 +698,9 @@ do_timeline(const job *j)
     st = wf_agent_get_timeline_typed(s_agent, INDIGO_PAGE_SIZE,
                                      j->cursor[0] ? j->cursor : NULL, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("timeline failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -763,7 +734,7 @@ do_post_action(const job *j)
 
     snprintf(ev.post_uri, sizeof ev.post_uri, "%s", j->post_uri);
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -789,9 +760,9 @@ do_post_action(const job *j)
             snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
         }
     } else {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("post action %d failed: wolfram status %d (%s)", (int) j->action,
-                        (int) st, indigo_failure_tag(ev.failure));
+                        (int) st, wf_failure_tag(ev.failure));
     }
     wf_agent_post_result_free(&res);
     publish_event(&ev);
@@ -850,22 +821,22 @@ do_thread(const job *j)
     wf_status st;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     memset(&thread, 0, sizeof thread);
     st = wf_agent_get_post_thread_typed(s_agent, j->post_uri, 6, &thread);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("thread failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
     if (thread.root.kind != WF_AGENT_THREAD_KIND_POST) {
         wf_agent_thread_free(&thread);
-        ev.failure = INDIGO_FAIL_BAD_RESPONSE;
+        ev.failure = WF_FAIL_BAD_RESPONSE;
         publish_event(&ev);
         return;
     }
@@ -902,16 +873,16 @@ do_profile(const job *j)
     wf_status st;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     memset(&p, 0, sizeof p);
     st = wf_agent_get_profile(s_agent, j->post_uri, &p);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("profile failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -993,14 +964,14 @@ do_search(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     if (!j->query[0]) {
         /* The app refuses to submit an empty query, so reaching this is a bug
          * rather than something a person did. */
-        ev.failure = INDIGO_FAIL_OTHER;
+        ev.failure = WF_FAIL_OTHER;
         publish_event(&ev);
         return;
     }
@@ -1008,9 +979,9 @@ do_search(const job *j)
     st = wf_agent_search_actors_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
                                       cursor, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("search failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1045,7 +1016,7 @@ do_people(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1057,9 +1028,9 @@ do_people(const job *j)
         st = wf_feedgen_get_likes_typed(s_agent, j->list_uri, NULL, INDIGO_SEARCH_PAGE,
                                         cursor, &likes);
         if (st != WF_OK) {
-            ev.failure = classify(st);
+            ev.failure = wf_failure_classify(st, 0, NULL);
             indigo_log_warn("liked-by failed: wolfram status %d (%s)", (int) st,
-                            indigo_failure_tag(ev.failure));
+                            wf_failure_tag(ev.failure));
             publish_event(&ev);
             return;
         }
@@ -1090,9 +1061,9 @@ do_people(const job *j)
                                          cursor, &list);
     }
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("people failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1125,7 +1096,7 @@ do_post_search(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1133,9 +1104,9 @@ do_post_search(const job *j)
     st = wf_agent_search_posts_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
                                       cursor, &list, &next);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("post search failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1169,7 +1140,7 @@ do_author_feed(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1181,9 +1152,9 @@ do_author_feed(const job *j)
                                          * them. The bare call is their posts. */
                                         NULL, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("author feed failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1216,7 +1187,7 @@ do_lists(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1226,7 +1197,7 @@ do_lists(const job *j)
         const char *who = wf_agent_get_handle(s_agent);
 
         if (!who || !who[0]) {
-            ev.failure = INDIGO_FAIL_NOT_READY;
+            ev.failure = WF_FAIL_NOT_READY;
             publish_event(&ev);
             return;
         }
@@ -1234,9 +1205,9 @@ do_lists(const job *j)
         st = wf_agent_get_lists_typed(s_agent, who, INDIGO_SEARCH_PAGE, cursor, &list);
     }
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("lists failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1278,16 +1249,16 @@ do_list_members(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     memset(&list, 0, sizeof list);
     st = wf_agent_get_list_typed(s_agent, j->list_uri, INDIGO_SEARCH_PAGE, cursor, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("list members failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1325,7 +1296,7 @@ do_moderation_list(const job *j)
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1336,9 +1307,9 @@ do_moderation_list(const job *j)
         st = wf_agent_get_mutes_typed(s_agent, INDIGO_SEARCH_PAGE, cursor, &list);
     }
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("%s list failed: wolfram status %d (%s)", blocks ? "blocked" : "muted",
-                        (int) st, indigo_failure_tag(ev.failure));
+                        (int) st, wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1377,15 +1348,15 @@ do_feeds(const job *j)
 
     (void) j;
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     st = wf_agent_get_preferences(s_agent, &prefs_json);
     if (st != WF_OK || !prefs_json) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("preferences failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1396,7 +1367,7 @@ do_feeds(const job *j)
         free(prefs_json);
         if (!cJSON_IsArray(prefs)) {
             cJSON_Delete(prefs);
-            ev.failure = INDIGO_FAIL_OTHER;
+            ev.failure = WF_FAIL_OTHER;
             indigo_log_warn("preferences: not an array");
             publish_event(&ev);
             return;
@@ -1500,7 +1471,7 @@ do_feed(const job *j)
     wf_status st;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1509,9 +1480,9 @@ do_feed(const job *j)
     st = wf_agent_get_feed_typed(s_agent, j->feed_uri, INDIGO_PAGE_SIZE,
                                  j->cursor[0] ? j->cursor : NULL, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("feed failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1547,7 +1518,7 @@ do_follow(const job *j)
 
     snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1559,7 +1530,7 @@ do_follow(const job *j)
         if (!j->undo_uri[0]) {
             /* The app only offers unfollow while it holds the record URI, so
              * an empty one here is a bug rather than a person tapping it. */
-            ev.failure = INDIGO_FAIL_OTHER;
+            ev.failure = WF_FAIL_OTHER;
             break;
         }
         st = wf_agent_unfollow(s_agent, j->undo_uri);
@@ -1580,9 +1551,9 @@ do_follow(const job *j)
             s_profile.followers--;
         }
     } else {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("follow %d failed: wolfram status %d (%s)", (int) j->follow, (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
     }
     wf_agent_post_result_free(&res);
     publish_event(&ev);
@@ -1597,7 +1568,7 @@ do_graph(const job *j)
 
     snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1615,7 +1586,7 @@ do_graph(const job *j)
         /* Block is a repo record, so unblocking deletes by URI and there is
          * no handle to resolve one from. */
         if (!j->undo_uri[0]) {
-            ev.failure = INDIGO_FAIL_OTHER;
+            ev.failure = WF_FAIL_OTHER;
             break;
         }
         st = wf_agent_unblock(s_agent, j->undo_uri);
@@ -1629,9 +1600,9 @@ do_graph(const job *j)
             snprintf(ev.record_uri, sizeof ev.record_uri, "%s", res.uri);
         }
     } else {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("graph action %d failed: wolfram status %d (%s)", (int) j->graph,
-                        (int) st, indigo_failure_tag(ev.failure));
+                        (int) st, wf_failure_tag(ev.failure));
     }
     wf_agent_post_result_free(&res);
     publish_event(&ev);
@@ -1645,16 +1616,16 @@ do_notifications(void)
     wf_status st;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
     memset(&list, 0, sizeof list);
     st = wf_agent_list_notifications_typed(s_agent, INDIGO_NOTIFICATION_MAX, NULL, &list);
     if (st != WF_OK) {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("notifications failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
         publish_event(&ev);
         return;
     }
@@ -1730,7 +1701,7 @@ do_publish(const job *j)
     wf_status st = WF_ERR_INVALID_ARG;
 
     if (!s_agent) {
-        ev.failure = INDIGO_FAIL_NOT_READY;
+        ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
@@ -1788,9 +1759,9 @@ do_publish(const job *j)
             }
         }
     } else {
-        ev.failure = classify(st);
+        ev.failure = wf_failure_classify(st, 0, NULL);
         indigo_log_warn("publish failed: wolfram status %d (%s)", (int) st,
-                        indigo_failure_tag(ev.failure));
+                        wf_failure_tag(ev.failure));
     }
     wf_agent_post_result_free(&res);
     publish_event(&ev);
@@ -2351,7 +2322,7 @@ indigo_session_stop(void)
 static bool
 refuse(indigo_session_event_kind kind)
 {
-    s_stub = (indigo_session_event) {.kind = kind, .failure = INDIGO_FAIL_NOT_READY};
+    s_stub = (indigo_session_event) {.kind = kind, .failure = WF_FAIL_NOT_READY};
     s_pending = true;
     return true;
 }

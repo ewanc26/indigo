@@ -60,7 +60,7 @@ typedef enum {
 
 typedef struct {
     indigo_session_event_kind kind;
-    indigo_failure failure;
+    wf_failure_kind failure;
     char account[256];
     /* TIMELINE_PAGE: how many posts indigo_session_page() holds, and the
      * cursor for the next page (empty when there are no more). */

@@ -1,24 +1,13 @@
 #ifndef INDIGO_ERRORS_H
 #define INDIGO_ERRORS_H
 
-/* What went wrong, in terms a person can act on. Never carries secrets. */
-typedef enum {
-    INDIGO_FAIL_NONE = 0,
-    INDIGO_FAIL_BAD_CREDENTIALS,
-    INDIGO_FAIL_NETWORK,
-    INDIGO_FAIL_TIMEOUT,
-    INDIGO_FAIL_TLS,
-    INDIGO_FAIL_RATE_LIMIT,
-    INDIGO_FAIL_SERVER,
-    INDIGO_FAIL_BAD_RESPONSE,
-    INDIGO_FAIL_NOT_READY,
-    INDIGO_FAIL_OTHER,
-} indigo_failure;
+/* What went wrong, in terms a person can act on. The kinds and their stable log
+ * tags are Wolfram's (wolfram/failure.h: wf_failure_kind, wf_failure_classify,
+ * wf_failure_tag); what stays here is the wording, which is Indigo's and the
+ * 3DS's. Never carries secrets. */
 
-const char *indigo_failure_message(indigo_failure f);
+#include <wolfram/failure.h>
 
-/* Stable short tag for the log file. */
-const char *indigo_failure_tag(indigo_failure f);
-
+const char *indigo_failure_message(wf_failure_kind f);
 
 #endif
