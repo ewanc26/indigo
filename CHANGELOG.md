@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-07
+
+What has and has not been run, plainly: the host tests pass (4019 checks under AddressSanitizer and UBSan), all 148 snapshots render, and the 3DS build links in CI against Wolfram v0.35.0. The new image attachment (picker, alt text, upload) has been run on the host only, not on an emulator or a real 3DS, and the upload has never reached a server from Indigo. The code moved into smaller files in this release; its layout renders byte-identically to 0.9.0 but the worker thread and touch handling were not re-run on a console.
+
 ### Fixed
 - A release whose version number is too long to show is now refused as unreadable instead of being cut short in the update screen. ([#60](https://github.com/ewanc26/indigo/pull/60))
 
