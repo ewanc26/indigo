@@ -138,9 +138,10 @@ typedef struct {
     indigo_profile profile;
     indigo_notifications notifications;
     indigo_compose compose;
-    /* Where the attach picker looks; INDIGO_IMAGES_DIR unless a test points it
-     * elsewhere. */
+    /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
+     * unless a test points them elsewhere. */
     char images_dir[INDIGO_IMAGE_PATH_MAX];
+    char camera_dir[INDIGO_IMAGE_PATH_MAX];
     indigo_search search;
     /* The image the viewer is showing, and the screen it was opened from. */
     indigo_image image;

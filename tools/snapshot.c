@@ -790,7 +790,19 @@ fill_social(indigo_app *app, const scenario *s)
                     fclose(f);
                 }
             }
-            indigo_menu_build_images(&app->menu, "build-host/snapshots/pictures");
+            /* And the camera's folder: one picture in a DCIM-style subfolder. */
+            mkdir("build-host/snapshots/camera", 0777);
+            mkdir("build-host/snapshots/camera/100NIN01", 0777);
+            snprintf(path, sizeof path, "build-host/snapshots/camera/100NIN01/IMG_0042.JPG");
+            {
+                FILE *f = fopen(path, "wb");
+                if (f) {
+                    fputs("x", f);
+                    fclose(f);
+                }
+            }
+            indigo_menu_build_images(&app->menu, "build-host/snapshots/pictures",
+                                     "build-host/snapshots/camera");
         } else {
             indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
                               app->signin.account);
