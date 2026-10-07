@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- The session and settings files share one line reader and one value check instead of a copy each, and the settings store's test-only `clear` is gone (the tests remove the file directly). No change to what is saved or loaded. ([#73](https://github.com/ewanc26/indigo/pull/73))
+
 ### Fixed
 
 - The timeline header's button hints are drawn smaller, so "START Exit" no longer runs into the post counter on the top screen (seen in Azahar). The layout's character-width estimate is too narrow for the system font; this is the minimum change, not a font change. ([#71](https://github.com/ewanc26/indigo/pull/71))
