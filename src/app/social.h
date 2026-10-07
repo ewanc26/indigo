@@ -113,12 +113,21 @@ typedef enum {
     INDIGO_REPLY_GATE_COUNT,
 } indigo_reply_gate;
 
+#define INDIGO_IMAGE_PATH_MAX 192
+#define INDIGO_IMAGE_ALT_MAX 256
+/* Where images to attach are looked for. The person copies .jpg and .png files
+ * here from a computer. */
+#define INDIGO_IMAGES_DIR "sdmc:/3ds/indigo/images"
+
 /* A post being written. Reply and quote both refer to `target`; a reply also
  * needs the thread root so it lands in the right conversation. */
 typedef struct {
     indigo_compose_mode mode;
     indigo_reply_gate reply_gate;
     char text[INDIGO_DRAFT_MAX];
+    /* One image to attach, by path, with its alt text; empty for none. */
+    char image[INDIGO_IMAGE_PATH_MAX];
+    char image_alt[INDIGO_IMAGE_ALT_MAX];
     indigo_post target;
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
@@ -185,6 +194,7 @@ typedef enum {
     INDIGO_MENU_OPEN_MENTION,
     INDIGO_MENU_SHOW_TAG,
     INDIGO_MENU_SHOW_LINK,
+    INDIGO_MENU_PICK_IMAGE,
     INDIGO_MENU_CLOSE,
 } indigo_menu_kind;
 
@@ -195,6 +205,11 @@ typedef struct {
 } indigo_menu_item;
 
 typedef struct {
+    /* "Menu", or "Images" while it is the picker for an attachment. */
+    char title[INDIGO_POST_NAME_MAX];
+    /* True while the menu is the attachment picker, so the top screen can say
+     * where the pictures come from. */
+    bool picking_image;
     indigo_menu_item items[INDIGO_MENU_MAX];
     unsigned count;
     unsigned selected;
@@ -206,6 +221,10 @@ typedef struct {
 /* `post` may be NULL when nothing is selected: the facet targets are then
  * left out. `account` is the signed-in handle for the profile entry. */
 void indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account);
+/* Fill the menu with the postable images in `dir` (see wolfram/attach.h), one
+ * INDIGO_MENU_PICK_IMAGE item per file whose payload is the file name, and a
+ * Close item so an empty folder still has a way out. `title` becomes "Images". */
+void indigo_menu_build_images(indigo_menu *m, const char *dir);
 /* Move the selection, keeping it inside the `rows` visible rows. */
 bool indigo_menu_move(indigo_menu *m, int delta, unsigned rows);
 /* The item shown in visible row `row`, or NULL when that row is empty. */
@@ -213,6 +232,10 @@ const indigo_menu_item *indigo_menu_row(const indigo_menu *m, unsigned row, unsi
 
 /* Compose is allowed to publish when it has text and is not already sending. */
 bool indigo_compose_ready(const indigo_compose *c);
+bool indigo_compose_has_image(const indigo_compose *c);
+void indigo_compose_clear_image(indigo_compose *c);
+/* The file name of the attached image, without its folder. */
+const char *indigo_compose_image_name(const indigo_compose *c);
 /* Quote is only offered when there is a post to quote. */
 bool indigo_compose_can_toggle(const indigo_compose *c);
 void indigo_compose_toggle(indigo_compose *c);

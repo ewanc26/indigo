@@ -112,8 +112,21 @@ start_publish(indigo_app *app)
 
     if (!indigo_session_submit_publish(c->mode, c->text, c->has_target ? c->target.uri : "",
                                        c->has_target ? c->target.cid : "", c->root_uri,
-                                       c->root_cid, (int) c->reply_gate)) {
+                                       c->root_cid, (int) c->reply_gate, c->image, c->image_alt)) {
         indigo_app_publish_failed(app, "Could not start posting.");
+    }
+}
+
+/* Alt text for the picture just chosen. Cancelling leaves it empty: alt text is
+ * encouraged here, not required, and a post is not held up for it. */
+static void
+handle_edit_image_alt(indigo_app *app)
+{
+    char text[INDIGO_IMAGE_ALT_MAX];
+
+    if (indigo_text_edit("Describe the picture", app->compose.image_alt, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_image_alt(app, text);
     }
 }
 
@@ -202,6 +215,9 @@ handle_requests(indigo_app *app)
         break;
     case INDIGO_REQUEST_EDIT_DRAFT:
         handle_edit_draft(app);
+        break;
+    case INDIGO_REQUEST_EDIT_IMAGE_ALT:
+        handle_edit_image_alt(app);
         break;
     case INDIGO_REQUEST_PUBLISH:
         start_publish(app);

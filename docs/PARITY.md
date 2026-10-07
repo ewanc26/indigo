@@ -51,7 +51,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Lists and members | read-only | implemented, read-only | host |
 | Mute and block, with lists | yes | implemented | host |
 | Muted words, hide reposts | yes | implemented: Wolfram's matcher (`wf_muted_words_match`), including mute expiry | host |
-| Attach an image when composing | yes | issue: #19 | Wolfram already has `wf_agent_upload_blob_ex` |
+| Attach an image when composing | yes | implemented: SELECT or the "Add an image" button in compose opens a picker over `sdmc:/3ds/indigo/images` (JPEG and PNG under 950 KB), then asks for alt text; works on posts, replies and quotes. The type and size filter, the folder scan and the upload are Wolfram's (`wolfram/attach.h`) | host only: the compose state, the picker and the layouts (snapshots `compose-image`, `attach-picker`). The upload and a real post have not been run on an emulator or a 3DS (#19 stays open for that). Whether the picker should also look in `sdmc:/DCIM`, where the camera saves, is undecided and needs a console |
 | On-card cache of timeline and profile data | not listed | issue: #13 | not started |
 | Settings screen | n/a | implemented: theme, text scale, alt text, diagnostics, startup feed; reduce motion and high contrast are stored and reserved | host |
 | Video, GIFs and animated media | not planned | not planned: Wolfram's decoder (`wf_image_decode_rgba`) is for still images, and nothing in the 1.5MB image budget accounts for frames | no decoder evaluation has been done, so this is a decision and not a hardware limit |

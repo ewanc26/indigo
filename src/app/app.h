@@ -60,6 +60,7 @@ typedef enum {
     INDIGO_REQUEST_PROFILE,
     INDIGO_REQUEST_NOTIFICATIONS,
     INDIGO_REQUEST_EDIT_DRAFT,
+    INDIGO_REQUEST_EDIT_IMAGE_ALT,
     INDIGO_REQUEST_PUBLISH,
     INDIGO_REQUEST_EDIT_QUERY,
     INDIGO_REQUEST_SEARCH,
@@ -137,6 +138,9 @@ typedef struct {
     indigo_profile profile;
     indigo_notifications notifications;
     indigo_compose compose;
+    /* Where the attach picker looks; INDIGO_IMAGES_DIR unless a test points it
+     * elsewhere. */
+    char images_dir[INDIGO_IMAGE_PATH_MAX];
     indigo_search search;
     /* The image the viewer is showing, and the screen it was opened from. */
     indigo_image image;
@@ -242,6 +246,8 @@ void indigo_app_graph_failed(indigo_app *app, indigo_graph_action action,
                              const char *message);
 /* The draft text came back from the keyboard. */
 void indigo_app_set_draft(indigo_app *app, const char *text);
+/* The alt text for the attached image came back from the keyboard. */
+void indigo_app_set_image_alt(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);
 void indigo_app_publish_failed(indigo_app *app, const char *message);
 
