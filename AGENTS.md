@@ -248,7 +248,7 @@ src/
 ├── main.c        libctru lifecycle and frame loop
 ├── app/          application state and navigation
 ├── gfx/          platform-neutral display lists (canvas)
-├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
+├── ui/           layout*.c (pure: geometry and hit tests in layout.c, the two screens in layout_top.c and layout_bottom.c, posts in layout_post.c, shared pieces in layout_widgets.c) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
 ├── atproto/      Wolfram-backed integration; session.c is the worker thread and its queue and the `session_*.c` files beside it hold the jobs (auth, view, read, people, lists, write; `session_internal.h` is what they share, `session_stub.c` stands in without a 3DS build of Wolfram), prefs.c is the pure muted-word matching
 ├── store/        session and settings codecs, atomic stores on sdmc
@@ -573,7 +573,7 @@ Do not silently substitute a host compiler or desktop libraries.
 
 ## 22. Testing
 
-Layout is pure: `ui/layout.c` fills `gfx/canvas` display lists and never calls libctru or citro2d, so `make test`, `make warnings` and `make snapshots` run on the host without devkitARM. `ui/ui.c` only replays display lists. Keep new screens in layout so they can be snapshotted; UI work needs a snapshot or emulator screenshot of both screens.
+Layout is pure: `ui/layout*.c` fill `gfx/canvas` display lists and never calls libctru or citro2d, so `make test`, `make warnings` and `make snapshots` run on the host without devkitARM. `ui/ui.c` only replays display lists. Keep new screens in layout so they can be snapshotted; UI work needs a snapshot or emulator screenshot of both screens.
 
 Validation has distinct levels.
 
