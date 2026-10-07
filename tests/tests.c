@@ -1275,12 +1275,12 @@ static void
 test_failures(void)
 {
 
-    for (int f = INDIGO_FAIL_BAD_CREDENTIALS; f <= INDIGO_FAIL_OTHER; f++) {
-        const char *m = indigo_failure_message((indigo_failure) f);
+    for (int f = WF_FAIL_BAD_CREDENTIALS; f <= WF_FAIL_OTHER; f++) {
+        const char *m = indigo_failure_message((wf_failure_kind) f);
 
         CHECK(m[0] != '\0');
         CHECK(strlen(m) < INDIGO_STATUS_MAX);
-        CHECK(indigo_failure_tag((indigo_failure) f)[0] != '\0');
+        CHECK(wf_failure_tag((wf_failure_kind) f)[0] != '\0');
     }
 }
 
@@ -2835,57 +2835,74 @@ test_follow_guards(void)
     CHECK(app.profile.status_is_error);
 }
 
-/* Muted words and hide-reposts. The matching is Wolfram's (its own suite pins the
- * rules); these check Indigo's glue: the word list, the targets, the expiry and
- * the page filter. */
+/* Muted words and hide-reposts. The list and the matching are Wolfram's (its own
+ * vectors pin the rules); these check Indigo's side: the posts a mute is tried
+ * against (text and tag facets), the loaded list, and the page filter. */
 static void
 test_prefs(void)
 {
     indigo_prefs p;
+    indigo_post post;
+    const char *tags[] = {"Spoilers"};
 
     indigo_prefs_clear(&p);
     CHECK(!indigo_prefs_text_is_muted(&p, "anything", NULL, 0));
-    CHECK(!indigo_prefs_add_word(&p, "", true, false, NULL));
+    CHECK(!indigo_prefs_text_is_muted(NULL, "anything", NULL, 0));
 
-    /* A single alphanumeric word matches whole words only. */
-    CHECK(indigo_prefs_add_word(&p, "cat", true, false, NULL));
+    CHECK(wf_muted_list_add(&p.muted, "cat", true, false, false, NULL));
+    CHECK(wf_muted_list_add(&p.muted, "spoilers", false, true, false, NULL));
     CHECK(indigo_prefs_text_is_muted(&p, "I like my Cat.", NULL, 0));
-    CHECK(indigo_prefs_text_is_muted(&p, "cat", NULL, 0));
     CHECK(!indigo_prefs_text_is_muted(&p, "a category of things", NULL, 0));
-    CHECK(!indigo_prefs_text_is_muted(&p, "concatenate", NULL, 0));
-
-    /* A phrase matches as a substring. */
-    indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "good morning", true, false, NULL));
-    CHECK(indigo_prefs_text_is_muted(&p, "oh, GOOD MORNING all", NULL, 0));
-    CHECK(!indigo_prefs_text_is_muted(&p, "good evening", NULL, 0));
-
-    /* A tag mute applies to the tag facets, not the text. */
-    indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "#spoilers", false, true, NULL));
-    const char *tags[] = {"Spoilers"};
-
+    /* A tag mute applies to the post's tag facets, not its text. */
     CHECK(indigo_prefs_text_is_muted(&p, "text", tags, 1));
-    CHECK(!indigo_prefs_text_is_muted(&p, "spoilers in text", NULL, 0));
+    CHECK(!indigo_prefs_text_is_muted(&p, "spoilers in the text", NULL, 0));
 
-    /* A word with neither target is content-only, which is what the server
-     * means by the default. */
-    indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "default", false, false, NULL));
-    CHECK(indigo_prefs_text_is_muted(&p, "the default case", NULL, 0));
+    /* The same through a post: its tag facets are the tags. */
+    memset(&post, 0, sizeof post);
+    snprintf(post.text, sizeof post.text, "nothing to see");
+    CHECK(!indigo_prefs_post_is_hidden(&p, &post, true));
+    post.facet_count = 1;
+    post.facets[0].kind = INDIGO_FACET_TAG;
+    snprintf(post.facets[0].target, sizeof post.facets[0].target, "spoilers");
+    CHECK(indigo_prefs_post_is_hidden(&p, &post, true));
 
-    /* An expired mute no longer applies and a current one does, judged at the time the
-     * list was loaded; with no clock (now = 0) nothing counts as expired. */
-    indigo_prefs_clear(&p);
-    p.now = 1791055895; /* 2026-10-03 */
-    CHECK(indigo_prefs_add_word(&p, "old", true, false, "2020-01-01T00:00:00Z"));
-    CHECK(indigo_prefs_add_word(&p, "current", true, false, "2099-01-01T00:00:00Z"));
-    CHECK(indigo_prefs_add_word(&p, "forever", true, false, NULL));
-    CHECK(!indigo_prefs_text_is_muted(&p, "an old post", NULL, 0));
-    CHECK(indigo_prefs_text_is_muted(&p, "a current post", NULL, 0));
-    CHECK(indigo_prefs_text_is_muted(&p, "a forever post", NULL, 0));
-    p.now = 0;
-    CHECK(indigo_prefs_text_is_muted(&p, "an old post", NULL, 0));
+    /* Loading from the server's preferences: the list, the home feed's
+     * hide-reposts, and an expired mute left out. */
+    {
+        wf_actor_preferences src;
+        wf_actor_pref_feed_view fv;
+        wf_actor_pref_muted_word mw[2];
+        char *targets[1] = {(char *) "content"};
+        char home[] = "home";
+        char dog[] = "dog";
+        char old[] = "old";
+        char past[] = "2020-01-01T00:00:00Z";
+
+        memset(&src, 0, sizeof src);
+        memset(&fv, 0, sizeof fv);
+        memset(mw, 0, sizeof mw);
+        fv.feed = home;
+        fv.has_hide_reposts = true;
+        fv.hide_reposts = true;
+        src.feed_views = &fv;
+        src.feed_view_count = 1;
+        mw[0].value = dog;
+        mw[0].targets = targets;
+        mw[0].target_count = 1;
+        mw[1].value = old;
+        mw[1].targets = targets;
+        mw[1].target_count = 1;
+        mw[1].expires_at = past;
+        src.muting_keywords = mw;
+        src.muting_keyword_count = 2;
+
+        indigo_prefs_from_wolfram(&p, &src, 1791055895);
+        CHECK(p.hide_reposts);
+        CHECK(indigo_prefs_text_is_muted(&p, "a dog", NULL, 0));
+        CHECK(!indigo_prefs_text_is_muted(&p, "an old post", NULL, 0));
+        indigo_prefs_from_wolfram(&p, NULL, 0);
+        CHECK(!p.hide_reposts && p.muted.count == 0);
+    }
 
     /* Page filtering: reposts hidden on the home timeline only, muted words
      * everywhere, posts before `from` untouched. */
@@ -2900,7 +2917,7 @@ test_prefs(void)
 
     indigo_prefs_clear(&p);
     p.hide_reposts = true;
-    CHECK(indigo_prefs_add_word(&p, "ban", true, false, NULL));
+    CHECK(wf_muted_list_add(&p.muted, "ban", true, false, false, NULL));
 
     CHECK(indigo_prefs_filter_page(&p, page, 4, 1, false) == 1);
     CHECK(page[1].reposted_by[0] != '\0');
