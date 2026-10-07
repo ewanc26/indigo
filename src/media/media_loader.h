@@ -36,8 +36,4 @@ bool indigo_media_loader_request(indigo_media_cache *c, const char *url,
  * per frame. */
 void indigo_media_loader_drain(indigo_media_cache *c);
 
-/* False when the thread could not be started, so the caller can say so rather
- * than leaving every avatar looking permanently unloaded. */
-bool indigo_media_loader_running(void);
-
 #endif

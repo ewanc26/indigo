@@ -275,11 +275,6 @@ indigo_media_loader_drain(indigo_media_cache *c)
     LightLock_Unlock(&s_lock);
 }
 
-bool
-indigo_media_loader_running(void)
-{
-    return s_started;
-}
 
 #else /* the host build: the pipeline exists, the network does not */
 
@@ -309,10 +304,5 @@ indigo_media_loader_drain(indigo_media_cache *c)
     (void) c;
 }
 
-bool
-indigo_media_loader_running(void)
-{
-    return false;
-}
 
 #endif
