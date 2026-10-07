@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-07
+
+What has and has not been run, plainly: the host tests pass (4000 checks under AddressSanitizer and UBSan) and the 3DS build links in CI against Wolfram v0.30.0. The new scrolling (touch drag, held D-pad and Circle Pad, C-Stick paging) has not been run on an emulator or a real 3DS: I cannot send touch or stick input to the emulator from here.
+
 ### Changed
 - Indigo now builds against Wolfram v0.30.0 (was v0.29.0). ([#50](https://github.com/ewanc26/indigo/pull/50))
 
