@@ -10,7 +10,7 @@ as the release notes.
 
 ### Added
 
-- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. This needs Wolfram v0.39.0's `wf_attach_scan_images_tree`, which is not released yet, so this PR is blocked on that release.
+- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. This needs Wolfram v0.39.0's `wf_attach_scan_images_tree`, which is not released yet, so this PR is blocked on that release. ([#74](https://github.com/ewanc26/indigo/pull/74))
 
 ### Changed
 
