@@ -8,6 +8,12 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Indigo now builds against Wolfram v0.30.0 (was v0.29.0). ([#50](https://github.com/ewanc26/indigo/pull/50))
+
+### Added
+- Feeds scroll by dragging a finger up or down the list on the touch screen, a row for every row's height dragged, and the D-pad and Circle Pad repeat while held, so running down a feed no longer takes a press per post. The C-Stick pages on a New 3DS. A drag that begins on a button or the header does not scroll. Wolfram's `wf_drag` does the tap-versus-drag work. Checked on the host; not on an emulator or a console, where I cannot send it a touch ([#50](https://github.com/ewanc26/indigo/pull/50)).
+
 ## [0.8.1] - 2026-10-07
 
 What has and has not been run, plainly: the host tests pass (3993 checks under AddressSanitizer and UBSan), the 3DS build links in CI against Wolfram v0.29.0, and I ran this build in Azahar on a signed-in session, where the timeline's avatars load and draw square and upright. It has not been run on a real 3DS.
