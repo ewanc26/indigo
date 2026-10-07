@@ -660,6 +660,110 @@ test_attach_image(void)
     remove(dir);
 }
 
+/* The picker also lists the camera's DCIM/<folder>/<image> files, after the
+ * app folder's own, and choosing one attaches its full path. */
+static void
+test_attach_camera_folder(void)
+{
+    char camera[] = "build-host/attach-camera";
+    char appdir[] = "build-host/attach-camera-app";
+    char path[256];
+    indigo_app app;
+    indigo_input in = {0};
+    FILE *f;
+
+    mkdir("build-host", 0777);
+    mkdir(camera, 0777);
+    mkdir(appdir, 0777);
+    snprintf(path, sizeof path, "%s/100NIN01", camera);
+    mkdir(path, 0777);
+    snprintf(path, sizeof path, "%s/100NIN01/IMG_0002.JPG", camera);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("jpg", f);
+        fclose(f);
+    }
+    snprintf(path, sizeof path, "%s/100NIN01/notes.txt", camera);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("x", f);
+        fclose(f);
+    }
+    snprintf(path, sizeof path, "%s/top.png", camera);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("png", f);
+        fclose(f);
+    }
+
+    indigo_app_init(&app);
+    indigo_copy_utf8(app.images_dir, sizeof app.images_dir, appdir);
+    indigo_copy_utf8(app.camera_dir, sizeof app.camera_dir, camera);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.compose.mode = INDIGO_COMPOSE_POST;
+    indigo_copy_utf8(app.compose.text, sizeof app.compose.text, "a post with a camera picture");
+
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    in.refresh = false;
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.picking_image);
+    /* Nothing in the app folder; the camera's picture and top-level picture,
+     * in name order, then Close. The text file is not an image. */
+    CHECK(app.menu.count == 3);
+    CHECK(strcmp(app.menu.items[0].label, "100NIN01/IMG_0002.JPG") == 0);
+    CHECK(app.menu.items[0].camera);
+    CHECK(strcmp(app.menu.items[1].label, "top.png") == 0);
+    CHECK(app.menu.items[1].camera);
+    CHECK(app.menu.items[2].kind == INDIGO_MENU_CLOSE);
+
+    /* Choosing the subfolder picture attaches its full path. */
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    in.confirm = false;
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(indigo_compose_has_image(&app.compose));
+    snprintf(path, sizeof path, "%s/100NIN01/IMG_0002.JPG", camera);
+    CHECK(strcmp(app.compose.image, path) == 0);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_EDIT_IMAGE_ALT);
+    indigo_app_take_request(&app, NULL);
+
+    /* An app-folder picture is still under the app folder. */
+    snprintf(path, sizeof path, "%s/own.jpg", appdir);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("jpg", f);
+        fclose(f);
+    }
+    indigo_compose_clear_image(&app.compose);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    in.refresh = false;
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.count == 4);
+    CHECK(strcmp(app.menu.items[0].label, "own.jpg") == 0);
+    CHECK(!app.menu.items[0].camera);
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    in.confirm = false;
+    snprintf(path, sizeof path, "%s/own.jpg", appdir);
+    CHECK(strcmp(app.compose.image, path) == 0);
+
+    snprintf(path, sizeof path, "%s/own.jpg", appdir);
+    remove(path);
+    snprintf(path, sizeof path, "%s/100NIN01/IMG_0002.JPG", camera);
+    remove(path);
+    snprintf(path, sizeof path, "%s/100NIN01/notes.txt", camera);
+    remove(path);
+    snprintf(path, sizeof path, "%s/100NIN01", camera);
+    remove(path);
+    snprintf(path, sizeof path, "%s/top.png", camera);
+    remove(path);
+    remove(camera);
+    remove(appdir);
+}
+
 static void
 test_compose_gate_text_fits(void)
 {
@@ -5391,6 +5495,7 @@ main(void)
     test_new_post_reply_gate();
     test_compose_gate_text_fits();
     test_attach_image();
+    test_attach_camera_folder();
     test_store_file();
     test_compose_flow();
     test_notifications();

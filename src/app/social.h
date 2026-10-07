@@ -118,6 +118,9 @@ typedef enum {
 /* Where images to attach are looked for. The person copies .jpg and .png files
  * here from a computer. */
 #define INDIGO_IMAGES_DIR "sdmc:/3ds/indigo/images"
+/* The 3DS camera's folder. It saves photos as DCIM/<folder>/<image>, so the
+ * picker also lists the images one folder down here. */
+#define INDIGO_CAMERA_DIR "sdmc:/DCIM"
 
 /* A post being written. Reply and quote both refer to `target`; a reply also
  * needs the thread root so it lands in the right conversation. */
@@ -202,6 +205,9 @@ typedef struct {
     indigo_menu_kind kind;
     char label[INDIGO_POST_NAME_MAX * 2];
     char payload[INDIGO_FACET_TARGET_MAX];
+    /* For an image picker row: the payload is under the camera folder rather
+     * than the images folder. */
+    bool camera;
 } indigo_menu_item;
 
 typedef struct {
@@ -221,10 +227,12 @@ typedef struct {
 /* `post` may be NULL when nothing is selected: the facet targets are then
  * left out. `account` is the signed-in handle for the profile entry. */
 void indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account);
-/* Fill the menu with the postable images in `dir` (see wolfram/attach.h), one
- * INDIGO_MENU_PICK_IMAGE item per file whose payload is the file name, and a
- * Close item so an empty folder still has a way out. `title` becomes "Images". */
-void indigo_menu_build_images(indigo_menu *m, const char *dir);
+/* Fill the menu with the postable images in `images_dir` (see wolfram/attach.h)
+ * and, one folder down, in `camera_dir`. Each file is an INDIGO_MENU_PICK_IMAGE
+ * item whose payload is its name under that folder ("folder/name" for the
+ * camera's subfolders), with `camera` set for the camera rows. A Close item
+ * follows, so an empty picker still has a way out. `title` becomes "Images". */
+void indigo_menu_build_images(indigo_menu *m, const char *images_dir, const char *camera_dir);
 /* Move the selection, keeping it inside the `rows` visible rows. */
 bool indigo_menu_move(indigo_menu *m, int delta, unsigned rows);
 /* The item shown in visible row `row`, or NULL when that row is empty. */

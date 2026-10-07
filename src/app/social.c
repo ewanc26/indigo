@@ -247,26 +247,40 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
 }
 
 void
-indigo_menu_build_images(indigo_menu *m, const char *dir)
+indigo_menu_build_images(indigo_menu *m, const char *images_dir, const char *camera_dir)
 {
     char names[INDIGO_MENU_MAX - 1][INDIGO_POST_NAME_MAX];
     int too_large = 0;
-    int n;
+    int app_n = 0;
+    int camera_n = 0;
 
     memset(m, 0, sizeof *m);
     indigo_copy_utf8(m->title, sizeof m->title, "Images");
     m->picking_image = true;
-    if (dir) {
+    if (images_dir) {
         /* So a first-time user finds the folder to copy pictures into. */
-        mkdir(dir, 0777);
+        mkdir(images_dir, 0777);
+        app_n = wf_attach_scan_images(images_dir, &names[0][0], sizeof names[0],
+                                      INDIGO_MENU_MAX - 1, &too_large);
     }
-    n = dir ? wf_attach_scan_images(dir, &names[0][0], sizeof names[0], INDIGO_MENU_MAX - 1,
-                                    &too_large)
-            : 0;
-    for (int i = 0; i < n; i++) {
+    /* The camera's folder is read one level down (DCIM/<folder>/<image>). It is
+     * never created here: the camera owns it. Its rows go after the app's. */
+    if (camera_dir) {
+        camera_n = wf_attach_scan_images_tree(camera_dir,
+                                              &names[0][0] + (size_t) app_n * sizeof names[0],
+                                              sizeof names[0], INDIGO_MENU_MAX - 1 - app_n,
+                                              &too_large);
+    }
+    for (int i = 0; i < app_n + camera_n; i++) {
+        unsigned before = m->count;
+
         add_item(m, INDIGO_MENU_PICK_IMAGE, names[i], names[i]);
+        if (m->count > before) {
+            m->items[before].camera = i >= app_n;
+        }
     }
-    add_item(m, INDIGO_MENU_CLOSE, n > 0 ? "Close" : "No images found - close", "");
+    add_item(m, INDIGO_MENU_CLOSE,
+             app_n + camera_n > 0 ? "Close" : "No images found - close", "");
 }
 
 bool

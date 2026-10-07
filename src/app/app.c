@@ -20,6 +20,7 @@ indigo_app_init(indigo_app *app)
     /* The memset above leaves text_scale at 0, which is not a valid scale. */
     indigo_settings_defaults(&app->settings);
     indigo_copy_utf8(app->images_dir, sizeof app->images_dir, INDIGO_IMAGES_DIR);
+    indigo_copy_utf8(app->camera_dir, sizeof app->camera_dir, INDIGO_CAMERA_DIR);
 }
 
 void
