@@ -39,7 +39,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
 | Followers, following | yes | implemented, paged | host |
-| Profile tabs | yes | partial: a person's posts only (`INDIGO_SEARCH_AUTHOR`) | host; no replies, media or likes tab |
+| Profile tabs | yes | partial: a person's posts only (`INDIGO_SEARCH_AUTHOR`) | host; no replies, media or likes tab (#56) |
 | Pinned posts | yes | implemented | host |
 | Avatars | yes | implemented | host, and Azahar: fetched as 128 px JPEG thumbnails, decoded and drawn on the timeline; not on hardware |
 | Images on posts, replies and quotes, with alt text | yes | implemented for viewing, behind an alt-text setting | host only |
@@ -58,6 +58,6 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Auto-update | in progress, to the same wolfram#106 contract | implemented: More > "Check for updates" asks GitHub for the latest release, shows the version and asks before downloading. The download is checked (size and SHA-256), written, re-read from the card, and swapped in with the old build kept until the new one starts. Manifest signed (Ed25519, `update.json.sig`) and refused if unsigned | host only (the screen's states, the pinned URLs, and the swap and its recovery with power lost at every write; docs/UPDATE.md). The network, the card and the swap have not been run on an emulator or hardware (#25) |
 | Push notifications | not planned | not planned: no push service a homebrew application can register with; notifications are fetched when the screen is opened | |
 
-## Duplication with Cobalt
+## Shared logic
 
-Tracked in #20. Short version: muted-word matching, relative time and the OAuth pairing client exist in both repositories as copies and belong in Wolfram.
+Muted-word matching and the list (`wf_muted_list`), relative time and RFC 3339 (`wolfram/time.h`), failure kinds (`wolfram/failure.h`), CDN image URLs, the drag gesture, the update signature check and the OAuth pairing client are all Wolfram's; Indigo keeps only the wording, the clock and the hooks. The guard is `scripts/check-flow.sh protocol` plus the duplication scan described in AGENTS.md. This closes the duplication tracked in #20.
