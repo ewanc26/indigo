@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-07
+
+What has and has not been run, plainly: the host tests pass (3993 checks under AddressSanitizer and UBSan), the 3DS build links in CI against Wolfram v0.29.0, and I ran this build in Azahar on a signed-in session, where the timeline's avatars load and draw square and upright. It has not been run on a real 3DS.
+
 ### Changed
 - Indigo now builds against Wolfram v0.29.0 (was v0.28.0). ([#48](https://github.com/ewanc26/indigo/pull/48))
 
