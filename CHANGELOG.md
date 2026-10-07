@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-07
+
+What has and has not been run, plainly: the host tests pass (4029 checks) and the 3DS build links against Wolfram v0.36.2. The new tabs have not been run on a 3DS or in Azahar.
+
 ### Added
 
 - A person's posts screen has replies, media and (on your own account) likes tabs: tap the header box to move to the next one. The tabs, their filters and the fetch are Wolfram v0.36's `wolfram/profile_tab.h`. ([#67](https://github.com/ewanc26/indigo/pull/67))
