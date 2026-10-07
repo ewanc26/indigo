@@ -41,7 +41,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Followers, following | yes | implemented, paged | host |
 | Profile tabs | yes | partial: a person's posts only (`INDIGO_SEARCH_AUTHOR`) | host; no replies, media or likes tab |
 | Pinned posts | yes | implemented | host |
-| Avatars | yes | implemented | host; the texture upload has not been seen on a screen |
+| Avatars | yes | implemented | host, and Azahar: fetched as 128 px JPEG thumbnails, decoded and drawn on the timeline; not on hardware |
 | Images on posts, replies and quotes, with alt text | yes | implemented for viewing, behind an alt-text setting | host only |
 | Full-size image viewer | yes | implemented | host only |
 | Who liked or reposted a post | yes | implemented (`INDIGO_SEARCH_LIKED_BY`, `INDIGO_SEARCH_REPOSTED_BY`; post menu) | host and 3DS build in CI; #15 closed as already done |
