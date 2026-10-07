@@ -42,11 +42,12 @@ typedef enum {
 
 /* What a post carries, for drawing rather than for the summary line. A kind of
  * NONE with a non-empty embed_note is a quote or an attachment Indigo draws as
- * text; IMAGE and LINK are drawn as themselves. */
+ * text; IMAGE, LINK and VIDEO are drawn as themselves. */
 typedef enum {
     INDIGO_EMBED_NONE = 0,
     INDIGO_EMBED_IMAGE,
     INDIGO_EMBED_LINK,
+    INDIGO_EMBED_VIDEO, /* the poster frame; Indigo cannot play the video */
 } indigo_embed_kind;
 
 typedef struct {

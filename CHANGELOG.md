@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- A video in a post shows its poster frame, decoded at the size it is drawn (400 px at most), with a line saying it cannot play on the 3DS. The poster and its shape come from Wolfram v0.37.0's `wf_post_embed`. ([#69](https://github.com/ewanc26/indigo/pull/69))
+
 ## [0.11.0] - 2026-10-07
 
 What has and has not been run, plainly: the host tests pass (4029 checks) and the 3DS build links against Wolfram v0.36.2. The new tabs have not been run on a 3DS or in Azahar.

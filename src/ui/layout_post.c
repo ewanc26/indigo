@@ -87,12 +87,12 @@ draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines,
 }
 
 /* True when the post has an embed the screen draws as itself rather than as a
- * line of text. A quote, a video and an attachment Indigo cannot draw all keep
- * the one-line note instead. */
+ * line of text. A quote and an attachment Indigo cannot draw keep the one-line
+ * note instead; a video is drawn as its poster frame. */
 static bool
 post_draws_embed(const indigo_post *p)
 {
-    if (p->embed_kind == INDIGO_EMBED_IMAGE) {
+    if (p->embed_kind == INDIGO_EMBED_IMAGE || p->embed_kind == INDIGO_EMBED_VIDEO) {
         return p->embed_thumb[0] != '\0';
     }
     if (p->embed_kind == INDIGO_EMBED_LINK) {
@@ -222,8 +222,15 @@ indigo_layout_draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_a
 
     draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES, text_scale);
     if (embed) {
-        if (p->embed_kind != INDIGO_EMBED_IMAGE) {
+        if (p->embed_kind == INDIGO_EMBED_LINK) {
             draw_post_link(c, p);
+            return;
+        }
+        if (p->embed_kind == INDIGO_EMBED_VIDEO) {
+            /* The label takes its line off the band before the poster is
+             * fitted into what is left, so the two never overlap. */
+            band_h = EMBED_H - draw_post_alt(c, "Video: it can't play on the 3DS") - 4.0f;
+            draw_post_image(c, p, band_h < EMBED_H_MIN ? EMBED_H_MIN : band_h);
             return;
         }
         if (show_alt && p->embed_alt[0]) {

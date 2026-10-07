@@ -2290,6 +2290,49 @@ test_layout_draws_post_images(void)
     }
 }
 
+/* A video is drawn as its poster frame with a line saying it cannot play, and
+ * the line sits under the poster rather than on it. */
+static void
+test_layout_draws_video_poster(void)
+{
+    static const char *const poster = "https://video.example/hls/did:plc:one/c/thumbnail.jpg";
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post *p;
+    const indigo_cmd *img;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    app.timeline.count = 1;
+    p = &app.timeline.posts[0];
+    indigo_copy_utf8(p->text, sizeof p->text, "Watch this.");
+    indigo_copy_utf8(p->embed_note, sizeof p->embed_note, "[video]");
+    indigo_copy_utf8(p->embed_thumb, sizeof p->embed_thumb, poster);
+    p->embed_kind = INDIGO_EMBED_VIDEO;
+    p->embed_w = 16;
+    p->embed_h = 9;
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow);
+    img = find_image(&top, poster);
+    CHECK(img != NULL);
+    CHECK(text_has(&top, "can't play"));
+    CHECK(!text_has(&top, "[video]"));
+    for (unsigned i = 0; i < top.count && img; i++) {
+        if (top.cmds[i].kind == INDIGO_CMD_TEXT &&
+            strstr(top.text + top.cmds[i].text_offset, "can't play")) {
+            CHECK(top.cmds[i].y >= img->y + img->h);
+        }
+    }
+
+    /* No poster URL, nothing to draw: the one-line note stands in for it. */
+    p->embed_thumb[0] = '\0';
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "[video]"));
+}
+
 static void
 test_layout_draws_link_cards(void)
 {
@@ -5394,6 +5437,7 @@ main(void)
     test_shapes_stay_on_screen();
     test_settings_screen_shows_the_build();
     test_layout_draws_post_images();
+    test_layout_draws_video_poster();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();
     test_layout_text_scale();
