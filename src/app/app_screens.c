@@ -343,6 +343,8 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_FIELD_QUERY:
             if (indigo_search_is_typed(s)) {
                 edit_query(app);
+            } else if (s->kind == INDIGO_SEARCH_AUTHOR) {
+              indigo_app_next_author_tab(app);
             }
             break;
         case INDIGO_ACTION_AUTHOR:

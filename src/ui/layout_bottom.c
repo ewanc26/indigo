@@ -254,9 +254,16 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
                                s->kind == INDIGO_SEARCH_LIKED_BY
                                    ? "People who liked this post"
                                    : "People who reposted this post");
+        } else if (s->kind == INDIGO_SEARCH_AUTHOR) {
+          /* The box doubles as the tab switch: it names the person and what
+           * a tap on it will show instead. */
+          indigo_canvas_text(
+              c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.26s  Tap: %s",
+              s->subject,
+              wf_profile_tab_name(indigo_app_author_tab_after(app)));
         } else {
-            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.40s",
-                               s->subject);
+          indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT,
+                             "@%.40s", s->subject);
         }
     }
     /* The search screen has no status line in its header to give up, so the

@@ -37,21 +37,22 @@
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
 #include <3ds.h>
-#include <wolfram/time.h>
 #include <wolfram/3ds.h>
 #include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
 #include <wolfram/attach.h>
-#include <wolfram/oauth_pairing.h>
-#include <wolfram/saved_feeds.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/moderation_typed.h>
+#include <wolfram/oauth_pairing.h>
 #include <wolfram/post_display.h>
 #include <wolfram/post_view_typed.h>
+#include <wolfram/profile_tab.h>
+#include <wolfram/saved_feeds.h>
 #include <wolfram/thread_typed.h>
 #include <wolfram/threadgate_postgate.h>
+#include <wolfram/time.h>
 
 typedef enum {
     JOB_NONE = 0,
@@ -104,6 +105,8 @@ typedef struct {
     indigo_graph_action graph;
     indigo_search_kind people_kind;
     char actor[INDIGO_PROFILE_DID_MAX];
+    /* JOB_AUTHOR_FEED's wf_profile_tab. */
+    int tab;
     char list_uri[INDIGO_POST_URI_MAX];
     /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
      * jobs stay readable. */

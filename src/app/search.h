@@ -60,6 +60,8 @@ typedef struct {
      * around one person, so they carry the subject instead of a query. */
     char query[INDIGO_SEARCH_QUERY_MAX];
     indigo_search_kind kind;
+    /* The profile tab (wf_profile_tab) an INDIGO_SEARCH_AUTHOR list shows. */
+    int tab;
     /* A handle for the people lists, a post's at:// URI for liked-by and
      * reposted-by, so it is sized for the longer of the two. */
     char subject[INDIGO_POST_URI_MAX];

@@ -203,6 +203,8 @@ void indigo_app_search_failed(indigo_app *app, const char *message);
 void indigo_app_open_people(indigo_app *app, indigo_search_kind kind, const char *subject);
 /* One person's posts. Reuses the post list that post search fills. */
 void indigo_app_open_author_posts(indigo_app *app, const char *actor);
+int indigo_app_author_tab_after(const indigo_app *app);
+void indigo_app_next_author_tab(indigo_app *app);
 /* The signed-in account's curated lists, then one list's members. Both reuse
  * the search screen; the members list reuses the actor rows. */
 void indigo_app_open_lists(indigo_app *app);

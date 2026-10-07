@@ -20,6 +20,7 @@
 #include "util/buildinfo.h"
 
 #include <wolfram/attach.h>
+#include <wolfram/profile_tab.h>
 
 #include <stdio.h>
 #include <string.h>

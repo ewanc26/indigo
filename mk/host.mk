@@ -26,7 +26,7 @@ endif
 HOST_CJSON_CFLAGS ?= $(shell pkg-config --cflags libcjson 2>/dev/null)
 HOST_CJSON_LIBS ?= $(shell pkg-config --libs libcjson 2>/dev/null || echo -lcjson)
 HOST_WOLFRAM_INC := -I$(WOLFRAM_ROOT)/include $(HOST_CJSON_CFLAGS)
-HOST_WOLFRAM_FILES := src/agent/muted_words.c src/agent/moderation.c src/failure.c src/time.c src/cdn.c src/attach.c src/util.c src/update/ed25519.c \
+HOST_WOLFRAM_FILES := src/agent/muted_words.c src/agent/profile_tab.c src/agent/moderation.c src/failure.c src/time.c src/cdn.c src/attach.c src/util.c src/update/ed25519.c \
                       src/update/signature.c src/update/update_core.c
 HOST_WOLFRAM_CXX_FILES := cpp/wolfram/syntax.cpp
 HOST_WOLFRAM_OBJS := $(addprefix $(HOST_OUT)/wf_,$(subst /,_,$(HOST_WOLFRAM_FILES:.c=.o))) \
