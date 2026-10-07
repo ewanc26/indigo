@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-07
+
+What has and has not been run, plainly: the host tests pass (4035 checks), the warnings sweep is clean, and the 3DS build links against Wolfram v0.37.0. The video poster has not been seen on a 3DS or in Azahar; the snapshot harness renders it with a stand-in font, so the widths there are approximate.
+
 ### Added
 
 - A video in a post shows its poster frame, decoded at the size it is drawn (400 px at most), with a line saying it cannot play on the 3DS. The poster and its shape come from Wolfram v0.37.0's `wf_post_embed`. ([#69](https://github.com/ewanc26/indigo/pull/69))
