@@ -15,12 +15,10 @@
 #include "ui/layout.h"
 #include "ui/wrap.h"
 #include "util/buildinfo.h"
-#include "util/timefmt.h"
+#include "util/clock.h"
 #include "update/update.h"
-#ifdef INDIGO_HOST_WOLFRAM
 #include "update/update_sig.h"
 #include "media/cdn_url.h"
-#endif
 #include "update/updater.h"
 
 #include <math.h>
@@ -2837,58 +2835,9 @@ test_follow_guards(void)
     CHECK(app.profile.status_is_error);
 }
 
-/* seenAt is the only place Indigo needs a wire timestamp, so the formatter is
- * pinned against known epochs rather than "now". */
-static void
-test_time_rfc3339(void)
-{
-    char buf[32];
-
-    CHECK(indigo_time_format_rfc3339(0, buf, sizeof buf));
-    CHECK(strcmp(buf, "1970-01-01T00:00:00Z") == 0);
-
-    CHECK(indigo_time_format_rfc3339(1791055895, buf, sizeof buf));
-    CHECK(strcmp(buf, "2026-10-03T19:31:35Z") == 0);
-
-    /* The last second before a leap day, then the leap day itself: the only
-     * date arithmetic here is gmtime's, but it is the part that would break. */
-    CHECK(indigo_time_format_rfc3339(1709164800, buf, sizeof buf));
-    CHECK(strcmp(buf, "2024-02-29T00:00:00Z") == 0);
-
-    /* Too small to hold the result is refused rather than truncated, because a
-     * half-written timestamp would be sent to the server as if it were whole. */
-    CHECK(!indigo_time_format_rfc3339(0, buf, 8));
-    CHECK(buf[0] == '\0');
-    CHECK(!indigo_time_format_rfc3339(0, NULL, sizeof buf));
-    CHECK(!indigo_time_format_rfc3339(0, buf, 0));
-
-    /* The parser is the formatter's inverse on the same pinned epochs, and
-     * refuses everything that is not the UTC form ATProto requires. */
-    long long t = 0;
-
-    CHECK(indigo_time_parse_rfc3339("2026-10-03T19:31:35Z", &t));
-    CHECK(t == 1791055895);
-    CHECK(indigo_time_parse_rfc3339("2024-02-29T00:00:00Z", &t));
-    CHECK(t == 1709164800);
-    CHECK(indigo_time_parse_rfc3339("1970-01-01T00:00:00Z", &t));
-    CHECK(t == 0);
-    /* Fractional seconds are present on most PDS output. */
-    CHECK(indigo_time_parse_rfc3339("2026-10-03T19:31:35.123Z", &t));
-    CHECK(t == 1791055895);
-
-    CHECK(!indigo_time_parse_rfc3339(NULL, &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03 19:31:35Z", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35+01:00", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35.123", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-13-03T19:31:35Z", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35Z ", &t));
-    CHECK(!indigo_time_parse_rfc3339("", &t));
-    CHECK(!indigo_time_parse_rfc3339("2026-10-03T19:31:35Z", NULL));
-}
-
-/* Muted words and hide-reposts: the rules are the same ones Cobalt settled,
- * so the checks pin the shared behaviour rather than restating it. */
+/* Muted words and hide-reposts. The matching is Wolfram's (its own suite pins the
+ * rules); these check Indigo's glue: the word list, the targets, the expiry and
+ * the page filter. */
 static void
 test_prefs(void)
 {
@@ -2896,10 +2845,10 @@ test_prefs(void)
 
     indigo_prefs_clear(&p);
     CHECK(!indigo_prefs_text_is_muted(&p, "anything", NULL, 0));
-    CHECK(!indigo_prefs_add_word(&p, "", true, false));
+    CHECK(!indigo_prefs_add_word(&p, "", true, false, NULL));
 
     /* A single alphanumeric word matches whole words only. */
-    CHECK(indigo_prefs_add_word(&p, "cat", true, false));
+    CHECK(indigo_prefs_add_word(&p, "cat", true, false, NULL));
     CHECK(indigo_prefs_text_is_muted(&p, "I like my Cat.", NULL, 0));
     CHECK(indigo_prefs_text_is_muted(&p, "cat", NULL, 0));
     CHECK(!indigo_prefs_text_is_muted(&p, "a category of things", NULL, 0));
@@ -2907,13 +2856,13 @@ test_prefs(void)
 
     /* A phrase matches as a substring. */
     indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "good morning", true, false));
+    CHECK(indigo_prefs_add_word(&p, "good morning", true, false, NULL));
     CHECK(indigo_prefs_text_is_muted(&p, "oh, GOOD MORNING all", NULL, 0));
     CHECK(!indigo_prefs_text_is_muted(&p, "good evening", NULL, 0));
 
     /* A tag mute applies to the tag facets, not the text. */
     indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "#spoilers", false, true));
+    CHECK(indigo_prefs_add_word(&p, "#spoilers", false, true, NULL));
     const char *tags[] = {"Spoilers"};
 
     CHECK(indigo_prefs_text_is_muted(&p, "text", tags, 1));
@@ -2922,8 +2871,21 @@ test_prefs(void)
     /* A word with neither target is content-only, which is what the server
      * means by the default. */
     indigo_prefs_clear(&p);
-    CHECK(indigo_prefs_add_word(&p, "default", false, false));
+    CHECK(indigo_prefs_add_word(&p, "default", false, false, NULL));
     CHECK(indigo_prefs_text_is_muted(&p, "the default case", NULL, 0));
+
+    /* An expired mute no longer applies and a current one does, judged at the time the
+     * list was loaded; with no clock (now = 0) nothing counts as expired. */
+    indigo_prefs_clear(&p);
+    p.now = 1791055895; /* 2026-10-03 */
+    CHECK(indigo_prefs_add_word(&p, "old", true, false, "2020-01-01T00:00:00Z"));
+    CHECK(indigo_prefs_add_word(&p, "current", true, false, "2099-01-01T00:00:00Z"));
+    CHECK(indigo_prefs_add_word(&p, "forever", true, false, NULL));
+    CHECK(!indigo_prefs_text_is_muted(&p, "an old post", NULL, 0));
+    CHECK(indigo_prefs_text_is_muted(&p, "a current post", NULL, 0));
+    CHECK(indigo_prefs_text_is_muted(&p, "a forever post", NULL, 0));
+    p.now = 0;
+    CHECK(indigo_prefs_text_is_muted(&p, "an old post", NULL, 0));
 
     /* Page filtering: reposts hidden on the home timeline only, muted words
      * everywhere, posts before `from` untouched. */
@@ -2938,7 +2900,7 @@ test_prefs(void)
 
     indigo_prefs_clear(&p);
     p.hide_reposts = true;
-    CHECK(indigo_prefs_add_word(&p, "ban", true, false));
+    CHECK(indigo_prefs_add_word(&p, "ban", true, false, NULL));
 
     CHECK(indigo_prefs_filter_page(&p, page, 4, 1, false) == 1);
     CHECK(page[1].reposted_by[0] != '\0');
@@ -4896,7 +4858,6 @@ test_update_asset_ok(void)
     CHECK(!indigo_update_asset_ok("0.7.0", NULL, good_url));
 }
 
-#ifdef INDIGO_HOST_WOLFRAM
 /* A throwaway key made for this test: its private half was deleted after it signed the
  * manifest below, so no key material is in the repository. Indigo's real key is never
  * used to sign anything here. */
@@ -4950,9 +4911,7 @@ test_update_signature_gate(void)
     CHECK(strcmp(INDIGO_UPDATE_SIGNATURE_URL,
                  "https://github.com/ewanc26/indigo/releases/latest/download/update.json.sig") == 0);
 }
-#endif
 
-#ifdef INDIGO_HOST_WOLFRAM
 static void
 test_cdn_url(void)
 {
@@ -4991,7 +4950,6 @@ test_cdn_url(void)
     indigo_media_cdn_url(tiny, sizeof tiny, "https://example.com/this-is-too-long-to-fit", INDIGO_CDN_AVATAR);
     CHECK(tiny[0] == '\0');
 }
-#endif
 
 static void
 test_updater_eligibility(void)
@@ -5204,7 +5162,6 @@ main(void)
     test_pinned_post();
     test_lists();
     test_feeds();
-    test_time_rfc3339();
     test_prefs();
     test_text_stays_on_screen();
     test_settings_screen();
@@ -5246,10 +5203,8 @@ main(void)
     test_update_install_happy_path();
     test_update_survives_power_loss_anywhere();
     test_update_asset_ok();
-#ifdef INDIGO_HOST_WOLFRAM
     test_update_signature_gate();
     test_cdn_url();
-#endif
     test_updater_eligibility();
     test_updater_transitions();
     test_update_screen_asks_before_it_installs();

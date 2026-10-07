@@ -50,7 +50,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Custom feeds | yes | implemented: the account's saved feeds, one feed on Home | host |
 | Lists and members | read-only | implemented, read-only | host |
 | Mute and block, with lists | yes | implemented | host |
-| Muted words, hide reposts | yes | implemented, same rules | host |
+| Muted words, hide reposts | yes | implemented: Wolfram's matcher (`wf_muted_words_match`), including mute expiry | host |
 | Attach an image when composing | yes | issue: #19 | Wolfram already has `wf_agent_upload_blob_ex` |
 | On-card cache of timeline and profile data | not listed | issue: #13 | not started |
 | Settings screen | n/a | implemented: theme, text scale, alt text, diagnostics, startup feed; reduce motion and high contrast are stored and reserved | host |

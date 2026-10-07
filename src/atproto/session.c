@@ -6,7 +6,7 @@
 
 #include "store/session_store.h"
 #include "util/log.h"
-#include "util/timefmt.h"
+#include "util/clock.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -18,6 +18,7 @@
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
 #include <3ds.h>
+#include <wolfram/time.h>
 #include <wolfram/3ds.h>
 #include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
@@ -1705,9 +1706,9 @@ do_notifications(void)
         /* Nothing initialises a clock on the 3DS, so time() can return a
          * negative value. Sending "1970-01-01T00:00:00Z" as seenAt would be
          * worse than not marking anything, so the clock decides. */
-        long now = (long) time(NULL);
+        const long long now = indigo_time_now();
 
-        if (now > 0 && indigo_time_format_rfc3339(now, seen_at, sizeof seen_at)) {
+        if (now > 0 && wf_time_format_rfc3339((int64_t) now, seen_at, sizeof seen_at) == WF_OK) {
             if (wf_agent_update_seen_notifications(s_agent, seen_at) != WF_OK) {
                 indigo_log_warn("updateSeen failed: the unread badge may linger on other "
                                 "clients");

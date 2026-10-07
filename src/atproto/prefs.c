@@ -1,76 +1,9 @@
 #include "atproto/prefs.h"
 
+#include <wolfram/muted_words.h>
+
 #include <stdio.h>
 #include <string.h>
-
-/* Bytes of a multi-byte UTF-8 sequence count as letters, so a word in a script
- * without spaces or ASCII punctuation is not split in the middle. */
-static bool
-is_word_byte(unsigned char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
-           (c >= 'A' && c <= 'Z') || c >= 0x80;
-}
-
-static char
-lower(char c)
-{
-    return (c >= 'A' && c <= 'Z') ? (char) (c - 'A' + 'a') : c;
-}
-
-static bool
-ci_equal(const char *a, const char *b)
-{
-    for (; *a && *b; a++, b++) {
-        if (lower(*a) != lower(*b)) {
-            return false;
-        }
-    }
-    return *a == *b;
-}
-
-static bool
-word_is_plain(const char *w)
-{
-    for (; *w; w++) {
-        if (!is_word_byte((unsigned char) *w)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/* Case-insensitive search; whole_word requires non-word bytes (or the string
- * edge) on both sides of the match. */
-static bool
-contains(const char *hay, const char *needle, bool whole_word)
-{
-    const size_t n = strlen(needle);
-
-    if (n == 0) {
-        return false;
-    }
-    for (const char *p = hay; *p; p++) {
-        size_t i = 0;
-
-        while (i < n && p[i] && lower(p[i]) == lower(needle[i])) {
-            i++;
-        }
-        if (i != n) {
-            continue;
-        }
-        if (whole_word) {
-            if (p != hay && is_word_byte((unsigned char) p[-1])) {
-                continue;
-            }
-            if (is_word_byte((unsigned char) p[n])) {
-                continue;
-            }
-        }
-        return true;
-    }
-    return false;
-}
 
 void
 indigo_prefs_clear(indigo_prefs *prefs)
@@ -82,7 +15,7 @@ indigo_prefs_clear(indigo_prefs *prefs)
 
 bool
 indigo_prefs_add_word(indigo_prefs *prefs, const char *value, bool content,
-                      bool tag)
+                      bool tag, const char *expires_at)
 {
     if (!prefs || !value || !value[0] || prefs->count >= INDIGO_PREFS_WORDS_MAX) {
         return false;
@@ -92,6 +25,7 @@ indigo_prefs_add_word(indigo_prefs *prefs, const char *value, bool content,
     snprintf(w->value, sizeof w->value, "%s", value);
     w->content = content || !tag;
     w->tag = tag;
+    snprintf(w->expires_at, sizeof w->expires_at, "%s", expires_at ? expires_at : "");
     return true;
 }
 
@@ -99,28 +33,37 @@ bool
 indigo_prefs_text_is_muted(const indigo_prefs *prefs, const char *text,
                            const char *const *tags, int tag_count)
 {
-    if (!prefs) {
+    wf_actor_pref_muted_word words[INDIGO_PREFS_WORDS_MAX];
+    char *targets[INDIGO_PREFS_WORDS_MAX][2];
+    char content_target[] = "content";
+    char tag_target[] = "tag";
+    char values[INDIGO_PREFS_WORDS_MAX][INDIGO_PREFS_WORD_MAX];
+    char expires[INDIGO_PREFS_WORDS_MAX][INDIGO_PREFS_EXPIRES_MAX];
+
+    if (!prefs || prefs->count == 0) {
         return false;
     }
+    memset(words, 0, sizeof words);
     for (unsigned i = 0; i < prefs->count; i++) {
         const indigo_muted_word *w = &prefs->words[i];
+        /* A tag mute may be written with or without the leading #. */
+        const char *v = (w->tag && !w->content && w->value[0] == '#') ? w->value + 1 : w->value;
 
-        if (w->content && text &&
-            contains(text, w->value, word_is_plain(w->value))) {
-            return true;
+        snprintf(values[i], sizeof values[i], "%s", v);
+        snprintf(expires[i], sizeof expires[i], "%s", w->expires_at);
+        words[i].value = values[i];
+        words[i].expires_at = expires[i][0] ? expires[i] : NULL;
+        if (w->content) {
+            targets[i][words[i].target_count++] = content_target;
         }
-        if (w->tag && tags) {
-            /* A tag mute may be written with or without the leading #. */
-            const char *v = w->value[0] == '#' ? w->value + 1 : w->value;
-
-            for (int t = 0; t < tag_count; t++) {
-                if (tags[t] && ci_equal(tags[t], v)) {
-                    return true;
-                }
-            }
+        if (w->tag) {
+            targets[i][words[i].target_count++] = tag_target;
         }
+        words[i].targets = targets[i];
     }
-    return false;
+    return wf_muted_words_match(words, prefs->count, text, tags,
+                                tags && tag_count > 0 ? (size_t) tag_count : 0, false,
+                                prefs->now);
 }
 
 bool

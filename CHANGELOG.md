@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Muted-word matching and the RFC 3339 timestamp code are Wolfram's now, not copies of Cobalt's: the matcher is `wf_muted_words_match` and the clock-free parsing and formatting are `wolfram/time.h`. A mute's expiry is checked at match time with Wolfram's parser, which also reads numeric offsets (the old one refused them). My copies, about 250 lines, are deleted. The host build now needs a Wolfram checkout and cJSON's headers ([#54](https://github.com/ewanc26/indigo/pull/54), [#20](https://github.com/ewanc26/indigo/issues/20)).
+
 ## [0.9.0] - 2026-10-07
 
 What has and has not been run, plainly: the host tests pass (4000 checks under AddressSanitizer and UBSan) and the 3DS build links in CI against Wolfram v0.30.0. The new scrolling (touch drag, held D-pad and Circle Pad, C-Stick paging) has not been run on an emulator or a real 3DS: I cannot send touch or stick input to the emulator from here.

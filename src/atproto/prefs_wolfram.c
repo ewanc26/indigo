@@ -5,7 +5,6 @@
 
 #include "atproto/prefs.h"
 #include "util/log.h"
-#include "util/timefmt.h"
 
 #include <wolfram/actor_prefs_typed.h>
 
@@ -20,6 +19,7 @@ indigo_prefs_from_wolfram(indigo_prefs *prefs,
         return;
     }
     indigo_prefs_clear(prefs);
+    prefs->now = now;
     if (!src) {
         return;
     }
@@ -38,14 +38,6 @@ indigo_prefs_from_wolfram(indigo_prefs *prefs,
         if (!mw->value) {
             continue;
         }
-        long long expires = 0;
-
-        /* An expiry in the past means the mute is over; the server may keep
-         * the record, so it is skipped rather than honoured. */
-        if (mw->expires_at && indigo_time_parse_rfc3339(mw->expires_at, &expires) &&
-            now > 0 && expires <= now) {
-            continue;
-        }
         bool content = false;
         bool tag = false;
 
@@ -56,7 +48,7 @@ indigo_prefs_from_wolfram(indigo_prefs *prefs,
             content = content || strcmp(mw->targets[t], "content") == 0;
             tag = tag || strcmp(mw->targets[t], "tag") == 0;
         }
-        indigo_prefs_add_word(prefs, mw->value, content, tag);
+        indigo_prefs_add_word(prefs, mw->value, content, tag, mw->expires_at);
     }
     indigo_log_info("prefs: %u muted word(s), hide reposts %s", prefs->count,
                     prefs->hide_reposts ? "on" : "off");
