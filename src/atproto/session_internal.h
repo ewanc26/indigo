@@ -44,6 +44,7 @@
 #include <wolfram/agent.h>
 #include <wolfram/attach.h>
 #include <wolfram/oauth_pairing.h>
+#include <wolfram/saved_feeds.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/moderation_typed.h>
