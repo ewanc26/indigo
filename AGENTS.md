@@ -195,7 +195,7 @@ libctru exposes the actual 3DS input hardware. The Indigo input abstraction curr
 
 Keep raw libctru key constants inside `input/` where possible.
 
-Core navigation must work on Old 3DS hardware. New 3DS-only inputs such as C-Stick and ZL/ZR can enhance the experience but cannot be required for basic operation.
+Lists scroll three ways, all through `indigo_input`: up and down (D-pad or Circle Pad, repeating while held), L and R for a page (the C-Stick too), and a touch drag that begins on one of the list's rows. The drag is Wolfram's `wf_drag` (`wolfram/drag.h`), fed in `src/input/input.c` and read by `drag_rows` in `src/app/app.c`; do not re-grow your own tap-versus-drag logic. Core navigation must work on Old 3DS hardware. New 3DS-only inputs such as C-Stick and ZL/ZR can enhance the experience but cannot be required for basic operation.
 
 When adding a gesture or touchscreen-only interaction, provide a physical-control equivalent when the operation is important.
 
