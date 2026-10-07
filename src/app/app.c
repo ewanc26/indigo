@@ -46,7 +46,8 @@ try_sign_in(indigo_app *app)
         return;
     }
     if (!indigo_signin_ready(s)) {
-        indigo_app_set_status(s, "Fill in the OAuth node URL and handle first.", true);
+        indigo_app_set_status(s, s->handle[0] ? "Fill in the OAuth node URL first."
+                                              : "Fill in the handle first.", true);
         return;
     }
     app->request = INDIGO_REQUEST_SIGN_IN;
