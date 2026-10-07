@@ -81,7 +81,7 @@ attach_or_detach(indigo_app *app)
         return;
     }
     indigo_app_push_screen(app);
-    indigo_menu_build_images(&app->menu, app->images_dir);
+    indigo_menu_build_images(&app->menu, app->images_dir, app->camera_dir);
     app->screen = INDIGO_SCREEN_MENU;
 }
 
@@ -197,7 +197,8 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         /* A path that does not fit is dropped rather than cut short into a
          * different file. */
-        if (snprintf(app->compose.image, sizeof app->compose.image, "%s/%s", app->images_dir,
+        if (snprintf(app->compose.image, sizeof app->compose.image, "%s/%s",
+                     it->camera ? app->camera_dir : app->images_dir,
                      it->payload) >= (int) sizeof app->compose.image) {
             app->compose.image[0] = '\0';
             break;

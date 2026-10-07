@@ -176,11 +176,12 @@ build_top_menu(const indigo_app *app, indigo_canvas *c)
         indigo_layout_top_title(c, "Add image", "B  Close");
         indigo_canvas_text(c, 18, 56, 0.6f, COL_TEXT_SOFT, "Choose a picture from");
         indigo_canvas_text(c, 18, 78, 0.6f, COL_TEXT, "%s", INDIGO_IMAGES_DIR);
+        indigo_canvas_text(c, 18, 100, 0.6f, COL_TEXT, "and %s (camera)", INDIGO_CAMERA_DIR);
         snprintf(note, sizeof note,
                  "Copy .jpg or .png files there from a computer; each must be under %d KB. "
                  "You can describe the picture for people who cannot see it after choosing it.",
                  WF_ATTACH_MAX_BYTES / 1000);
-        indigo_layout_top_paragraph(c, 18, 110, 0.55f, COL_TEXT_DIM, 5, note);
+        indigo_layout_top_paragraph(c, 18, 124, 0.55f, COL_TEXT_DIM, 4, note);
         return;
     }
     indigo_layout_top_title(c, "Menu", "B  Close");

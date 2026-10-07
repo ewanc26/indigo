@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. This needs Wolfram v0.39.0's `wf_attach_scan_images_tree`, which is not released yet, so this PR is blocked on that release.
+
 ### Changed
 
 - Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. This needs Wolfram v0.38.0's `wf_agent_login_discovered`, which is not released yet, so this PR is blocked on that release. ([#72](https://github.com/ewanc26/indigo/pull/72))
