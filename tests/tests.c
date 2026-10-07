@@ -293,6 +293,53 @@ make_post(const char *uri, const char *text)
 }
 
 static void
+test_drag_scrolls_feeds(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_rect row = indigo_layout_button_rect(INDIGO_ACTION_ROW0);
+    indigo_rect like = indigo_layout_button_rect(INDIGO_ACTION_LIKE);
+    indigo_post p;
+    char uri[48];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    for (int i = 0; i < 8; i++) {
+        snprintf(uri, sizeof uri, "at://a/app.bsky.feed.post/%d", i);
+        p = make_post(uri, "post");
+        indigo_timeline_append(&app.timeline, &p);
+    }
+    CHECK(app.timeline.selected == 0);
+
+    /* A drag that began on a row moves the selection by the rows it covered: up is
+     * forward, down is back, and it stops at the ends. */
+    in.drag_start_x = (int) (row.x + row.w / 2);
+    in.drag_start_y = (int) (row.y + row.h / 2);
+    in.drag_rows = 2;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 2);
+    in.drag_rows = -1;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 1);
+    in.drag_rows = 50;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 7);
+    in.drag_rows = -50;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 0);
+
+    /* A frame with no movement, and a drag that began on a button, move nothing. */
+    in.drag_rows = 0;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 0);
+    in.drag_start_x = (int) (like.x + like.w / 2);
+    in.drag_start_y = (int) (like.y + like.h / 2);
+    in.drag_rows = 3;
+    indigo_app_update(&app, &in);
+    CHECK(app.timeline.selected == 0);
+}
+
+static void
 test_thread_navigation(void)
 {
     indigo_app app;
@@ -5100,6 +5147,7 @@ main(void)
     test_canvas_overflow_is_bounded();
     test_app_navigation();
     test_touch_navigation();
+    test_drag_scrolls_feeds();
     test_buttons_spaced_and_on_screen();
     test_layout_invariants();
     test_thread_navigation();

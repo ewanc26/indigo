@@ -30,7 +30,7 @@
 #define ROW_X 8
 #define ROW_W 304
 #define ROW_H 46
-#define ROW_STEP 50
+#define ROW_STEP INDIGO_LIST_ROW_PX
 #define ROW_Y0 48
 #define PILL_Y 202
 #define PILL_W 74
