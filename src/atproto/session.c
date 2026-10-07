@@ -168,6 +168,16 @@ publish_event(const indigo_session_event *ev)
     LightLock_Unlock(&s_lock);
 }
 
+/* A call failed: say what kind of failure it was, log it, and tell the app. */
+static void
+publish_failure(indigo_session_event *ev, const char *what, wf_status st)
+{
+    ev->failure = wf_failure_classify(st, 0, NULL);
+    indigo_log_warn("%s failed: wolfram status %d (%s)", what, (int) st,
+                    wf_failure_tag(ev->failure));
+    publish_event(ev);
+}
+
 static void
 drop_agent(void)
 {
@@ -703,10 +713,7 @@ do_timeline(const job *j)
     st = wf_agent_get_timeline_typed(s_agent, INDIGO_PAGE_SIZE,
                                      j->cursor[0] ? j->cursor : NULL, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("timeline failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "timeline", st);
         return;
     }
 
@@ -833,10 +840,7 @@ do_thread(const job *j)
     memset(&thread, 0, sizeof thread);
     st = wf_agent_get_post_thread_typed(s_agent, j->post_uri, 6, &thread);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("thread failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "thread", st);
         return;
     }
     if (thread.root.kind != WF_AGENT_THREAD_KIND_POST) {
@@ -885,10 +889,7 @@ do_profile(const job *j)
     memset(&p, 0, sizeof p);
     st = wf_agent_get_profile(s_agent, j->post_uri, &p);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("profile failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "profile", st);
         return;
     }
     memset(&s_profile, 0, sizeof s_profile);
@@ -960,6 +961,26 @@ note_kind(const char *reason)
     return INDIGO_NOTE_OTHER;
 }
 
+/* Followers, following, likes and search all end the same way: the page lands in
+ * the one actor array (a fresh list replaces it, a further page appends) and the
+ * event carries the count and the next cursor. */
+static void
+publish_actor_page(const job *j, wf_agent_actor_list *list, indigo_session_event *ev)
+{
+    if (!j->paging) {
+        s_actor_count = 0;
+    }
+    for (size_t i = 0; i < list->actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
+        if (fill_actor(&list->actors[i], &s_actors[s_actor_count])) {
+            s_actor_count++;
+        }
+    }
+    ev->kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
+    ev->page_count = s_actor_count;
+    indigo_copy_utf8(ev->cursor, sizeof ev->cursor, list->cursor ? list->cursor : "");
+    wf_agent_actor_list_free(list);
+}
+
 static void
 do_search(const job *j)
 {
@@ -984,27 +1005,11 @@ do_search(const job *j)
     st = wf_agent_search_actors_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
                                       cursor, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("search failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "search", st);
         return;
     }
 
-    if (!j->paging) {
-        s_actor_count = 0;
-    }
-    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
-        const wf_agent_profile_view *a = &list.actors[i];
-
-        if (fill_actor(a, &s_actors[s_actor_count])) {
-            s_actor_count++;
-        }
-    }
-    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
-    ev.page_count = s_actor_count;
-    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
-    wf_agent_actor_list_free(&list);
+    publish_actor_page(j, &list, &ev);
     indigo_log_info("search '%s': %u", j->query, s_actor_count);
     publish_event(&ev);
 }
@@ -1033,10 +1038,7 @@ do_people(const job *j)
         st = wf_feedgen_get_likes_typed(s_agent, j->list_uri, NULL, INDIGO_SEARCH_PAGE,
                                         cursor, &likes);
         if (st != WF_OK) {
-            ev.failure = wf_failure_classify(st, 0, NULL);
-            indigo_log_warn("liked-by failed: wolfram status %d (%s)", (int) st,
-                            wf_failure_tag(ev.failure));
-            publish_event(&ev);
+            publish_failure(&ev, "liked-by", st);
             return;
         }
         if (!j->paging) {
@@ -1066,27 +1068,11 @@ do_people(const job *j)
                                          cursor, &list);
     }
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("people failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "people", st);
         return;
     }
 
-    if (!j->paging) {
-        s_actor_count = 0;
-    }
-    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
-        const wf_agent_profile_view *a = &list.actors[i];
-
-        if (fill_actor(a, &s_actors[s_actor_count])) {
-            s_actor_count++;
-        }
-    }
-    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
-    ev.page_count = s_actor_count;
-    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
-    wf_agent_actor_list_free(&list);
+    publish_actor_page(j, &list, &ev);
     indigo_log_info("people %d '%s': %u", (int) j->people_kind, j->actor, s_actor_count);
     publish_event(&ev);
 }
@@ -1109,10 +1095,7 @@ do_post_search(const job *j)
     st = wf_agent_search_posts_typed(s_agent, j->query, INDIGO_SEARCH_PAGE,
                                       cursor, &list, &next);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("post search failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "post search", st);
         return;
     }
 
@@ -1157,10 +1140,7 @@ do_author_feed(const job *j)
                                          * them. The bare call is their posts. */
                                         NULL, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("author feed failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "author feed", st);
         return;
     }
 
@@ -1210,10 +1190,7 @@ do_lists(const job *j)
         st = wf_agent_get_lists_typed(s_agent, who, INDIGO_SEARCH_PAGE, cursor, &list);
     }
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("lists failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "lists", st);
         return;
     }
 
@@ -1261,10 +1238,7 @@ do_list_members(const job *j)
     memset(&list, 0, sizeof list);
     st = wf_agent_get_list_typed(s_agent, j->list_uri, INDIGO_SEARCH_PAGE, cursor, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("list members failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "list members", st);
         return;
     }
 
@@ -1319,20 +1293,7 @@ do_moderation_list(const job *j)
         return;
     }
 
-    if (!j->paging) {
-        s_actor_count = 0;
-    }
-    for (size_t i = 0; i < list.actor_count && s_actor_count < INDIGO_SEARCH_MAX; i++) {
-        const wf_agent_profile_view *a = &list.actors[i];
-
-        if (fill_actor(a, &s_actors[s_actor_count])) {
-            s_actor_count++;
-        }
-    }
-    ev.kind = INDIGO_SESSION_EVENT_SEARCH_PAGE;
-    ev.page_count = s_actor_count;
-    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
-    wf_agent_actor_list_free(&list);
+    publish_actor_page(j, &list, &ev);
     indigo_log_info("%s accounts: %u", blocks ? "blocked" : "muted", s_actor_count);
     publish_event(&ev);
 }
@@ -1359,10 +1320,7 @@ do_feeds(const job *j)
     }
     st = wf_agent_get_preferences(s_agent, &prefs_json);
     if (st != WF_OK || !prefs_json) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("preferences failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "preferences", st);
         return;
     }
     {
@@ -1485,10 +1443,7 @@ do_feed(const job *j)
     st = wf_agent_get_feed_typed(s_agent, j->feed_uri, INDIGO_PAGE_SIZE,
                                  j->cursor[0] ? j->cursor : NULL, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("feed failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "feed", st);
         return;
     }
 
@@ -1628,10 +1583,7 @@ do_notifications(void)
     memset(&list, 0, sizeof list);
     st = wf_agent_list_notifications_typed(s_agent, INDIGO_NOTIFICATION_MAX, NULL, &list);
     if (st != WF_OK) {
-        ev.failure = wf_failure_classify(st, 0, NULL);
-        indigo_log_warn("notifications failed: wolfram status %d (%s)", (int) st,
-                        wf_failure_tag(ev.failure));
-        publish_event(&ev);
+        publish_failure(&ev, "notifications", st);
         return;
     }
 
