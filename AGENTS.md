@@ -250,7 +250,7 @@ src/
 ├── gfx/          platform-neutral display lists (canvas)
 ├── ui/           layout.c (pure) and ui.c (citro2d/citro3d backend)
 ├── input/        3DS buttons, sticks and touchscreen
-├── atproto/      Wolfram-backed integration; session.c runs login on a worker thread, prefs.c is the pure muted-word matching
+├── atproto/      Wolfram-backed integration; session.c is the worker thread and its queue and the `session_*.c` files beside it hold the jobs (auth, view, read, people, lists, write; `session_internal.h` is what they share, `session_stub.c` stands in without a 3DS build of Wolfram), prefs.c is the pure muted-word matching
 ├── store/        session and settings codecs, atomic stores on sdmc
 └── util/         logging (file + stderr) and small helpers
 
@@ -632,7 +632,7 @@ Watch for:
 - believing `make warnings` covers `tools/snapshot.c`. It builds only `src/`
   and `tests/`, so a snapshot scenario that does not compile is caught by
   `make snapshots` alone;
-- believing the host targets cover `src/atproto/session.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, five times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`), and a missing `<wolfram/feed_gen_typed.h>` for `wf_feedgen_get_feed_generators_typed`. Run `make` for the console before calling a session change done;
+- believing the host targets cover `src/atproto/session*.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, five times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`), and a missing `<wolfram/feed_gen_typed.h>` for `wf_feedgen_get_feed_generators_typed`. Run `make` for the console before calling a session change done;
 - trusting `make warnings` to match the cross-build's diagnostics. The host
   sweep compiles at `-O2` but the `make test` binary is `-O1`, and the ARM
   `CFLAGS` carry no `-Werror`, so a value-range warning such as
