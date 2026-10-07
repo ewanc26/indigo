@@ -145,7 +145,7 @@ Indigo starts on the sign-in screen; [Status](#status) covers the two ways in. A
 | B | back |
 | Y | like the selected post |
 | X | repost the selected post |
-| SELECT | reload |
+| SELECT | reload; in compose, add or remove a picture |
 | START | quit to the Homebrew Menu |
 | ZR (New 3DS) | open the selected post's picture |
 | Touch | the buttons on the bottom screen |

@@ -494,6 +494,114 @@ advance_count(const char *s)
 
 /* The reply gate's three wordings all have to fit the compose pill, and the
  * longest is easy to lengthen by accident, so check every one of them. */
+/* Attaching an image: the picker is the menu screen filled with the folder's
+ * pictures, choosing one asks for alt text, and the same control takes it off.
+ * Which files count (type, size, dotfiles) is Wolfram's and tested there; here,
+ * that Indigo wires the folder, the compose state and the request. */
+static void
+test_attach_image(void)
+{
+    char dir[] = "build-host/attach-test";
+    char path[256];
+    indigo_app app;
+    indigo_input in = {0};
+
+    mkdir("build-host", 0777);
+    mkdir(dir, 0777);
+    snprintf(path, sizeof path, "%s/b.png", dir);
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        fputs("png", f);
+        fclose(f);
+    }
+    snprintf(path, sizeof path, "%s/a.jpg", dir);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("jpg", f);
+        fclose(f);
+    }
+    snprintf(path, sizeof path, "%s/notes.txt", dir);
+    f = fopen(path, "wb");
+    if (f) {
+        fputs("x", f);
+        fclose(f);
+    }
+
+    indigo_app_init(&app);
+    indigo_copy_utf8(app.images_dir, sizeof app.images_dir, dir);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_copy_utf8(app.compose.text, sizeof app.compose.text, "a post with a picture");
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.compose.mode = INDIGO_COMPOSE_POST;
+    CHECK(!indigo_compose_has_image(&app.compose));
+
+    /* Select opens the picker: two pictures in name order, then Close. */
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    in.refresh = false;
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    CHECK(app.menu.picking_image);
+    CHECK(strcmp(app.menu.title, "Images") == 0);
+    CHECK(app.menu.count == 3);
+    CHECK(strcmp(app.menu.items[0].label, "a.jpg") == 0);
+    CHECK(strcmp(app.menu.items[1].label, "b.png") == 0);
+    CHECK(app.menu.items[2].kind == INDIGO_MENU_CLOSE);
+
+    /* Choosing the second one attaches it and asks for alt text. */
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in.down = false;
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    in.confirm = false;
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(indigo_compose_has_image(&app.compose));
+    CHECK(strcmp(indigo_compose_image_name(&app.compose), "b.png") == 0);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_EDIT_IMAGE_ALT);
+    indigo_app_take_request(&app, NULL);
+    indigo_app_set_image_alt(&app, "a small test picture");
+    CHECK(strcmp(app.compose.image_alt, "a small test picture") == 0);
+
+    /* The controls draw, and the same one takes the picture off again. */
+    {
+        indigo_canvas top;
+        indigo_canvas bot;
+
+        indigo_layout_build(&app, &in, &top, &bot);
+        CHECK(!top.overflow && !bot.overflow);
+    }
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    in.refresh = false;
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(!indigo_compose_has_image(&app.compose));
+    CHECK(app.compose.image_alt[0] == '\0');
+
+    /* An empty folder still has a way out. */
+    snprintf(path, sizeof path, "%s/a.jpg", dir);
+    remove(path);
+    snprintf(path, sizeof path, "%s/b.png", dir);
+    remove(path);
+    in.refresh = true;
+    indigo_app_update(&app, &in);
+    in.refresh = false;
+    CHECK(app.menu.count == 1 && app.menu.items[0].kind == INDIGO_MENU_CLOSE);
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    in.confirm = false;
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+
+    /* A published post forgets the picture so the next one does not carry it. */
+    indigo_copy_utf8(app.compose.image, sizeof app.compose.image, "/x/y.png");
+    app.compose.sending = true;
+    indigo_app_publish_done(&app);
+    CHECK(!indigo_compose_has_image(&app.compose));
+
+    snprintf(path, sizeof path, "%s/notes.txt", dir);
+    remove(path);
+    remove(dir);
+}
+
 static void
 test_compose_gate_text_fits(void)
 {
@@ -5129,6 +5237,7 @@ main(void)
     test_compose_reply_gate();
     test_new_post_reply_gate();
     test_compose_gate_text_fits();
+    test_attach_image();
     test_compose_flow();
     test_notifications();
     test_normalise_service();

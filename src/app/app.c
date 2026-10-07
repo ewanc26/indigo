@@ -3,6 +3,7 @@
 #include "input/input.h"
 #include "ui/layout.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static void
@@ -24,6 +25,7 @@ indigo_app_init(indigo_app *app)
     indigo_timeline_init(&app->thread);
     /* The memset above leaves text_scale at 0, which is not a valid scale. */
     indigo_settings_defaults(&app->settings);
+    indigo_copy_utf8(app->images_dir, sizeof app->images_dir, INDIGO_IMAGES_DIR);
 }
 
 void
@@ -384,6 +386,25 @@ begin_compose(indigo_app *app, indigo_compose_mode mode, const indigo_post *targ
     if (c->text[0]) {
         indigo_copy_utf8(c->status, sizeof c->status, "Draft kept from earlier.");
     }
+}
+
+/* The attach control: with an image attached it removes it, otherwise it opens
+ * the picker, which is the menu screen filled with the folder's pictures. */
+static void
+attach_or_detach(indigo_app *app)
+{
+    indigo_compose *c = &app->compose;
+
+    if (c->sending) {
+        return;
+    }
+    if (indigo_compose_has_image(c)) {
+        indigo_compose_clear_image(c);
+        return;
+    }
+    push_screen(app);
+    indigo_menu_build_images(&app->menu, app->images_dir);
+    app->screen = INDIGO_SCREEN_MENU;
 }
 
 static void
@@ -819,6 +840,15 @@ menu_choose(indigo_app *app, unsigned item)
     case INDIGO_MENU_SIGN_OUT:
         app->request = INDIGO_REQUEST_SIGN_OUT;
         break;
+    case INDIGO_MENU_PICK_IMAGE:
+        go_back(app);
+        snprintf(app->compose.image, sizeof app->compose.image, "%s/%s", app->images_dir,
+                 it->payload);
+        app->compose.image_alt[0] = '\0';
+        /* Alt text is asked for straight away, while the picture is the thing
+         * being thought about. Cancelling the keyboard leaves it empty. */
+        app->request = INDIGO_REQUEST_EDIT_IMAGE_ALT;
+        break;
     case INDIGO_MENU_CLOSE:
         go_back(app);
         break;
@@ -1053,6 +1083,9 @@ update_compose(indigo_app *app, const indigo_input *input)
     if (input->like) {
         compose_second_button(app);
     }
+    if (input->refresh) {
+        attach_or_detach(app);
+    }
     if (input->repost) {
         send_compose(app);
     }
@@ -1065,6 +1098,9 @@ update_compose(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_TOGGLE:
             compose_second_button(app);
+            break;
+        case INDIGO_ACTION_ATTACH:
+            attach_or_detach(app);
             break;
         case INDIGO_ACTION_SEND:
             send_compose(app);
@@ -1800,6 +1836,12 @@ indigo_app_set_draft(indigo_app *app, const char *text)
 }
 
 void
+indigo_app_set_image_alt(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->compose.image_alt, sizeof app->compose.image_alt, text);
+}
+
+void
 indigo_app_publish_done(indigo_app *app)
 {
     indigo_compose *c = &app->compose;
@@ -1807,6 +1849,7 @@ indigo_app_publish_done(indigo_app *app)
 
     c->sending = false;
     c->text[0] = '\0';
+    indigo_compose_clear_image(c);
     c->status[0] = '\0';
     c->has_target = false;
     if (app->screen == INDIGO_SCREEN_COMPOSE) {

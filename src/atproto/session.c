@@ -23,6 +23,7 @@
 #include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
+#include <wolfram/attach.h>
 #include <wolfram/oauth_pairing.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
@@ -73,6 +74,9 @@ typedef struct {
     /* Reply controls for a new top-level post; matches indigo_reply_gate.
      * Ignored for a reply or a quote. */
     int reply_gate;
+    /* The image to attach, by path, and its alt text; empty for none. */
+    char image_path[INDIGO_IMAGE_PATH_MAX];
+    char image_alt[INDIGO_IMAGE_ALT_MAX];
     char text[INDIGO_DRAFT_MAX];
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
@@ -1699,24 +1703,52 @@ do_publish(const job *j)
                                .compose_mode = j->mode};
     wf_agent_post_result res = {0};
     wf_status st = WF_ERR_INVALID_ARG;
+    cJSON *images = NULL;
+    char *embed_json = NULL;
 
     if (!s_agent) {
         ev.failure = WF_FAIL_NOT_READY;
         publish_event(&ev);
         return;
     }
+    if (j->image_path[0]) {
+        st = wf_agent_upload_image_file(s_agent, j->image_path, j->image_alt, &images);
+        if (st != WF_OK) {
+            /* Nothing is posted without the picture the person chose. */
+            indigo_log_warn("image upload failed: wolfram status %d", (int) st);
+            ev.failure = wf_failure_classify(st, 0, NULL);
+            publish_event(&ev);
+            return;
+        }
+    }
+    if (images) {
+        embed_json = cJSON_PrintUnformatted(images);
+        if (!embed_json) {
+            cJSON_Delete(images);
+            ev.failure = WF_FAIL_OTHER;
+            publish_event(&ev);
+            return;
+        }
+    }
     switch (j->mode) {
     case INDIGO_COMPOSE_POST:
-        st = wf_agent_post(s_agent, j->text, &res);
+        st = images ? wf_agent_post_with_embed(s_agent, j->text, embed_json, &res)
+                    : wf_agent_post(s_agent, j->text, &res);
         break;
     case INDIGO_COMPOSE_REPLY:
-        st = wf_agent_reply_refs(s_agent, j->text, j->root_uri, j->root_cid, j->post_uri,
-                                 j->post_cid, &res);
+        st = images ? wf_agent_reply_refs_with_embed(s_agent, j->text, j->root_uri, j->root_cid,
+                                                     j->post_uri, j->post_cid, embed_json, &res)
+                    : wf_agent_reply_refs(s_agent, j->text, j->root_uri, j->root_cid, j->post_uri,
+                                          j->post_cid, &res);
         break;
     case INDIGO_COMPOSE_QUOTE:
-        st = wf_agent_quote(s_agent, j->text, j->post_uri, j->post_cid, &res);
+        st = images ? wf_agent_quote_with_media(s_agent, j->text, j->post_uri, j->post_cid, images,
+                                                &res)
+                    : wf_agent_quote(s_agent, j->text, j->post_uri, j->post_cid, &res);
         break;
     }
+    free(embed_json);
+    cJSON_Delete(images);
     if (st == WF_OK) {
         ev.kind = INDIGO_SESSION_EVENT_PUBLISHED;
         if (res.uri && strlen(res.uri) < sizeof ev.record_uri) {
@@ -2031,11 +2063,14 @@ indigo_session_submit_notifications(void)
 bool
 indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                               const char *target_uri, const char *target_cid,
-                              const char *root_uri, const char *root_cid, int reply_gate)
+                              const char *root_uri, const char *root_cid, int reply_gate,
+                              const char *image_path, const char *image_alt)
 {
     job j = {.kind = JOB_PUBLISH, .mode = mode, .reply_gate = reply_gate};
 
     snprintf(j.text, sizeof j.text, "%s", text);
+    snprintf(j.image_path, sizeof j.image_path, "%s", image_path ? image_path : "");
+    snprintf(j.image_alt, sizeof j.image_alt, "%s", image_alt ? image_alt : "");
     snprintf(j.post_uri, sizeof j.post_uri, "%s", target_uri ? target_uri : "");
     snprintf(j.post_cid, sizeof j.post_cid, "%s", target_cid ? target_cid : "");
     snprintf(j.root_uri, sizeof j.root_uri, "%s", root_uri ? root_uri : "");
@@ -2424,8 +2459,11 @@ indigo_session_submit_notifications(void)
 bool
 indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                               const char *target_uri, const char *target_cid,
-                              const char *root_uri, const char *root_cid, int reply_gate)
+                              const char *root_uri, const char *root_cid, int reply_gate,
+                              const char *image_path, const char *image_alt)
 {
+    (void) image_path;
+    (void) image_alt;
     (void) mode;
     (void) text;
     (void) target_uri;

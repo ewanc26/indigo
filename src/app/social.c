@@ -1,7 +1,10 @@
 #include "app/social.h"
 
+#include <wolfram/attach.h>
+
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static void
 keep_visible(unsigned *scroll, unsigned selected, unsigned rows)
@@ -71,6 +74,27 @@ bool
 indigo_compose_ready(const indigo_compose *c)
 {
     return !c->sending && c->text[0] != '\0';
+}
+
+bool
+indigo_compose_has_image(const indigo_compose *c)
+{
+    return c->image[0] != '\0';
+}
+
+void
+indigo_compose_clear_image(indigo_compose *c)
+{
+    c->image[0] = '\0';
+    c->image_alt[0] = '\0';
+}
+
+const char *
+indigo_compose_image_name(const indigo_compose *c)
+{
+    const char *slash = strrchr(c->image, '/');
+
+    return slash ? slash + 1 : c->image;
 }
 
 bool
@@ -195,6 +219,7 @@ void
 indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
 {
     memset(m, 0, sizeof *m);
+    indigo_copy_utf8(m->title, sizeof m->title, "Menu");
     if (post) {
         for (unsigned i = 0; i < post->facet_count; i++) {
             add_facet(m, post, &post->facets[i]);
@@ -219,6 +244,29 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_UPDATE, "Check for updates", "");
     add_item(m, INDIGO_MENU_SIGN_OUT, "Sign out", "");
     add_item(m, INDIGO_MENU_CLOSE, "Close menu", "");
+}
+
+void
+indigo_menu_build_images(indigo_menu *m, const char *dir)
+{
+    char names[INDIGO_MENU_MAX - 1][INDIGO_POST_NAME_MAX];
+    int too_large = 0;
+    int n;
+
+    memset(m, 0, sizeof *m);
+    indigo_copy_utf8(m->title, sizeof m->title, "Images");
+    m->picking_image = true;
+    if (dir) {
+        /* So a first-time user finds the folder to copy pictures into. */
+        mkdir(dir, 0777);
+    }
+    n = dir ? wf_attach_scan_images(dir, &names[0][0], sizeof names[0], INDIGO_MENU_MAX - 1,
+                                    &too_large)
+            : 0;
+    for (int i = 0; i < n; i++) {
+        add_item(m, INDIGO_MENU_PICK_IMAGE, names[i], names[i]);
+    }
+    add_item(m, INDIGO_MENU_CLOSE, n > 0 ? "Close" : "No images found - close", "");
 }
 
 bool
