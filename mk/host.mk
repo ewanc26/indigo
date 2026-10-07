@@ -33,7 +33,7 @@ HOST_WOLFRAM_OBJS := $(addprefix $(HOST_OUT)/wf_,$(subst /,_,$(HOST_WOLFRAM_FILE
                      $(addprefix $(HOST_OUT)/wf_,$(subst /,_,$(HOST_WOLFRAM_CXX_FILES:.cpp=.o)))
 
 # Sources that never touch libctru/citro2d.
-HOST_SRCS := src/app/app.c src/app/search.c src/app/signin.c src/app/social.c src/app/timeline.c src/atproto/errors.c src/atproto/prefs.c src/media/media.c src/store/session_codec.c src/store/session_store.c src/store/settings_codec.c src/store/settings_store.c src/store/draft_store.c src/store/file.c src/gfx/canvas.c src/ui/layout.c src/ui/wrap.c src/util/log.c src/util/clock.c src/update/update.c src/update/updater.c src/update/update_sig.c src/media/cdn_url.c
+HOST_SRCS := src/app/app.c src/app/search.c src/app/signin.c src/app/social.c src/app/timeline.c src/atproto/errors.c src/atproto/prefs.c src/media/media.c src/store/session_codec.c src/store/session_store.c src/store/settings_codec.c src/store/settings_store.c src/store/draft_store.c src/store/file.c src/gfx/canvas.c src/ui/layout.c src/ui/layout_widgets.c src/ui/layout_post.c src/ui/layout_top.c src/ui/layout_bottom.c src/ui/wrap.c src/util/log.c src/util/clock.c src/update/update.c src/update/updater.c src/update/update_sig.c src/media/cdn_url.c
 HOST_SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
 
 .PHONY: test warnings snapshots
