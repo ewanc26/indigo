@@ -24,8 +24,9 @@ ifeq ($(wildcard $(WOLFRAM_ROOT)/include/wolfram/update.h),)
 $(error The host build needs a Wolfram checkout at $(WOLFRAM_ROOT) (the release in wolfram.ref); set WOLFRAM_ROOT)
 endif
 HOST_CJSON_CFLAGS ?= $(shell pkg-config --cflags libcjson 2>/dev/null)
+HOST_CJSON_LIBS ?= $(shell pkg-config --libs libcjson 2>/dev/null || echo -lcjson)
 HOST_WOLFRAM_INC := -I$(WOLFRAM_ROOT)/include $(HOST_CJSON_CFLAGS)
-HOST_WOLFRAM_FILES := src/agent/muted_words.c src/time.c src/cdn.c src/update/ed25519.c \
+HOST_WOLFRAM_FILES := src/agent/muted_words.c src/agent/moderation.c src/failure.c src/time.c src/cdn.c src/update/ed25519.c \
                       src/update/signature.c src/update/update_core.c
 HOST_WOLFRAM_CXX_FILES := cpp/wolfram/syntax.cpp
 HOST_WOLFRAM_OBJS := $(addprefix $(HOST_OUT)/wf_,$(subst /,_,$(HOST_WOLFRAM_FILES:.c=.o))) \
@@ -61,7 +62,7 @@ $(foreach f,$(HOST_WOLFRAM_CXX_FILES),$(eval $(call WOLFRAM_CXX_OBJ_RULE,$(f))))
 
 $(HOST_OUT)/tests: tests/tests.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(wildcard src/*/*.h)
 	@mkdir -p $(HOST_OUT)
-	$(HOST_CC) $(HOST_WARN) $(HOST_SANITIZE) $(HOST_INC) $(HOST_WOLFRAM_INC) -o $@ tests/tests.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(HOST_CXXLIB)
+	$(HOST_CC) $(HOST_WARN) $(HOST_SANITIZE) $(HOST_INC) $(HOST_WOLFRAM_INC) -o $@ tests/tests.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(HOST_CXXLIB) $(HOST_CJSON_LIBS)
 
 warnings:
 	@mkdir -p $(HOST_OUT)
@@ -73,7 +74,7 @@ warnings:
 
 $(HOST_OUT)/snapshot: tools/snapshot.c tools/snapshot_font.h $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(wildcard src/*/*.h)
 	@mkdir -p $(HOST_OUT)
-	$(HOST_CC) -std=c11 -Wall -Wextra -O2 $(HOST_SANITIZE) $(HOST_INC) $(HOST_WOLFRAM_INC) -o $@ tools/snapshot.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(HOST_CXXLIB) -lm
+	$(HOST_CC) -std=c11 -Wall -Wextra -O2 $(HOST_SANITIZE) $(HOST_INC) $(HOST_WOLFRAM_INC) -o $@ tools/snapshot.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(HOST_CXXLIB) $(HOST_CJSON_LIBS) -lm
 
 snapshots: $(HOST_OUT)/snapshot
 	@mkdir -p $(HOST_OUT)/snapshots
