@@ -1,13 +1,9 @@
 #include "store/session_codec.h"
 
+#include "store/codec_text.h"
+
 #include <stdio.h>
 #include <string.h>
-
-static bool
-has_break(const char *v)
-{
-    return strchr(v, '\n') != NULL || strchr(v, '\r') != NULL;
-}
 
 indigo_codec_status
 indigo_session_encode(const indigo_saved_session *s, char *out, size_t cap,
@@ -16,7 +12,7 @@ indigo_session_encode(const indigo_saved_session *s, char *out, size_t cap,
     const char *vals[] = {s->service, s->session};
 
     for (size_t i = 0; i < sizeof vals / sizeof vals[0]; i++) {
-        if (has_break(vals[i])) {
+        if (indigo_codec_has_break(vals[i])) {
             return INDIGO_CODEC_CORRUPT;
         }
     }
@@ -80,40 +76,38 @@ indigo_session_decode(const char *data, size_t len, indigo_saved_session *out)
     }
 
     while (p < end) {
-        const char *nl = memchr(p, '\n', (size_t) (end - p));
+        const char *line;
         size_t line_len;
 
-        if (!nl) {
+        if (!indigo_codec_next_line(&p, end, &line, &line_len)) {
             break; /* truncated final line */
         }
-        line_len = (size_t) (nl - p);
-        if (line_len == 3 && memcmp(p, "end", 3) == 0) {
+        if (line_len == 3 && memcmp(line, "end", 3) == 0) {
             saw_end = true;
             break;
         }
 
-        const char *eq = memchr(p, '=', line_len);
+        const char *eq = memchr(line, '=', line_len);
 
         if (!eq) {
             indigo_session_wipe(out);
             return INDIGO_CODEC_CORRUPT;
         }
 
-        size_t klen = (size_t) (eq - p);
+        size_t klen = (size_t) (eq - line);
         const char *v = eq + 1;
         size_t vlen = line_len - klen - 1;
         bool ok = true;
 
-        if (klen == 7 && memcmp(p, "service", 7) == 0) {
+        if (klen == 7 && memcmp(line, "service", 7) == 0) {
             ok = assign(out->service, sizeof out->service, v, vlen);
-        } else if (klen == 7 && memcmp(p, "session", 7) == 0) {
+        } else if (klen == 7 && memcmp(line, "session", 7) == 0) {
             ok = assign(out->session, sizeof out->session, v, vlen);
         } /* unknown keys are skipped so a newer file still loads */
         if (!ok) {
             indigo_session_wipe(out);
             return INDIGO_CODEC_TOO_BIG;
         }
-        p = nl + 1;
     }
 
     if (!saw_end) {

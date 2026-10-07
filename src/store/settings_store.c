@@ -35,9 +35,3 @@ indigo_settings_store_load(const char *path, indigo_settings *out)
     indigo_file_set_aside(path);
     return INDIGO_STORE_UNREADABLE;
 }
-
-indigo_store_status
-indigo_settings_store_clear(const char *path)
-{
-    return indigo_file_remove(path);
-}
