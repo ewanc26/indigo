@@ -92,13 +92,17 @@ load_one(const char *url, int slot, unsigned generation, unsigned max_dim)
     /* Public GET: no Authorization header, https-only including redirects, a
      * body cap that aborts the transfer rather than buffering an endless one,
      * and no touch of the client's state. */
-    if (wf_http_get_public(s_client, url, INDIGO_MEDIA_DOWNLOAD_MAX, &resp) != WF_OK) {
-        indigo_log_warn("image fetch failed: %.80s", url);
+    wf_status fetched = wf_http_get_public(s_client, url, INDIGO_MEDIA_DOWNLOAD_MAX, &resp);
+
+    if (fetched != WF_OK) {
+        indigo_log_warn("image fetch failed (wolfram status %d, http %ld): %.80s", (int) fetched,
+                        (long) resp.status, url);
         done.failed = true;
     } else if (wf_image_decode_rgba(resp.body, resp.body_len,
                                     max_dim ? max_dim : INDIGO_MEDIA_MAX_DIM,
                                     &img) != WF_OK) {
-        indigo_log_warn("image decode failed: %.80s", url);
+        indigo_log_warn("image decode failed (http %ld, %lu bytes): %.80s", (long) resp.status,
+                        (unsigned long) resp.body_len, url);
         done.failed = true;
     } else {
         done.pixels = img.pixels;
