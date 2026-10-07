@@ -138,8 +138,9 @@ Indigo starts on the sign-in screen; [Status](#status) covers the two ways in. A
 
 | Control | Does |
 |---|---|
-| D-pad up and down | move the selection |
-| L and R | a page up or down |
+| D-pad or Circle Pad, up and down | move the selection; hold to keep moving |
+| Dragging a finger up or down a list | scrolls it a row for every row's height dragged; a tap still selects |
+| L and R (C-Stick up and down on a New 3DS) | a page up or down |
 | A | open or confirm |
 | B | back |
 | Y | like the selected post |
