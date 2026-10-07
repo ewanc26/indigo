@@ -842,8 +842,13 @@ menu_choose(indigo_app *app, unsigned item)
         break;
     case INDIGO_MENU_PICK_IMAGE:
         go_back(app);
-        snprintf(app->compose.image, sizeof app->compose.image, "%s/%s", app->images_dir,
-                 it->payload);
+        /* A path that does not fit is dropped rather than cut short into a
+         * different file. */
+        if (snprintf(app->compose.image, sizeof app->compose.image, "%s/%s", app->images_dir,
+                     it->payload) >= (int) sizeof app->compose.image) {
+            app->compose.image[0] = '\0';
+            break;
+        }
         app->compose.image_alt[0] = '\0';
         /* Alt text is asked for straight away, while the picture is the thing
          * being thought about. Cancelling the keyboard leaves it empty. */
