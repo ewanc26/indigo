@@ -9,6 +9,7 @@
 #include "store/session_store.h"
 #include "store/settings_codec.h"
 #include "store/draft_store.h"
+#include "store/file.h"
 #include "store/settings_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
@@ -498,6 +499,62 @@ advance_count(const char *s)
  * pictures, choosing one asks for alt text, and the same control takes it off.
  * Which files count (type, size, dotfiles) is Wolfram's and tested there; here,
  * that Indigo wires the folder, the compose state and the request. */
+/* The file operations every store shares. */
+static void
+test_store_file(void)
+{
+    const char *path = "build-host/file-test.dat";
+    char bad[64];
+    char buf[16];
+    size_t n = 99;
+    FILE *f;
+
+    snprintf(bad, sizeof bad, "%s.bad", path);
+    mkdir("build-host", 0777);
+    indigo_file_remove(path);
+    indigo_file_remove(bad);
+
+    CHECK(indigo_file_read(path, buf, sizeof buf, &n) == INDIGO_STORE_MISSING && n == 0);
+    CHECK(indigo_file_remove(path) == INDIGO_STORE_OK);
+
+    CHECK(indigo_file_write_atomic(path, "hello", 5) == INDIGO_STORE_OK);
+    CHECK(indigo_file_read(path, buf, sizeof buf, &n) == INDIGO_STORE_OK);
+    CHECK(n == 5 && memcmp(buf, "hello", 5) == 0);
+
+    /* A second write replaces the first and leaves no temporary file behind. */
+    CHECK(indigo_file_write_atomic(path, "abc", 3) == INDIGO_STORE_OK);
+    CHECK(indigo_file_read(path, buf, sizeof buf, &n) == INDIGO_STORE_OK && n == 3);
+    f = fopen("build-host/file-test.dat.tmp", "rb");
+    CHECK(f == NULL);
+    if (f) {
+        fclose(f);
+    }
+
+    /* A file longer than the buffer comes back as exactly the buffer. */
+    CHECK(indigo_file_write_atomic(path, "0123456789", 10) == INDIGO_STORE_OK);
+    CHECK(indigo_file_read(path, buf, 4, &n) == INDIGO_STORE_OK && n == 4);
+
+    /* A damaged file moves aside, replacing an earlier one. */
+    indigo_file_set_aside(path);
+    f = fopen(path, "rb");
+    CHECK(f == NULL);
+    if (f) {
+        fclose(f);
+    }
+    CHECK(indigo_file_read(bad, buf, sizeof buf, &n) == INDIGO_STORE_OK && n == 10);
+    CHECK(indigo_file_write_atomic(path, "x", 1) == INDIGO_STORE_OK);
+    indigo_file_set_aside(path);
+    CHECK(indigo_file_read(bad, buf, sizeof buf, &n) == INDIGO_STORE_OK && n == 1);
+
+    /* Bad arguments are an I/O error, not a crash. */
+    CHECK(indigo_file_write_atomic(NULL, "x", 1) == INDIGO_STORE_IO);
+    CHECK(indigo_file_write_atomic(path, NULL, 1) == INDIGO_STORE_IO);
+    CHECK(indigo_file_read(path, NULL, 4, &n) == INDIGO_STORE_IO);
+    indigo_file_set_aside(NULL);
+
+    indigo_file_remove(bad);
+}
+
 static void
 test_attach_image(void)
 {
@@ -5238,6 +5295,7 @@ main(void)
     test_new_post_reply_gate();
     test_compose_gate_text_fits();
     test_attach_image();
+    test_store_file();
     test_compose_flow();
     test_notifications();
     test_normalise_service();

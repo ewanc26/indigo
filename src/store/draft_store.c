@@ -1,6 +1,7 @@
 #include "store/draft_store.h"
 
-#include <stdbool.h>
+#include "store/file.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,93 +75,58 @@ indigo_draft_decode(const char *buf, size_t len, char *out, size_t cap)
 indigo_store_status
 indigo_draft_store_save(const char *path, const char *text)
 {
-    char tmp[300];
     char *buf;
     size_t cap;
     size_t len = 0;
-    FILE *f;
-    bool ok;
+    indigo_store_status st = INDIGO_STORE_IO;
 
     if (!path || !text) {
         return INDIGO_STORE_IO;
     }
     if (text[0] == '\0') {
-        if (remove(path) != 0 && (f = fopen(path, "rb")) != NULL) {
-            fclose(f);
-            return INDIGO_STORE_IO;
-        }
-        return INDIGO_STORE_OK;
+        /* An empty draft is no draft: nothing to keep. */
+        return indigo_file_remove(path);
     }
     cap = strlen(text) + DRAFT_OVERHEAD;
     buf = malloc(cap);
     if (!buf) {
         return INDIGO_STORE_IO;
     }
-    if (indigo_draft_encode(text, buf, cap, &len) != INDIGO_CODEC_OK ||
-        snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int) sizeof tmp) {
-        free(buf);
-        return INDIGO_STORE_IO;
+    if (indigo_draft_encode(text, buf, cap, &len) == INDIGO_CODEC_OK) {
+        st = indigo_file_write_atomic(path, buf, len);
     }
-    f = fopen(tmp, "wb");
-    if (!f) {
-        free(buf);
-        return INDIGO_STORE_IO;
-    }
-    ok = fwrite(buf, 1, len, f) == len;
-    ok = (fclose(f) == 0) && ok;
     free(buf);
-    if (!ok) {
-        remove(tmp);
-        return INDIGO_STORE_IO;
-    }
-    /* FAT rename will not overwrite on every libc, so clear the target first. */
-    remove(path);
-    if (rename(tmp, path) != 0) {
-        remove(tmp);
-        return INDIGO_STORE_IO;
-    }
-    return INDIGO_STORE_OK;
+    return st;
 }
 
 indigo_store_status
 indigo_draft_store_load(const char *path, char *out, size_t cap)
 {
-    FILE *f;
     char *buf;
-    size_t n;
-    bool err;
-    char bad[300];
+    size_t n = 0;
+    indigo_store_status st;
+    indigo_codec_status decoded;
 
     if (!path || !out || cap == 0) {
         return INDIGO_STORE_IO;
     }
     out[0] = '\0';
-    f = fopen(path, "rb");
-    if (!f) {
-        return INDIGO_STORE_MISSING;
-    }
     buf = malloc(cap + DRAFT_OVERHEAD + 1u);
     if (!buf) {
-        fclose(f);
         return INDIGO_STORE_IO;
     }
-    n = fread(buf, 1, cap + DRAFT_OVERHEAD + 1u, f);
-    err = ferror(f) != 0;
-    fclose(f);
-    if (err) {
+    st = indigo_file_read(path, buf, cap + DRAFT_OVERHEAD + 1u, &n);
+    if (st != INDIGO_STORE_OK) {
         free(buf);
-        return INDIGO_STORE_IO;
+        return st;
     }
-    if (indigo_draft_decode(buf, n, out, cap) == INDIGO_CODEC_OK) {
-        free(buf);
+    decoded = indigo_draft_decode(buf, n, out, cap);
+    free(buf);
+    if (decoded == INDIGO_CODEC_OK) {
         return INDIGO_STORE_OK;
     }
-    free(buf);
     out[0] = '\0';
     /* Kept for inspection rather than discarded: it may be someone's writing. */
-    if (snprintf(bad, sizeof bad, "%s.bad", path) < (int) sizeof bad) {
-        remove(bad);
-        rename(path, bad);
-    }
+    indigo_file_set_aside(path);
     return INDIGO_STORE_UNREADABLE;
 }
