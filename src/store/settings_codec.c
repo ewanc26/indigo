@@ -1,13 +1,9 @@
 #include "store/settings_codec.h"
 
+#include "store/codec_text.h"
+
 #include <stdio.h>
 #include <string.h>
-
-static bool
-has_break(const char *v)
-{
-    return strchr(v, '\n') != NULL || strchr(v, '\r') != NULL;
-}
 
 void
 indigo_settings_defaults(indigo_settings *out)
@@ -54,7 +50,7 @@ indigo_settings_encode(const indigo_settings *s, char *out, size_t cap,
 {
     indigo_settings c;
 
-    if (has_break(s->default_feed)) {
+    if (indigo_codec_has_break(s->default_feed)) {
         return INDIGO_CODEC_CORRUPT;
     }
     /* Encode what is on the way in, not what the caller meant: a struct filled
@@ -171,28 +167,27 @@ indigo_settings_decode(const char *data, size_t len, indigo_settings *out)
     tmp = *out;
 
     while (p < end) {
-        const char *nl = memchr(p, '\n', (size_t) (end - p));
+        const char *line;
         size_t line_len;
 
-        if (!nl) {
+        if (!indigo_codec_next_line(&p, end, &line, &line_len)) {
             break; /* truncated final line */
         }
-        line_len = (size_t) (nl - p);
-        if (line_len > 0 && p[line_len - 1] == '\r') {
+        if (line_len > 0 && line[line_len - 1] == '\r') {
             line_len--; /* tolerate a file last edited with CRLF endings */
         }
-        if (line_len == 3 && memcmp(p, "end", 3) == 0) {
+        if (line_len == 3 && memcmp(line, "end", 3) == 0) {
             saw_end = true;
             break;
         }
 
-        const char *eq = memchr(p, '=', line_len);
+        const char *eq = memchr(line, '=', line_len);
 
         if (!eq) {
             return INDIGO_CODEC_CORRUPT;
         }
 
-        size_t klen = (size_t) (eq - p);
+        size_t klen = (size_t) (eq - line);
         const char *v = eq + 1;
         size_t vlen = line_len - klen - 1;
         int num = 0;
@@ -201,12 +196,12 @@ indigo_settings_decode(const char *data, size_t len, indigo_settings *out)
         /* Every branch below ignores a value it cannot use and leaves the
          * default in place. Anything unrecognised is skipped, so a file
          * written by a newer Indigo still loads. */
-        if (klen == 5 && memcmp(p, "theme", 5) == 0) {
+        if (klen == 5 && memcmp(line, "theme", 5) == 0) {
             if (parse_number(v, vlen, (int) INDIGO_THEME_AUTO,
                              (int) INDIGO_THEME_DARK, &num)) {
                 tmp.theme = (indigo_theme) num;
             }
-        } else if (klen == 10 && memcmp(p, "text_scale", 10) == 0) {
+        } else if (klen == 10 && memcmp(line, "text_scale", 10) == 0) {
             /* A range check alone is not enough: 101 is inside 100..130 but
              * is not a scale the renderer knows how to apply. */
             if (parse_number(v, vlen, (int) INDIGO_TEXT_SCALE_SMALL,
@@ -216,33 +211,32 @@ indigo_settings_decode(const char *data, size_t len, indigo_settings *out)
                  num == (int) INDIGO_TEXT_SCALE_LARGE)) {
                 tmp.text_scale = (indigo_text_scale) num;
             }
-        } else if (klen == 13 && memcmp(p, "reduce_motion", 13) == 0) {
+        } else if (klen == 13 && memcmp(line, "reduce_motion", 13) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.reduce_motion = flag;
             }
-        } else if (klen == 8 && memcmp(p, "alt_text", 8) == 0) {
+        } else if (klen == 8 && memcmp(line, "alt_text", 8) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.alt_text = flag;
             }
-        } else if (klen == 13 && memcmp(p, "high_contrast", 13) == 0) {
+        } else if (klen == 13 && memcmp(line, "high_contrast", 13) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.high_contrast = flag;
             }
-        } else if (klen == 13 && memcmp(p, "large_targets", 13) == 0) {
+        } else if (klen == 13 && memcmp(line, "large_targets", 13) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.large_targets = flag;
             }
-        } else if (klen == 11 && memcmp(p, "diagnostics", 11) == 0) {
+        } else if (klen == 11 && memcmp(line, "diagnostics", 11) == 0) {
             if (parse_bool(v, vlen, &flag)) {
                 tmp.diagnostics = flag;
             }
-        } else if (klen == 12 && memcmp(p, "default_feed", 12) == 0) {
+        } else if (klen == 12 && memcmp(line, "default_feed", 12) == 0) {
             if (vlen < sizeof tmp.default_feed) {
                 memcpy(tmp.default_feed, v, vlen);
                 tmp.default_feed[vlen] = '\0';
             }
         }
-        p = nl + 1;
     }
 
     if (!saw_end) {
