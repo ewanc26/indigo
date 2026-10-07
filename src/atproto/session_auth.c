@@ -2,6 +2,8 @@
 
 #include "atproto/session_internal.h"
 
+#include "app/app.h"
+
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
 void
@@ -192,6 +194,7 @@ indigo_session_do_login(const indigo_job *j)
     wf_status st;
     g_session.node_session = false;
     const char *who;
+    char *pds = NULL;
 
     indigo_session_drop_agent();
     g_session.agent = new_agent(j->service);
@@ -200,19 +203,25 @@ indigo_session_do_login(const indigo_job *j)
         return;
     }
 
+    /* The handle or DID resolves to the account's PDS, which the agent is
+     * pointed at before the login is sent. The user never types that host. */
     indigo_log_info("sign-in: contacting %s", j->service);
-    st = wf_agent_login(g_session.agent, j->identifier, j->password);
+    st = wf_agent_login_discovered(g_session.agent, j->identifier, j->password, &pds);
     if (st != WF_OK) {
         wf_failure_kind f = wf_failure_classify(st, 0, NULL);
 
         indigo_log_warn("sign-in failed: wolfram status %d (%s)", (int) st,
                         wf_failure_tag(f));
+        free(pds);
         indigo_session_drop_agent();
         indigo_session_publish(INDIGO_SESSION_EVENT_SIGN_IN_FAILED, f, NULL);
         return;
     }
 
-    remember(j->service);
+    /* The saved session keeps the discovered PDS, so a resume goes straight
+     * there. Fall back to the starting host only if none was reported. */
+    remember(pds ? pds : j->service);
+    free(pds);
     who = wf_agent_get_handle(g_session.agent);
     indigo_log_info("signed in as %s", who ? who : "(unknown)");
     indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
@@ -331,7 +340,10 @@ indigo_session_submit_login(const char *service, const char *identifier,
     indigo_job j = {.kind = JOB_LOGIN};
     bool ok;
 
-    snprintf(j.service, sizeof j.service, "%s", service);
+    /* The password path starts from the default host when no Service is set;
+     * the login then moves to the account's own PDS. */
+    snprintf(j.service, sizeof j.service, "%s",
+             service && service[0] ? service : INDIGO_DEFAULT_SERVICE);
     snprintf(j.identifier, sizeof j.identifier, "%s", identifier);
     snprintf(j.password, sizeof j.password, "%s", password);
     ok = indigo_session_enqueue(&j);
