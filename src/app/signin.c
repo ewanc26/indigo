@@ -203,8 +203,13 @@ indigo_signin_field_label(indigo_field f)
 bool
 indigo_signin_ready(const indigo_signin *s)
 {
-    /* An empty password selects the browser-based OAuth flow. */
-    return s->service[0] && s->handle[0];
+    /* A password sign-in needs only the handle: the PDS is discovered from it,
+     * and an empty Service starts from INDIGO_DEFAULT_SERVICE. An empty
+     * password selects the browser-based OAuth flow, which needs the node. */
+    if (!s->handle[0]) {
+        return false;
+    }
+    return s->password[0] ? true : s->service[0] != '\0';
 }
 
 void

@@ -878,6 +878,29 @@ test_signin_fields(void)
     CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_PASSWORD, "") == INDIGO_INPUT_EMPTY);
     CHECK(strcmp(s.password, "abcd-efgh-ijkl-mnop") == 0);
 
+    /* A password sign-in is ready from the handle alone: the PDS is
+     * discovered, so no Service is needed. An empty handle never is. */
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_HANDLE, "ewancroft.uk") == INDIGO_INPUT_OK);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_PASSWORD, "abcd-efgh-ijkl-mnop") == INDIGO_INPUT_OK);
+    s.service[0] = '\0';
+    CHECK(indigo_signin_ready(&s));
+    s.handle[0] = '\0';
+    CHECK(!indigo_signin_ready(&s));
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_HANDLE, "ewancroft.uk") == INDIGO_INPUT_OK);
+    CHECK(indigo_signin_ready(&s));
+    /* Without a password the browser (OAuth node) sign-in needs a Service. */
+    s.service[0] = '\0';
+    CHECK(!indigo_signin_ready(&s));
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_PASSWORD, "abcd-efgh-ijkl-mnop") == INDIGO_INPUT_OK);
+    CHECK(!indigo_signin_ready(&s));
+
+    indigo_signin_init(&s);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_HANDLE, "@ewancroft.uk") == INDIGO_INPUT_OK);
+    CHECK(indigo_signin_set_field(&s, INDIGO_FIELD_PASSWORD, "abcd-efgh-ijkl-mnop\n") == INDIGO_INPUT_OK);
+
     /* The password is never shown, only its length. */
     indigo_signin_display(&s, INDIGO_FIELD_PASSWORD, shown, sizeof shown);
     CHECK(strlen(shown) == strlen("abcd-efgh-ijkl-mnop"));

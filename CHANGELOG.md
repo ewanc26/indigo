@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. This needs Wolfram v0.38.0's `wf_agent_login_discovered`, which is not released yet, so this PR is blocked on that release. ([#72](https://github.com/ewanc26/indigo/pull/72))
+
 ### Fixed
 
 - The timeline header's button hints are drawn smaller, so "START Exit" no longer runs into the post counter on the top screen (seen in Azahar). The layout's character-width estimate is too narrow for the system font; this is the minimum change, not a font change. ([#71](https://github.com/ewanc26/indigo/pull/71))
