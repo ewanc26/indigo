@@ -420,6 +420,32 @@ send_compose(indigo_app *app)
     app->request = INDIGO_REQUEST_PUBLISH;
 }
 
+/* The touch actions the timeline and the thread share: pick a row, like,
+ * repost, open the picture. */
+static void
+post_list_touch(indigo_app *app, indigo_timeline *t, indigo_action a)
+{
+    switch (a) {
+    case INDIGO_ACTION_ROW0:
+    case INDIGO_ACTION_ROW1:
+    case INDIGO_ACTION_ROW2:
+        indigo_timeline_select(t, t->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
+                               INDIGO_TIMELINE_ROWS);
+        break;
+    case INDIGO_ACTION_LIKE:
+        toggle_like(app);
+        break;
+    case INDIGO_ACTION_REPOST:
+        toggle_repost(app);
+        break;
+    case INDIGO_ACTION_IMAGE:
+        indigo_app_open_image(app);
+        break;
+    default:
+        break;
+    }
+}
+
 /* Navigation and like/repost shared by the timeline and thread lists. */
 /* The rows a touch drag has moved a list by this frame: positive when the finger
  * went up, so later rows come into view. Only a drag that began on one of the
@@ -511,17 +537,10 @@ update_home(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_ROW0:
         case INDIGO_ACTION_ROW1:
         case INDIGO_ACTION_ROW2:
-            indigo_timeline_select(t, t->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
-                                   INDIGO_TIMELINE_ROWS);
-            break;
         case INDIGO_ACTION_LIKE:
-            toggle_like(app);
-            break;
         case INDIGO_ACTION_REPOST:
-            toggle_repost(app);
-            break;
         case INDIGO_ACTION_IMAGE:
-            indigo_app_open_image(app);
+            post_list_touch(app, t, a);
             break;
         case INDIGO_ACTION_OPEN:
             if (sel) {
@@ -580,17 +599,10 @@ update_thread(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_ROW0:
         case INDIGO_ACTION_ROW1:
         case INDIGO_ACTION_ROW2:
-            indigo_timeline_select(t, t->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
-                                   INDIGO_TIMELINE_ROWS);
-            break;
         case INDIGO_ACTION_LIKE:
-            toggle_like(app);
-            break;
         case INDIGO_ACTION_REPOST:
-            toggle_repost(app);
-            break;
         case INDIGO_ACTION_IMAGE:
-            indigo_app_open_image(app);
+            post_list_touch(app, t, a);
             break;
         case INDIGO_ACTION_REPLY:
             if (sel) {
