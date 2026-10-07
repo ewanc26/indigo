@@ -8,6 +8,9 @@ as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- Indigo now builds against Wolfram v0.29.0 (was v0.28.0). ([#48](https://github.com/ewanc26/indigo/pull/48))
+
 ### Fixed
 - Avatars load. Four things stopped them, none visible on the host: the AppView's avatar URLs are about 130 bytes and Indigo cut them to 128, so the CDN answered 400; a URL with no format comes back as WebP, which the decoder cannot read; the first JPEG decode crashed the loader thread (stb_image's thread-local state, fixed in Wolfram); and the decoded image was copied into the GPU texture without being tiled. Indigo now asks the CDN for the 128 px avatar thumbnail or the feed thumbnail as a JPEG, URL buffers are 160 bytes, and textures are tiled. The profile screen also used the avatar's blob key instead of its URL. Checked in Azahar on a signed-in session; not on a console ([#48](https://github.com/ewanc26/indigo/pull/48)).
 
