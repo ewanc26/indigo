@@ -55,7 +55,6 @@ typedef struct {
     unsigned tex_w;
     unsigned tex_h;
     C3D_Tex tex;
-    Tex3DS_SubTexture sub;
 } ui_tex;
 
 static ui_tex s_texs[UI_TEX_MAX];
@@ -147,6 +146,44 @@ pot_up(unsigned v)
     return p;
 }
 
+/* PICA200 textures are tiled: 8x8 blocks in raster order with the pixels inside a
+ * block in Z (Morton) order, and the GPU reads an RGBA8 texel as the word
+ * 0xRRGGBBAA. So decoded RGBA bytes cannot be copied in row by row; each pixel is
+ * repacked into its tiled position on the CPU (the GPU's display transfer would
+ * do it, but is not allowed between C3D_FrameBegin and C3D_FrameEnd).
+ *
+ * The layout below, read back through the GPU, shows the picture turned 90
+ * degrees clockwise: Azahar drew every avatar that way until the image was
+ * stored turned the other way. So pixel (x, y) of the picture is stored at
+ * (y, side - 1 - x). That swaps the axes, so the texture is a square of `side`
+ * texels (a power of two at least as big as the longer edge) and the picture sits
+ * in its top-left corner as far as sampling is concerned; the rest is transparent. */
+static unsigned
+tile_offset(unsigned x, unsigned y, unsigned side)
+{
+    unsigned z = (x & 1u) | ((y & 1u) << 1) | ((x & 2u) << 1) | ((y & 2u) << 2) |
+                 ((x & 4u) << 2) | ((y & 4u) << 3);
+
+    return ((y >> 3) * (side >> 3) + (x >> 3)) * 64u + z;
+}
+
+static void
+tex_load(C3D_Tex *tex, const indigo_media_slot *s, unsigned side)
+{
+    u32 *dst = tex->data;
+
+    memset(dst, 0, tex->size);
+    for (unsigned y = 0; y < s->height; y++) {
+        const uint8_t *src = s->pixels + (size_t) y * s->width * 4u;
+
+        for (unsigned x = 0; x < s->width; x++, src += 4) {
+            dst[tile_offset(y, side - 1u - x, side)] = ((u32) src[0] << 24) | ((u32) src[1] << 16) |
+                                                       ((u32) src[2] << 8) | (u32) src[3];
+        }
+    }
+    C3D_TexFlush(tex);
+}
+
 static ui_tex *
 tex_for(unsigned slot)
 {
@@ -162,8 +199,8 @@ tex_for(unsigned slot)
         if (s_texs[i].pixels) {
             continue;
         }
-        tex_w = pot_up(s->width);
-        tex_h = pot_up(s->height);
+        tex_w = pot_up(s->width > s->height ? s->width : s->height);
+        tex_h = tex_w;
         /* The byte bound, refused before the allocation rather than after it:
          * a pool that grew until citro3d said no would leave the textures it
          * could not replace deleted out from under the frame. */
@@ -173,21 +210,7 @@ tex_for(unsigned slot)
         if (!C3D_TexInit(&s_texs[i].tex, (u16) tex_w, (u16) tex_h, GPU_RGBA8)) {
             return NULL;
         }
-        {
-            unsigned char *padded = calloc(tex_w * tex_h, 4);
-
-            if (!padded) {
-                C3D_TexDelete(&s_texs[i].tex);
-                return NULL;
-            }
-            for (unsigned y = 0; y < s->height; y++) {
-                memcpy(padded + (size_t) y * tex_w * 4u, s->pixels + (size_t) y * s->width * 4u,
-                       (size_t) s->width * 4u);
-            }
-            C3D_TexLoadImage(&s_texs[i].tex, padded, GPU_TEXFACE_2D, 0);
-            C3D_TexFlush(&s_texs[i].tex);
-            free(padded);
-        }
+        tex_load(&s_texs[i].tex, s, tex_w);
         /* Bilinear: avatars are drawn well below their decoded size, and
          * nearest-neighbour at that ratio is a shimmering mess. */
         C3D_TexSetFilter(&s_texs[i].tex, GPU_LINEAR, GPU_LINEAR);
@@ -199,14 +222,6 @@ tex_for(unsigned slot)
         s_texs[i].tex_w = tex_w;
         s_texs[i].tex_h = tex_h;
         s_tex_bytes += tex_w * tex_h * 4u;
-        s_texs[i].sub = (Tex3DS_SubTexture) {
-            .width = (u16) s->width,
-            .height = (u16) s->height,
-            .left = 0.0f,
-            .top = 0.0f,
-            .right = (float) s->width / (float) tex_w,
-            .bottom = (float) s->height / (float) tex_h,
-        };
         return &s_texs[i];
     }
     return NULL;
@@ -233,9 +248,38 @@ draw_image(const indigo_cmd *cmd, const indigo_canvas_image_ref *img)
         C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
         return;
     }
-    image = (C2D_Image) { .tex = &t->tex, .subtex = &t->sub };
-    C2D_DrawImageAt(image, cmd->x, cmd->y, 0.0f, NULL, cmd->w / (float) t->width,
-                    cmd->h / (float) t->height);
+    if (cmd->w <= 0.0f || cmd->h <= 0.0f) {
+        return;
+    }
+    /* Cover, not stretch: the part of the picture that has the rectangle's shape,
+     * centred, is what is drawn. An avatar is a square however wide or tall the
+     * image behind it is; a post image's rectangle already has its own shape. */
+    {
+        float want = cmd->w / cmd->h;
+        float have = (float) t->width / (float) t->height;
+        float src_w = (float) t->width;
+        float src_h = (float) t->height;
+        Tex3DS_SubTexture sub;
+
+        if (have > want) {
+            src_w = src_h * want;
+        } else {
+            src_h = src_w / want;
+        }
+        sub.width = (u16) (src_w + 0.5f);
+        sub.height = (u16) (src_h + 0.5f);
+        if (sub.width == 0 || sub.height == 0) {
+            C2D_DrawRectSolid(cmd->x, cmd->y, 0.0f, cmd->w, cmd->h, to_c2d(cmd->color));
+            return;
+        }
+        sub.left = ((float) t->width - (float) sub.width) / 2.0f / (float) t->tex_w;
+        sub.right = sub.left + (float) sub.width / (float) t->tex_w;
+        sub.top = ((float) t->height - (float) sub.height) / 2.0f / (float) t->tex_h;
+        sub.bottom = sub.top + (float) sub.height / (float) t->tex_h;
+        image = (C2D_Image) { .tex = &t->tex, .subtex = &sub };
+        C2D_DrawImageAt(image, cmd->x, cmd->y, 0.0f, NULL, cmd->w / (float) sub.width,
+                        cmd->h / (float) sub.height);
+    }
 }
 
 static void
