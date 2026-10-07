@@ -1,4 +1,5 @@
 #include "atproto/session.h"
+#include "media/cdn_url.h"
 
 #include "atproto/atproto.h"
 #include "atproto/prefs.h"
@@ -581,7 +582,7 @@ fill_embed(const wf_post_display *d, const cJSON *raw_embed, indigo_post *out)
             }
             if (out->embed_kind == INDIGO_EMBED_NONE) {
                 out->embed_kind = INDIGO_EMBED_IMAGE;
-                indigo_copy_utf8(out->embed_thumb, sizeof out->embed_thumb, img->thumb);
+                indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, img->thumb, INDIGO_CDN_THUMBNAIL);
                 indigo_copy_utf8(out->embed_alt, sizeof out->embed_alt,
                                  img->alt ? img->alt : "");
                 if (img->width > 0 && img->height > 0) {
@@ -605,8 +606,8 @@ fill_embed(const wf_post_display *d, const cJSON *raw_embed, indigo_post *out)
         indigo_copy_utf8(out->embed_title, sizeof out->embed_title,
                          embed.external_title ? embed.external_title : "");
         indigo_copy_utf8(out->embed_uri, sizeof out->embed_uri, embed.external_uri);
-        indigo_copy_utf8(out->embed_thumb, sizeof out->embed_thumb,
-                         embed.external_thumb ? embed.external_thumb : "");
+        indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, embed.external_thumb,
+                             INDIGO_CDN_THUMBNAIL);
     }
 
     wf_post_embed_free(&embed);
@@ -627,7 +628,7 @@ fill_post(const wf_agent_post_view *pv, indigo_post *out)
     snprintf(out->cid, sizeof out->cid, "%s", pv->cid);
     indigo_copy_utf8(out->handle, sizeof out->handle, pv->author.handle);
     indigo_copy_utf8(out->display_name, sizeof out->display_name, pv->author.display_name);
-    indigo_copy_utf8(out->avatar, sizeof out->avatar, pv->author.avatar ? pv->author.avatar : "");
+    indigo_media_cdn_url(out->avatar, sizeof out->avatar, pv->author.avatar, INDIGO_CDN_AVATAR);
     out->like_count = count_of(pv->like_count);
     out->repost_count = count_of(pv->repost_count);
     out->reply_count = count_of(pv->reply_count);
@@ -916,7 +917,7 @@ do_profile(const job *j)
     memset(&s_profile, 0, sizeof s_profile);
     indigo_copy_utf8(s_profile.handle, sizeof s_profile.handle, p.handle);
     indigo_copy_utf8(s_profile.display_name, sizeof s_profile.display_name, p.display_name);
-    indigo_copy_utf8(s_profile.avatar, sizeof s_profile.avatar, p.avatar_cid ? p.avatar_cid : "");
+    indigo_media_cdn_url(s_profile.avatar, sizeof s_profile.avatar, p.avatar, INDIGO_CDN_AVATAR);
     indigo_copy_utf8(s_profile.bio, sizeof s_profile.bio, p.description);
     indigo_copy_utf8(s_profile.did, sizeof s_profile.did, p.did);
     indigo_copy_utf8(s_profile.follow_uri, sizeof s_profile.follow_uri, p.following);
@@ -951,7 +952,7 @@ fill_actor(const wf_agent_profile_view *a, indigo_actor *o)
     indigo_copy_utf8(o->display_name, sizeof o->display_name,
                      a->display_name ? a->display_name : "");
     indigo_copy_utf8(o->did, sizeof o->did, a->did ? a->did : "");
-    indigo_copy_utf8(o->avatar, sizeof o->avatar, a->avatar ? a->avatar : "");
+    indigo_media_cdn_url(o->avatar, sizeof o->avatar, a->avatar, INDIGO_CDN_AVATAR);
     return true;
 }
 
@@ -1666,8 +1667,7 @@ do_notifications(void)
         memset(o, 0, sizeof *o);
         o->kind = note_kind(n->reason);
         indigo_copy_utf8(o->handle, sizeof o->handle, n->author.handle);
-        indigo_copy_utf8(o->avatar, sizeof o->avatar,
-                         n->author.avatar ? n->author.avatar : "");
+        indigo_media_cdn_url(o->avatar, sizeof o->avatar, n->author.avatar, INDIGO_CDN_AVATAR);
         indigo_copy_utf8(o->name, sizeof o->name,
                          n->author.display_name && n->author.display_name[0]
                              ? n->author.display_name

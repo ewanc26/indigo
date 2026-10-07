@@ -37,7 +37,7 @@
 /* Longest CDN URL kept. Bluesky avatar and thumbnail URLs run around 60-90
  * characters; the extra room is not for them but so that a longer URL is
  * stored than rejected, and a rejected avatar is a visibly missing face. */
-#define INDIGO_MEDIA_URL_MAX 128
+#define INDIGO_MEDIA_URL_MAX 160
 
 /* Longest decoded side for an avatar. Avatars are drawn at 24-40px and this is
  * deliberately more than that, so the texture survives being scaled down on

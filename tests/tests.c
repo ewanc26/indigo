@@ -19,6 +19,7 @@
 #include "update/update.h"
 #ifdef INDIGO_HOST_WOLFRAM
 #include "update/update_sig.h"
+#include "media/cdn_url.h"
 #endif
 #include "update/updater.h"
 
@@ -4904,6 +4905,47 @@ test_update_signature_gate(void)
 }
 #endif
 
+#ifdef INDIGO_HOST_WOLFRAM
+static void
+test_cdn_url(void)
+{
+    /* The 130-byte avatar URL the AppView returns: longer than the 128 bytes the
+     * URL buffers used to be, which cut off the blob key and made the CDN answer 400. */
+    const char *avatar =
+        "https://cdn.bsky.app/img/avatar/plain/did:plc:z72i7hdynmk6r22z27h6tvur/"
+        "bafkreihwihm6kpd6zuwhhlro75p5qks5qtrcu55jp3gddbfjsieiv7wuka";
+    const char *thumb =
+        "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:z72i7hdynmk6r22z27h6tvur/"
+        "bafkreihwihm6kpd6zuwhhlro75p5qks5qtrcu55jp3gddbfjsieiv7wuka@jpeg";
+    char out[INDIGO_MEDIA_URL_MAX];
+    char tiny[16];
+
+    CHECK(strlen(avatar) > 128);
+    indigo_media_cdn_url(out, sizeof out, avatar, INDIGO_CDN_AVATAR);
+    CHECK(strcmp(out,
+                 "https://cdn.bsky.app/img/avatar_thumbnail/plain/did:plc:z72i7hdynmk6r22z27h6tvur/"
+                 "bafkreihwihm6kpd6zuwhhlro75p5qks5qtrcu55jp3gddbfjsieiv7wuka@jpeg") == 0);
+    CHECK(strlen(out) < sizeof out);
+    indigo_media_cdn_url(out, sizeof out, avatar, INDIGO_CDN_THUMBNAIL);
+    CHECK(strstr(out, "/img/feed_thumbnail/plain/") != NULL && strstr(out, "@jpeg") != NULL);
+    indigo_media_cdn_url(out, sizeof out, thumb, INDIGO_CDN_THUMBNAIL);
+    CHECK(strcmp(out, thumb) == 0);
+
+    /* Not a Bluesky CDN URL: unchanged. Empty and NULL: empty. A result that does not fit:
+     * empty, never a truncated URL. */
+    indigo_media_cdn_url(out, sizeof out, "https://example.com/a.png", INDIGO_CDN_AVATAR);
+    CHECK(strcmp(out, "https://example.com/a.png") == 0);
+    indigo_media_cdn_url(out, sizeof out, "", INDIGO_CDN_AVATAR);
+    CHECK(out[0] == '\0');
+    indigo_media_cdn_url(out, sizeof out, NULL, INDIGO_CDN_AVATAR);
+    CHECK(out[0] == '\0');
+    indigo_media_cdn_url(tiny, sizeof tiny, avatar, INDIGO_CDN_AVATAR);
+    CHECK(tiny[0] == '\0');
+    indigo_media_cdn_url(tiny, sizeof tiny, "https://example.com/this-is-too-long-to-fit", INDIGO_CDN_AVATAR);
+    CHECK(tiny[0] == '\0');
+}
+#endif
+
 static void
 test_updater_eligibility(void)
 {
@@ -5158,6 +5200,7 @@ main(void)
     test_update_asset_ok();
 #ifdef INDIGO_HOST_WOLFRAM
     test_update_signature_gate();
+    test_cdn_url();
 #endif
     test_updater_eligibility();
     test_updater_transitions();
