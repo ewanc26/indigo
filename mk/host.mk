@@ -16,11 +16,11 @@ HOST_INC := -Isrc -Itools
 # unchanged and that test is skipped, with a notice.
 WOLFRAM_ROOT ?= ../wolfram
 ifneq ($(wildcard $(WOLFRAM_ROOT)/include/wolfram/update.h),)
-HOST_WOLFRAM_SRCS := src/update/update_sig.c
+HOST_WOLFRAM_SRCS := src/update/update_sig.c src/media/cdn_url.c
 HOST_WOLFRAM_DEFS := -DINDIGO_HOST_WOLFRAM=1 -I$(WOLFRAM_ROOT)/include
 # Wolfram's own sources are compiled under the flags Wolfram builds them with,
 # not Indigo's warning set, into objects linked into the test binary.
-HOST_WOLFRAM_OBJS := $(HOST_OUT)/wf_ed25519.o $(HOST_OUT)/wf_signature.o $(HOST_OUT)/wf_update_core.o
+HOST_WOLFRAM_OBJS := $(HOST_OUT)/wf_ed25519.o $(HOST_OUT)/wf_signature.o $(HOST_OUT)/wf_update_core.o $(HOST_OUT)/wfs_cdn.o
 else
 HOST_WOLFRAM_SRCS :=
 HOST_WOLFRAM_DEFS :=
@@ -44,9 +44,13 @@ $(HOST_OUT)/wf_%.o: $(WOLFRAM_ROOT)/src/update/%.c
 	@mkdir -p $(HOST_OUT)
 	$(HOST_CC) -std=c11 -O1 -g $(HOST_SANITIZE) -I$(WOLFRAM_ROOT)/include -c -o $@ $<
 
+$(HOST_OUT)/wfs_%.o: $(WOLFRAM_ROOT)/src/%.c
+	@mkdir -p $(HOST_OUT)
+	$(HOST_CC) -std=c11 -O1 -g $(HOST_SANITIZE) -I$(WOLFRAM_ROOT)/include -c -o $@ $<
+
 $(HOST_OUT)/tests: tests/tests.c $(HOST_SRCS) $(HOST_WOLFRAM_SRCS) $(HOST_WOLFRAM_OBJS) $(wildcard src/*/*.h)
 	@mkdir -p $(HOST_OUT)
-	@test -n "$(HOST_WOLFRAM_SRCS)" || echo "tests ... no Wolfram checkout at $(WOLFRAM_ROOT): skipping the update-signature test"
+	@test -n "$(HOST_WOLFRAM_SRCS)" || echo "tests ... no Wolfram checkout at $(WOLFRAM_ROOT): skipping the update-signature and CDN-URL tests"
 	$(HOST_CC) $(HOST_WARN) $(HOST_SANITIZE) $(HOST_INC) $(HOST_WOLFRAM_DEFS) -o $@ tests/tests.c $(HOST_SRCS) $(HOST_WOLFRAM_SRCS) $(HOST_WOLFRAM_OBJS)
 
 warnings:
