@@ -400,9 +400,29 @@ send_compose(indigo_app *app)
 }
 
 /* Navigation and like/repost shared by the timeline and thread lists. */
+/* The rows a touch drag has moved a list by this frame: positive when the finger
+ * went up, so later rows come into view. Only a drag that began on one of the
+ * list's rows counts, so dragging from a button or the header never scrolls. */
+static int
+drag_rows(const indigo_app *app, const indigo_input *input)
+{
+    indigo_action a;
+
+    if (input->drag_rows == 0) {
+        return 0;
+    }
+    a = indigo_layout_hit_app(app, input->drag_start_x, input->drag_start_y);
+    if (a < INDIGO_ACTION_ROW0 || a > INDIGO_ACTION_ROW2) {
+        return 0;
+    }
+    return input->drag_rows;
+}
+
 static void
 update_list(indigo_app *app, const indigo_input *input, indigo_timeline *t)
 {
+    int drag = drag_rows(app, input);
+
     if (input->up) {
         indigo_timeline_move(t, -1, INDIGO_TIMELINE_ROWS);
     }
@@ -414,6 +434,9 @@ update_list(indigo_app *app, const indigo_input *input, indigo_timeline *t)
     }
     if (input->page_down) {
         indigo_timeline_move(t, INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (drag != 0) {
+        indigo_timeline_move(t, drag, INDIGO_TIMELINE_ROWS);
     }
     if (input->like) {
         toggle_like(app);
@@ -645,6 +668,7 @@ static void
 update_notifications(indigo_app *app, const indigo_input *input)
 {
     indigo_notifications *n = &app->notifications;
+    int drag = drag_rows(app, input);
 
     if (input->up) {
         indigo_notifications_move(n, -1, INDIGO_TIMELINE_ROWS);
@@ -657,6 +681,9 @@ update_notifications(indigo_app *app, const indigo_input *input)
     }
     if (input->page_down) {
         indigo_notifications_move(n, INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (drag != 0) {
+        indigo_notifications_move(n, drag, INDIGO_TIMELINE_ROWS);
     }
     if (input->back) {
         go_back(app);
@@ -801,11 +828,16 @@ menu_choose(indigo_app *app, unsigned item)
 static void
 update_menu(indigo_app *app, const indigo_input *input)
 {
+    int drag = drag_rows(app, input);
+
     if (input->up) {
         indigo_menu_move(&app->menu, -1, MENU_ITEMS);
     }
     if (input->down) {
         indigo_menu_move(&app->menu, 1, MENU_ITEMS);
+    }
+    if (drag != 0) {
+        indigo_menu_move(&app->menu, drag, MENU_ITEMS);
     }
     if (input->back) {
         go_back(app);
@@ -874,6 +906,7 @@ static void
 update_search(indigo_app *app, const indigo_input *input)
 {
     indigo_search *s = &app->search;
+    int drag = drag_rows(app, input);
 
     if (input->up) {
         indigo_search_move(s, -1, INDIGO_SEARCH_ROWS);
@@ -886,6 +919,9 @@ update_search(indigo_app *app, const indigo_input *input)
     }
     if (input->page_down) {
         indigo_search_move(s, INDIGO_SEARCH_ROWS, INDIGO_SEARCH_ROWS);
+    }
+    if (drag != 0) {
+        indigo_search_move(s, drag, INDIGO_SEARCH_ROWS);
     }
     if (input->back) {
         go_back(app);
