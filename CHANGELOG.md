@@ -10,12 +10,12 @@ as the release notes.
 
 ### Added
 
-- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. This needs Wolfram v0.39.0's `wf_attach_scan_images_tree`, which is not released yet, so this PR is blocked on that release. ([#74](https://github.com/ewanc26/indigo/pull/74))
+- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
 
 ### Changed
 
 - The session and settings files share one line reader and one value check instead of a copy each, and the settings store's test-only `clear` is gone (the tests remove the file directly). No change to what is saved or loaded. ([#75](https://github.com/ewanc26/indigo/pull/75))
-- Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. This needs Wolfram v0.38.0's `wf_agent_login_discovered`, which is not released yet, so this PR is blocked on that release. ([#72](https://github.com/ewanc26/indigo/pull/72))
+- Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. It uses Wolfram v0.38.0's `wf_agent_login_discovered`. ([#72](https://github.com/ewanc26/indigo/pull/72))
 
 ### Fixed
 
