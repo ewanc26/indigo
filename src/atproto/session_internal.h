@@ -168,6 +168,19 @@ typedef struct {
 
 extern indigo_session_state g_session;
 
+/* Publish WF_FAIL_NOT_READY and return when no agent is live. Every job
+ * function that needs the agent must be guarded against a race with logout
+ * or a failed resume; this macro is the canonical form. `_ev` is an already-
+ * initialised indigo_session_event whose kind is the caller's failure kind. */
+#define INDIGO_SESSION_AGENT_GUARD(_ev) \
+    do { \
+        if (!g_session.agent) { \
+            (_ev).failure = WF_FAIL_NOT_READY; \
+            indigo_session_publish_event(&(_ev)); \
+            return; \
+        } \
+    } while (0)
+
 /* session.c */
 void indigo_session_publish(indigo_session_event_kind kind, wf_failure_kind failure, const char *account);
 void indigo_session_publish_event(const indigo_session_event *ev);

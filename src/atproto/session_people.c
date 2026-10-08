@@ -11,11 +11,7 @@ indigo_session_do_profile(const indigo_job *j)
     wf_agent_profile p;
     wf_status st;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&p, 0, sizeof p);
     st = wf_agent_get_profile(g_session.agent, j->post_uri, &p);
     if (st != WF_OK) {
@@ -71,11 +67,7 @@ indigo_session_do_search(const indigo_job *j)
     wf_status st;
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     if (!j->query[0]) {
         /* The app refuses to submit an empty query, so reaching this is a bug
          * rather than something a person did. */
@@ -107,11 +99,7 @@ indigo_session_do_people(const indigo_job *j)
     wf_status st = WF_ERR_INVALID_ARG;
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
     if (j->people_kind == INDIGO_SEARCH_LIKED_BY) {
         wf_agent_like_list likes;
@@ -168,11 +156,7 @@ indigo_session_do_follow(const indigo_job *j)
     wf_status st = WF_ERR_INVALID_ARG;
 
     snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     switch (j->follow) {
     case INDIGO_FOLLOW:
         st = wf_agent_follow(g_session.agent, j->actor, &res);
@@ -218,11 +202,7 @@ indigo_session_do_graph(const indigo_job *j)
     wf_status st = WF_ERR_INVALID_ARG;
 
     snprintf(ev.actor, sizeof ev.actor, "%s", j->actor);
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     switch (j->graph) {
     case INDIGO_GRAPH_MUTE:
         st = wf_agent_mute_actor(g_session.agent, j->actor);

@@ -15,11 +15,7 @@ indigo_session_do_lists(const indigo_job *j)
     wf_status st;
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     /* The signed-in account's own lists: getLists needs an actor, and the
      * agent knows its own handle. */
     {
@@ -74,11 +70,7 @@ indigo_session_do_list_members(const indigo_job *j)
     wf_status st;
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
     st = wf_agent_get_list_typed(g_session.agent, j->list_uri, INDIGO_SEARCH_PAGE, cursor, &list);
     if (st != WF_OK) {
@@ -118,11 +110,7 @@ indigo_session_do_moderation_list(const indigo_job *j)
     wf_status st;
     const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
 
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
     if (blocks) {
         st = wf_agent_get_blocks_typed(g_session.agent, INDIGO_SEARCH_PAGE, cursor, &list);
@@ -156,11 +144,7 @@ indigo_session_do_feeds(const indigo_job *j)
     wf_status st;
 
     (void) j;
-    if (!g_session.agent) {
-        ev.failure = WF_FAIL_NOT_READY;
-        indigo_session_publish_event(&ev);
-        return;
-    }
+    INDIGO_SESSION_AGENT_GUARD(ev);
     st = wf_agent_get_saved_feeds(g_session.agent, feeds, INDIGO_SEARCH_MAX, &n);
     if (st != WF_OK) {
         indigo_session_publish_failure(&ev, "preferences", st);
