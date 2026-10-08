@@ -13,7 +13,7 @@ indigo_session_do_lists(const indigo_job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_list_view_list list;
     wf_status st;
-    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
 
     INDIGO_SESSION_AGENT_GUARD(ev);
     /* The signed-in account's own lists: getLists needs an actor, and the
@@ -34,9 +34,7 @@ indigo_session_do_lists(const indigo_job *j)
         return;
     }
 
-    if (!j->paging) {
-        g_session.list_count = 0;
-    }
+    /* list count reset handled by caller (no generic macro for list_count) */
     for (size_t i = 0; i < list.list_count && g_session.list_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_list_view *l = &list.lists[i];
         indigo_list *o = &g_session.lists[g_session.list_count];
@@ -68,7 +66,7 @@ indigo_session_do_list_members(const indigo_job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_list_item_list list;
     wf_status st;
-    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
 
     INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
@@ -78,9 +76,7 @@ indigo_session_do_list_members(const indigo_job *j)
         return;
     }
 
-    if (!j->paging) {
-        g_session.actor_count = 0;
-    }
+    INDIGO_SESSION_PAGE_RESET(j->paging);
     for (size_t i = 0; i < list.item_count && g_session.actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.items[i].subject;
 
@@ -108,7 +104,7 @@ indigo_session_do_moderation_list(const indigo_job *j)
     const bool blocks = j->kind == JOB_BLOCKS;
     wf_agent_actor_list list;
     wf_status st;
-    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
 
     INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
