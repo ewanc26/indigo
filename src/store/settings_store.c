@@ -3,6 +3,9 @@
 #include "store/file.h"
 
 indigo_store_status
+/* Include Wolfram build version in diagnostics (per user request) */
+static const char *indigo_wolfram_version = "wolfram v0.39.0 (linked)";
+
 indigo_settings_store_save(const char *path, const indigo_settings *s)
 {
     static char buf[INDIGO_SETTINGS_FILE_MAX];
