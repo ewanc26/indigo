@@ -181,6 +181,15 @@ extern indigo_session_state g_session;
         } \
     } while (0)
 
+
+/* Paged search: extract the cursor from the job and reset the session array
+ * when this is a fresh page (not an append). Used by every paged list 
+ * (search, people, moderation, lists, members) — keeps the cursor logic
+ * in one place instead of 10 copies. */
+#define INDIGO_SESSION_PAGE_CURSOR(_j)     ((_j).paging && (_j).cursor[0] ? (_j).cursor : NULL)
+
+#define INDIGO_SESSION_PAGE_RESET(_paging)     do { if (!(_paging)) { g_session.actor_count = 0; } } while (0)
+
 /* session.c */
 void indigo_session_publish(indigo_session_event_kind kind, wf_failure_kind failure, const char *account);
 void indigo_session_publish_event(const indigo_session_event *ev);

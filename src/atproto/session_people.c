@@ -45,9 +45,7 @@ indigo_session_do_profile(const indigo_job *j)
 void
 indigo_session_publish_actor_page(const indigo_job *j, wf_agent_actor_list *list, indigo_session_event *ev)
 {
-    if (!j->paging) {
-        g_session.actor_count = 0;
-    }
+    INDIGO_SESSION_PAGE_RESET(j->paging);
     for (size_t i = 0; i < list->actor_count && g_session.actor_count < INDIGO_SEARCH_MAX; i++) {
         if (indigo_session_fill_actor(&list->actors[i], &g_session.actors[g_session.actor_count])) {
             g_session.actor_count++;
@@ -65,7 +63,7 @@ indigo_session_do_search(const indigo_job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_actor_list list;
     wf_status st;
-    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
 
     INDIGO_SESSION_AGENT_GUARD(ev);
     if (!j->query[0]) {
@@ -97,7 +95,7 @@ indigo_session_do_people(const indigo_job *j)
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SEARCH_FAILED};
     wf_agent_actor_list list;
     wf_status st = WF_ERR_INVALID_ARG;
-    const char *cursor = j->paging && j->cursor[0] ? j->cursor : NULL;
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
 
     INDIGO_SESSION_AGENT_GUARD(ev);
     memset(&list, 0, sizeof list);
