@@ -17,6 +17,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_TIMELINE_FAILED,
     INDIGO_SESSION_EVENT_POST_ACTION_DONE,
     INDIGO_SESSION_EVENT_POST_ACTION_FAILED,
+    INDIGO_SESSION_EVENT_POST_DELETED,
+    INDIGO_SESSION_EVENT_POST_DELETE_FAILED,
     INDIGO_SESSION_EVENT_THREAD_PAGE,
     INDIGO_SESSION_EVENT_THREAD_FAILED,
     INDIGO_SESSION_EVENT_PROFILE_LOADED,
@@ -108,6 +110,9 @@ bool indigo_session_submit_timeline(const char *cursor);
 /* `undo_uri` is the like/repost record to delete for UNLIKE/UNREPOST. */
 bool indigo_session_submit_post_action(indigo_post_action action, const char *post_uri,
                                        const char *post_cid, const char *undo_uri);
+/* Delete only after the app's confirmation screen has been accepted. The
+ * worker verifies that the AT-URI belongs to the signed-in DID. */
+bool indigo_session_submit_delete_post(const char *post_uri);
 
 /* Replies, ancestors and the post itself; `uri` is an at:// post URI. */
 bool indigo_session_submit_thread(const char *uri);
