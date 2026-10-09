@@ -36,6 +36,11 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Compose, reply, quote | yes | implemented | emulator: modes 0, 1 and 2 published |
 | Reply gates | yes | implemented (`src/app/social.c`: everyone, following and mentioned, nobody) | host only |
 | Like and repost, with undo | yes | implemented | emulator, counts moved and were undone |
+| Delete your own post | yes | issue #22 | not started | Cobalt confirms before deleting from the thread view; Indigo has not implemented the delete request yet. |
+| Direct messages | issue cobalt#107 | issue #22 | not started | Follow Cobalt's design first; read-only inbox and replying are the proposed first steps. |
+| Post to a thread (several posts at once) | yes | issue #22 | not started | Cobalt supports up to eight text posts in one thread; Indigo should follow once the design settles. |
+| Video poster and external-media embeds | partial, cobalt#102 | issue #22 | not started | Link cards are implemented; poster-frame and other external-media parity remains open. |
+| Open a link on a phone via QR code | yes | issue #22 | not started | Cobalt uses Wolfram's QR encoder; Indigo has no equivalent flow yet. |
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
 | Followers, following | yes | implemented, paged | host |
