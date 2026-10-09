@@ -28,6 +28,17 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     const indigo_timeline *t = thread ? &app->thread : &app->timeline;
     const indigo_post *sel = indigo_timeline_selected(t);
 
+    if (thread && app->confirm_delete) {
+        indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Delete post?");
+        indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Cancel");
+        indigo_canvas_text(c, 14, 74, 0.7f, COL_TEXT, "This cannot be undone.");
+        indigo_layout_action_pill(c, INDIGO_ACTION_DELETE_CONFIRM, false, false,
+                                  COL_PILL_ACTIVE, "A Delete");
+        indigo_layout_action_pill(c, INDIGO_ACTION_DELETE_CANCEL, false, false,
+                                  COL_PILL_ACTIVE, "B Cancel");
+        return;
+    }
+
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, thread ? "Thread" : "Timeline");
     if (!indigo_layout_image_button(c, app)) {
         indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
@@ -62,7 +73,11 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
                 COL_PILL_ACTIVE, sel && sel->repost_uri[0] ? "X Reposted" : "X Repost");
     if (thread) {
         indigo_layout_action_pill(c, INDIGO_ACTION_REPLY, false, false, COL_PILL_ACTIVE, "A Reply");
-        indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, false, false, COL_PILL_ACTIVE, "Profile");
+        if (indigo_app_selected_post_is_own(app)) {
+            indigo_layout_action_pill(c, INDIGO_ACTION_DELETE, false, false, COL_PILL_ACTIVE, "Delete");
+        } else {
+            indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, false, false, COL_PILL_ACTIVE, "Profile");
+        }
     } else {
         indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE, "A Open");
         indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "Reload");
