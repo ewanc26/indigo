@@ -24,7 +24,8 @@ static const indigo_rect s_image_button = {104, 4, 92, 34};
 /* Compose: the draft box, the image attach control, the Reply/Quote switch and
  * Post, 8px apart so a thumb never lands on two. */
 static const indigo_rect s_edit_button = {14, 52, 292, 56};
-static const indigo_rect s_attach_button = {14, 116, 292, 32};
+static const indigo_rect s_attach_button = {14, 116, 142, 32};
+static const indigo_rect s_thread_button = {164, 116, 142, 32};
 static const indigo_rect s_toggle_button = {14, 156, 292, 32};
 static const indigo_rect s_send_button = {14, 196, 292, 38};
 
@@ -124,6 +125,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_pinned_button;
     case INDIGO_ACTION_ATTACH:
         return s_attach_button;
+    case INDIGO_ACTION_THREAD_EXTEND:
+        return s_thread_button;
     case INDIGO_ACTION_TOGGLE:
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
@@ -217,8 +220,8 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_MENU0, INDIGO_ACTION_MENU1, INDIGO_ACTION_MENU2, INDIGO_ACTION_MENU3,
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
     static const indigo_action compose_actions[] = {
-        INDIGO_ACTION_EDIT, INDIGO_ACTION_ATTACH, INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND,
-        INDIGO_ACTION_BACK};
+        INDIGO_ACTION_EDIT, INDIGO_ACTION_ATTACH, INDIGO_ACTION_THREAD_EXTEND,
+        INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
         INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK, INDIGO_ACTION_IMAGE};
@@ -282,6 +285,11 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
 indigo_action
 indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
 {
+    if (app && app->screen == INDIGO_SCREEN_COMPOSE && app->compose.has_target &&
+        inside((indigo_rect) {14, 116, 292, 32}, touch_x, touch_y,
+               app->settings.large_targets)) {
+        return INDIGO_ACTION_ATTACH;
+    }
     if (app && app->screen == INDIGO_SCREEN_THREAD && app->confirm_delete) {
         static const indigo_action confirm_actions[] = {
             INDIGO_ACTION_DELETE_CONFIRM, INDIGO_ACTION_DELETE_CANCEL, INDIGO_ACTION_BACK};
