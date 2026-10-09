@@ -283,6 +283,33 @@ draw_image(const indigo_cmd *cmd, const indigo_canvas_image_ref *img)
 }
 
 static void
+draw_qr(const indigo_canvas *canvas, const indigo_cmd *cmd)
+{
+    int px = (int) cmd->w;
+    int size = (int) cmd->qr_size;
+    int side = (size + 8) * px;
+    int x = (int) cmd->x;
+    int y = (int) cmd->y;
+    C2D_DrawRectSolid((float) x, (float) y, 0.0f, (float) side, (float) side,
+                      to_c2d(INDIGO_RGBA(255, 255, 255, 255)));
+    for (int row = 0; row < size; row++) {
+        int col = 0;
+        while (col < size) {
+            int start;
+            while (col < size && !canvas->qr[row * size + col]) col++;
+            start = col;
+            while (col < size && canvas->qr[row * size + col]) col++;
+            if (col > start) {
+                C2D_DrawRectSolid((float) (x + (start + 4) * px),
+                                  (float) (y + (row + 4) * px), 0.0f,
+                                  (float) ((col - start) * px), (float) px,
+                                  to_c2d(INDIGO_RGBA(0, 0, 0, 255)));
+            }
+        }
+    }
+}
+
+static void
 replay(const indigo_canvas *canvas)
 {
     C2D_TextBufClear(s_text_buf);
@@ -296,6 +323,10 @@ replay(const indigo_canvas *canvas)
         }
         if (cmd->kind == INDIGO_CMD_IMAGE) {
             draw_image(cmd, &canvas->images[cmd->image_index]);
+            continue;
+        }
+        if (cmd->kind == INDIGO_CMD_QR) {
+            draw_qr(canvas, cmd);
             continue;
         }
 
