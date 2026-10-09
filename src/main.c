@@ -456,7 +456,7 @@ handle_events(indigo_app *app)
             indigo_app_delete_done(app, ev.post_uri);
             break;
         case INDIGO_SESSION_EVENT_POST_DELETE_FAILED:
-            indigo_app_delete_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_delete_failed(app, "Could not delete that post. It may still be there.");
             break;
         case INDIGO_SESSION_EVENT_SEARCH_PAGE: {
             unsigned n;
