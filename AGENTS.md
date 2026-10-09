@@ -706,7 +706,7 @@ Do not skip the platform foundations by implementing a web-client-shaped UI firs
 
 Use the existing C style:
 
-- C unless C++ is justified;
+- C unless C++ is justified; C translation units stay in the existing `src/` module tree, while any new C++ translation units belong in top-level `cpp/` (the Makefile keeps `SOURCES` and `CPPSOURCES` separate);
 - small structs;
 - explicit ownership;
 - init/shutdown pairs;
