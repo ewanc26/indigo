@@ -537,14 +537,16 @@ indigo_app_set_image_alt(indigo_app *app, const char *text)
     indigo_copy_utf8(app->compose.image_alt, sizeof app->compose.image_alt, text);
 }
 
-void
-indigo_app_publish_done(indigo_app *app)
+static void
+publish_finish(indigo_app *app, const char *notice)
 {
     indigo_compose *c = &app->compose;
     indigo_compose_mode mode = c->mode;
 
     c->sending = false;
     c->text[0] = '\0';
+    memset(c->thread_texts, 0, sizeof c->thread_texts);
+    c->thread_count = 0;
     indigo_compose_clear_image(c);
     c->status[0] = '\0';
     c->has_target = false;
@@ -557,6 +559,23 @@ indigo_app_publish_done(indigo_app *app)
     } else {
         indigo_app_refresh_timeline(app);
     }
+    if (notice && notice[0]) {
+        indigo_copy_utf8(app->timeline.status, sizeof app->timeline.status, notice);
+        app->timeline.status_is_error = true;
+    }
+}
+
+void
+indigo_app_publish_done(indigo_app *app)
+{
+    publish_finish(app, NULL);
+}
+
+void
+indigo_app_publish_partial(indigo_app *app, const char *message)
+{
+    publish_finish(app, message && message[0] ? message
+                                             : "Only part of the thread was published.");
 }
 
 void
