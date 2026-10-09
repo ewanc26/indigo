@@ -28,6 +28,38 @@ post_list_touch(indigo_app *app, indigo_timeline *t, indigo_action a)
     }
 }
 
+/* Deletion is a two-step action. Opening the prompt has no side effects; only
+ * the explicit confirmation creates a request for the session worker. */
+static void
+begin_delete_confirmation(indigo_app *app)
+{
+    const indigo_post *p = indigo_timeline_selected(&app->thread);
+
+    if (!p || !indigo_app_selected_post_is_own(app) || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_copy_utf8(app->delete_uri, sizeof app->delete_uri, p->uri);
+    app->confirm_delete = app->delete_uri[0] != '\\0';
+}
+
+static void
+cancel_delete_confirmation(indigo_app *app)
+{
+    app->confirm_delete = false;
+    app->delete_uri[0] = '\\0';
+}
+
+static void
+confirm_delete_post(indigo_app *app)
+{
+    if (!app->confirm_delete || !app->delete_uri[0] || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri, app->delete_uri);
+    cancel_delete_confirmation(app);
+    app->request = INDIGO_REQUEST_DELETE_POST;
+}
+
 /* Navigation and like/repost shared by the timeline and thread lists. */
 /* The rows a touch drag has moved a list by this frame: positive when the finger
  * went up, so later rows come into view. Only a drag that began on one of the
@@ -160,6 +192,34 @@ indigo_app_update_thread(indigo_app *app, const indigo_input *input)
     indigo_timeline *t = &app->thread;
     const indigo_post *sel = indigo_timeline_selected(t);
 
+    if (app->confirm_delete) {
+        if (input->back || (input->touch_pressed &&
+            indigo_layout_hit_app(app, input->touch_x, input->touch_y) == INDIGO_ACTION_BACK)) {
+            cancel_delete_confirmation(app);
+        } else if (input->confirm) {
+            confirm_delete_post(app);
+        } else if (input->touch_pressed) {
+            switch (indigo_layout_hit_app(app, input->touch_x, input->touch_y)) {
+            case INDIGO_ACTION_DELETE_CONFIRM:
+                confirm_delete_post(app);
+                break;
+            case INDIGO_ACTION_DELETE_CANCEL:
+                cancel_delete_confirmation(app);
+                break;
+            default:
+                break;
+            }
+        }
+        return;
+    }
+
+    /* L/R page movement remains available on other posts. On your own post,
+     * page-down is the physical-button alternative to the on-screen Delete. */
+    if (input->page_down && indigo_app_selected_post_is_own(app)) {
+        begin_delete_confirmation(app);
+        return;
+    }
+
     update_list(app, input, t);
     if (input->back) {
         indigo_app_go_back(app);
@@ -195,6 +255,9 @@ indigo_app_update_thread(indigo_app *app, const indigo_input *input)
             if (sel) {
                 indigo_app_open_profile(app, sel->handle);
             }
+            break;
+        case INDIGO_ACTION_DELETE:
+            begin_delete_confirmation(app);
             break;
         case INDIGO_ACTION_BACK:
             indigo_app_go_back(app);
