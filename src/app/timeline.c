@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+static void keep_visible(indigo_timeline *t, unsigned rows);
+
 void
 indigo_copy_utf8(char *dst, size_t cap, const char *src)
 {
@@ -58,11 +60,12 @@ indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
 {
     unsigned out = 0;
     bool removed = false;
-    unsigned old_selected = t->selected;
+    unsigned old_selected;
 
     if (!t || !uri || !uri[0]) {
         return false;
     }
+    old_selected = t->selected;
     for (unsigned i = 0; i < t->count; i++) {
         if (strcmp(t->posts[i].uri, uri) == 0) {
             removed = true;
