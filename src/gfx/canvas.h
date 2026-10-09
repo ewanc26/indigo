@@ -24,6 +24,7 @@ typedef enum {
     INDIGO_CMD_RECT = 0,
     INDIGO_CMD_TEXT,
     INDIGO_CMD_IMAGE,
+    INDIGO_CMD_QR,
 } indigo_cmd_kind;
 
 typedef struct {
@@ -39,6 +40,7 @@ typedef struct {
     uint16_t span_count;
     /* Index into indigo_canvas.images; only meaningful for INDIGO_CMD_IMAGE. */
     uint16_t image_index;
+    uint8_t qr_size;
 } indigo_cmd;
 
 /* A byte range of a text command drawn in another colour (links, mentions). */
@@ -78,12 +80,18 @@ typedef struct {
     indigo_cmd cmds[INDIGO_CANVAS_MAX_CMDS];
     indigo_span spans[INDIGO_CANVAS_MAX_SPANS];
     indigo_canvas_image_ref images[INDIGO_CANVAS_MAX_IMAGES];
+    /* At most one QR matrix per display list; QR is rendered by each backend. */
+    uint8_t qr_size;
+    uint8_t qr[57 * 57];
     char text[INDIGO_CANVAS_TEXT_BYTES];
 } indigo_canvas;
 
 void indigo_canvas_init(indigo_canvas *canvas, int width, int height);
 bool indigo_canvas_rect(indigo_canvas *canvas, float x, float y, float w, float h,
                         uint32_t color);
+/* Add a QR code with a four-module quiet zone. x/y name the outer white square. */
+bool indigo_canvas_qr(indigo_canvas *canvas, float x, float y, unsigned module_px,
+                      unsigned size, const uint8_t *modules);
 bool indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
                         uint32_t color, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
