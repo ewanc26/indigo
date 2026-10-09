@@ -34,6 +34,7 @@ TARGET := indigo
 BUILD := build
 
 SOURCES := src src/app src/ui src/input src/atproto src/store src/util src/gfx src/media src/update
+CPPSOURCES := cpp
 DATA :=
 ROMFS := romfs
 INCLUDES := src
@@ -90,11 +91,11 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 
 export OUTPUT := $(CURDIR)/$(TARGET)
 export TOPDIR := $(CURDIR)
-export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))                 $(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir))                 $(foreach dir,$(DATA),$(CURDIR)/$(dir))
+export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))                 $(foreach dir,$(CPPSOURCES),$(CURDIR)/$(dir))                 $(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir))                 $(foreach dir,$(DATA),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 
 CFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
+CPPFILES := $(foreach dir,$(CPPSOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 GFXFILES := $(foreach dir,$(GRAPHICS),$(notdir $(wildcard $(dir)/*.t3s)))
 BINFILES := $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
