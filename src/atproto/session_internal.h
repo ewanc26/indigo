@@ -99,6 +99,8 @@ typedef struct {
     char image_path[INDIGO_IMAGE_PATH_MAX];
     char image_alt[INDIGO_IMAGE_ALT_MAX];
     char text[INDIGO_DRAFT_MAX];
+    unsigned thread_count;
+    char thread_texts[INDIGO_THREAD_POSTS_MAX][INDIGO_DRAFT_MAX];
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
     char query[INDIGO_SEARCH_QUERY_MAX];
