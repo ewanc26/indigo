@@ -210,10 +210,13 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_compose *d = &app->compose;
     indigo_rect e = indigo_layout_button_rect(INDIGO_ACTION_EDIT);
-    indigo_rect a = indigo_layout_button_rect(INDIGO_ACTION_ATTACH);
+    indigo_rect a = d->has_target ? (indigo_rect) {14, 116, 292, 32}
+                                  : indigo_layout_button_rect(INDIGO_ACTION_ATTACH);
+    indigo_rect th = indigo_layout_button_rect(INDIGO_ACTION_THREAD_EXTEND);
     indigo_rect t = indigo_layout_button_rect(INDIGO_ACTION_TOGGLE);
     indigo_rect s = indigo_layout_button_rect(INDIGO_ACTION_SEND);
     bool can_toggle = indigo_compose_can_toggle(d);
+    bool can_extend = indigo_compose_can_extend(d) && d->text[0] != '\0';
 
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "%s", indigo_layout_compose_title(d));
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
@@ -234,12 +237,26 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, e.x + 10, e.y + 30, 0.7f, COL_TEXT_DIM, "Tap to write");
     }
 
-    /* One picture can be attached; the same control takes it off again. */
-    indigo_canvas_rect(c, a.x, a.y, a.w, a.h, indigo_compose_has_image(d) ? COL_PILL_ACTIVE : COL_PILL);
-    if (indigo_compose_has_image(d)) {
-        indigo_canvas_text(c, a.x + 14, a.y + 7, 0.6f, COL_TEXT, "Remove the image - Select");
+    /* Replies and quotes keep a full-width image control. Top-level posts split
+     * this row with the text-only thread action. */
+    indigo_canvas_rect(c, a.x, a.y, a.w, a.h,
+                       d->thread_count > 0 ? COL_PILL :
+                       indigo_compose_has_image(d) ? COL_PILL_ACTIVE : COL_PILL);
+    if (d->thread_count > 0) {
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT_DIM, "Threads are text-only");
+    } else if (indigo_compose_has_image(d)) {
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Remove image - Select");
     } else {
-        indigo_canvas_text(c, a.x + 14, a.y + 7, 0.6f, COL_TEXT, "Add an image - Select");
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Add image - Select");
+    }
+    if (!d->has_target) {
+        const char *thread_label = d->thread_count + 1 >= INDIGO_THREAD_POSTS_MAX
+                                       ? "8 post limit"
+                                   : indigo_compose_has_image(d) ? "Text-only threads"
+                                                                 : "Add to thread";
+        indigo_canvas_rect(c, th.x, th.y, th.w, th.h, can_extend ? COL_PILL_ACTIVE : COL_PILL);
+        indigo_canvas_text(c, th.x + 8, th.y + 7, 0.55f,
+                           can_extend ? COL_TEXT : COL_TEXT_DIM, "%s", thread_label);
     }
 
     /* With no target there is no reply/quote to switch, so the pill carries the
