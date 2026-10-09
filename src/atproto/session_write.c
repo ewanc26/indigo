@@ -1,4 +1,4 @@
-/* Publishing a post, reply or quote. */
+/* Publishing a post, reply or quote, and deleting your own post. */
 
 #include "atproto/session_internal.h"
 
@@ -103,6 +103,73 @@ indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
     snprintf(j.post_cid, sizeof j.post_cid, "%s", target_cid ? target_cid : "");
     snprintf(j.root_uri, sizeof j.root_uri, "%s", root_uri ? root_uri : "");
     snprintf(j.root_cid, sizeof j.root_cid, "%s", root_cid ? root_cid : "");
+    return indigo_session_enqueue(&j);
+}
+
+/* A post URI names the repository DID before the collection. Do not send a
+ * delete for another account or for a different record collection. */
+static bool
+post_uri_is_own(const char *uri)
+{
+    const char *did = g_session.agent ? wf_agent_get_did(g_session.agent) : NULL;
+    const char *authority;
+    const char *slash;
+    static const char collection[] = "/app.bsky.feed.post/";
+    size_t did_len;
+
+    if (!uri || !did || !did[0] || strncmp(uri, "at://", 5) != 0) {
+        return false;
+    }
+    authority = uri + 5;
+    slash = strchr(authority, '/');
+    did_len = strlen(did);
+    return slash && (size_t) (slash - authority) == did_len &&
+           memcmp(authority, did, did_len) == 0 &&
+           strncmp(slash, collection, sizeof collection - 1) == 0 &&
+           slash[sizeof collection - 1] != '\0';
+}
+
+void
+indigo_session_do_delete_post(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_POST_DELETE_FAILED};
+    wf_status st;
+
+    snprintf(ev.post_uri, sizeof ev.post_uri, "%s", j->post_uri);
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!post_uri_is_own(j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_log_warn("refusing to delete a post outside the signed-in repository");
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    st = wf_agent_delete_post(g_session.agent, j->post_uri);
+    if (st != WF_OK) {
+        ev.failure = wf_failure_classify(st, 0, NULL);
+        indigo_log_warn("post delete failed: wolfram status %d (%s)", (int) st,
+                        wf_failure_tag(ev.failure));
+    } else {
+        ev.kind = INDIGO_SESSION_EVENT_POST_DELETED;
+        ev.failure = WF_FAIL_NONE;
+        indigo_log_info("post deleted");
+    }
+    indigo_session_publish_event(&ev);
+}
+
+bool
+indigo_session_submit_delete_post(const char *post_uri)
+{
+    indigo_job j = {.kind = JOB_DELETE_POST};
+
+    if (!post_uri || !post_uri[0]) {
+        return false;
+    }
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", post_uri);
     return indigo_session_enqueue(&j);
 }
 
