@@ -12,6 +12,11 @@ expect() { # expect pass|fail <label> <command...>
   if "$@" >/dev/null 2>&1; then got=pass; else got=fail; fi
   if [[ "$got" == "$want" ]]; then echo "ok   $label ($want)"; else echo "FAIL $label: wanted $want, got $got"; fails=1; fi
 }
+# GNU sed takes the in-place script as its next argument; BSD sed (macOS) takes
+# the backup suffix first, so a bare `sed -i 's/x/y/' f` edits nothing there.
+sed_i() {
+  if sed --version >/dev/null 2>&1; then sed -i "$@"; else sed -i '' "$@"; fi
+}
 
 # Drift: a doc naming a missing path, and a missing make target, must fail.
 expect pass drift-clean $c drift
@@ -38,7 +43,7 @@ cp "$tmp/indigo.3dsx" "$tmp/rel/indigo.3dsx"
 expect pass update-verify $u verify 1.2.3 "$tmp/rel"
 cp -r "$tmp/rel" "$tmp/tamper"; printf x >> "$tmp/tamper/indigo-1.2.3.3dsx"
 expect fail update-tampered-build $u verify 1.2.3 "$tmp/tamper"
-cp -r "$tmp/rel" "$tmp/host"; sed -i 's#https://github.com/#https://example.com/#g' "$tmp/host/update.json"
+cp -r "$tmp/rel" "$tmp/host"; sed_i 's#https://github.com/#https://example.com/#g' "$tmp/host/update.json"
 expect fail update-foreign-url $u verify 1.2.3 "$tmp/host"
 cp -r "$tmp/rel" "$tmp/stale"; printf y >> "$tmp/stale/indigo.3dsx"
 expect fail update-stale-plain-asset $u verify 1.2.3 "$tmp/stale"
@@ -56,11 +61,11 @@ cp "$tmp/icon.png" assets/icon.png
 # versioned asset to Universal-Updater, must both fail.
 expect pass udb-current python3 scripts/udb-listing.py --check
 cp meta/universal-db/indigo.json "$tmp/udb.json"
-sed -i 's/"app"/"game"/' meta/universal-db/indigo.json
+sed_i 's/"app"/"game"/' meta/universal-db/indigo.json
 expect fail udb-hand-edited python3 scripts/udb-listing.py --check
 cp "$tmp/udb.json" meta/universal-db/indigo.json
 cp scripts/udb-listing.py "$tmp/udb-listing.py"
-sed -i 's|^DOWNLOAD_FILTER = .*|DOWNLOAD_FILTER = r"\\.3dsx$"|' scripts/udb-listing.py
+sed_i 's|^DOWNLOAD_FILTER = .*|DOWNLOAD_FILTER = r"\\.3dsx$"|' scripts/udb-listing.py
 expect fail udb-filter-too-wide python3 scripts/udb-listing.py --check
 cp "$tmp/udb-listing.py" scripts/udb-listing.py
 
