@@ -132,6 +132,15 @@ indigo_session_submit_notifications(void)
 }
 
 bool
+indigo_session_submit_publish_thread(const char *const *texts, unsigned count, int reply_gate)
+{
+    (void) texts;
+    (void) count;
+    (void) reply_gate;
+    return false;
+}
+
+bool
 indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                               const char *target_uri, const char *target_cid,
                               const char *root_uri, const char *root_cid, int reply_gate,
