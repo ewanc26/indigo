@@ -261,6 +261,7 @@ void indigo_app_set_draft(indigo_app *app, const char *text);
 /* The alt text for the attached image came back from the keyboard. */
 void indigo_app_set_image_alt(indigo_app *app, const char *text);
 void indigo_app_publish_done(indigo_app *app);
+void indigo_app_publish_partial(indigo_app *app, const char *message);
 void indigo_app_publish_failed(indigo_app *app, const char *message);
 
 /* The full-size image viewer. Opens the image on the selected post of whichever
