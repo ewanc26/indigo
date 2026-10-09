@@ -6,6 +6,21 @@ adds its entry under `## [Unreleased]`, linking itself. A release PR renames
 that section to the version, and the Release workflow publishes that section
 as the release notes.
 
+## [Unreleased]
+
+### Added
+
+- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
+
+### Changed
+
+- The session and settings files share one line reader and one value check instead of a copy each, and the settings store's test-only `clear` is gone (the tests remove the file directly). No change to what is saved or loaded. ([#75](https://github.com/ewanc26/indigo/pull/75))
+- Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. It uses Wolfram v0.38.0's `wf_agent_login_discovered`. ([#72](https://github.com/ewanc26/indigo/pull/72))
+
+### Fixed
+
+- The timeline header's button hints are drawn smaller, so "START Exit" no longer runs into the post counter on the top screen (seen in Azahar). The layout's character-width estimate is too narrow for the system font; this is the minimum change, not a font change. ([#71](https://github.com/ewanc26/indigo/pull/71))
+
 ## [0.12.1] - 2026-10-08
 
 ### Fixed
@@ -21,22 +36,6 @@ as the release notes.
 ### Changed
 
 - Indigo version: 0.12.1 (linear from 0.12.0).
-
-
-## [Unreleased]
-
-### Added
-
-- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
-
-### Changed
-
-- The session and settings files share one line reader and one value check instead of a copy each, and the settings store's test-only `clear` is gone (the tests remove the file directly). No change to what is saved or loaded. ([#75](https://github.com/ewanc26/indigo/pull/75))
-- Signing in with an app password needs only the handle: Indigo finds the account's PDS from it, so the Service field is not needed. An empty Service starts from https://bsky.social. The Service field is still used for the browser (OAuth node) sign-in. It uses Wolfram v0.38.0's `wf_agent_login_discovered`. ([#72](https://github.com/ewanc26/indigo/pull/72))
-
-### Fixed
-
-- The timeline header's button hints are drawn smaller, so "START Exit" no longer runs into the post counter on the top screen (seen in Azahar). The layout's character-width estimate is too narrow for the system font; this is the minimum change, not a font change. ([#71](https://github.com/ewanc26/indigo/pull/71))
 
 ## [0.12.0] - 2026-10-07
 
