@@ -570,6 +570,59 @@ indigo_app_publish_failed(indigo_app *app, const char *message)
 }
 
 void
+indigo_app_delete_done(indigo_app *app, const char *post_uri)
+{
+    app->confirm_delete = false;
+    app->delete_uri[0] = '\0';
+    indigo_timeline_remove_post(&app->timeline, post_uri);
+    /* Search and author-post results use the same bounded post array. */
+    if (indigo_search_is_posts(&app->search)) {
+        unsigned out = 0;
+        for (unsigned i = 0; i < app->search.count; i++) {
+            if (strcmp(app->search.results.posts[i].uri, post_uri) == 0) {
+                continue;
+            }
+            if (out != i) {
+                app->search.results.posts[out] = app->search.results.posts[i];
+            }
+            out++;
+        }
+        app->search.count = out;
+        if (out == 0) {
+            app->search.selected = 0;
+            app->search.scroll = 0;
+        } else {
+            if (app->search.selected >= out) {
+                app->search.selected = out - 1;
+            }
+            if (app->search.scroll >= out) {
+                app->search.scroll = out - 1;
+            }
+        }
+    }
+    indigo_timeline_clear(&app->thread);
+    if (app->screen == INDIGO_SCREEN_THREAD) {
+        indigo_app_go_back(app);
+    }
+    indigo_copy_utf8(app->timeline.status, sizeof app->timeline.status, "Post deleted.");
+    app->timeline.status_is_error = false;
+    app->thread_uri[0] = '\0';
+}
+
+void
+indigo_app_delete_failed(indigo_app *app, const char *message)
+{
+    app->confirm_delete = false;
+    app->delete_uri[0] = '\0';
+    if (app->screen == INDIGO_SCREEN_THREAD) {
+        indigo_timeline_fail_fetch(&app->thread, message);
+    } else {
+        indigo_copy_utf8(app->timeline.status, sizeof app->timeline.status, message);
+        app->timeline.status_is_error = true;
+    }
+}
+
+void
 indigo_app_set_updater(indigo_app *app, const char *describe, bool can_swap)
 {
     indigo_updater_init(&app->updater, describe, can_swap);
