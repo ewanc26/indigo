@@ -56,7 +56,7 @@ indigo_timeline_append(indigo_timeline *t, const indigo_post *p)
 }
 
 bool
-indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
+indigo_timeline_remove_post(indigo_timeline *t, const char *uri, unsigned rows)
 {
     unsigned out = 0;
     unsigned removed_before_selected = 0;
@@ -92,7 +92,7 @@ indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
                            ? old_selected - removed_before_selected
                            : 0;
         t->selected = old_selected < t->count ? old_selected : t->count - 1;
-        keep_visible(t, INDIGO_TIMELINE_ROWS);
+        keep_visible(t, rows);
     }
     return true;
 }
