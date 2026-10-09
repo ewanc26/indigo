@@ -39,14 +39,14 @@ begin_delete_confirmation(indigo_app *app)
         return;
     }
     indigo_copy_utf8(app->delete_uri, sizeof app->delete_uri, p->uri);
-    app->confirm_delete = app->delete_uri[0] != '\\0';
+    app->confirm_delete = app->delete_uri[0] != '\0';
 }
 
 static void
 cancel_delete_confirmation(indigo_app *app)
 {
     app->confirm_delete = false;
-    app->delete_uri[0] = '\\0';
+    app->delete_uri[0] = '\0';
 }
 
 static void
