@@ -45,7 +45,7 @@ indigo_canvas_qr(indigo_canvas *canvas, float x, float y, unsigned module_px,
 {
     indigo_cmd *cmd;
 
-    if (!modules || size == 0 || size > 57 || module_px == 0 || canvas->qr_size != 0) {
+    if (!modules || size == 0 || size > WF_QR_MAX_SIZE || module_px == 0 || canvas->qr_size != 0) {
         return false;
     }
     cmd = indigo_canvas_push(canvas);
