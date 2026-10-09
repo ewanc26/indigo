@@ -62,6 +62,7 @@ typedef enum {
     JOB_LOGOUT,
     JOB_TIMELINE,
     JOB_POST_ACTION,
+    JOB_DELETE_POST,
     JOB_THREAD,
     JOB_PROFILE,
     JOB_NOTIFICATIONS,
@@ -237,6 +238,7 @@ void indigo_session_do_moderation_list(const indigo_job *j);
 
 /* session_write.c */
 void indigo_session_do_publish(const indigo_job *j);
+void indigo_session_do_delete_post(const indigo_job *j);
 
 #endif /* 3DS with Wolfram */
 
