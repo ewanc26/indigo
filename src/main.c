@@ -222,6 +222,11 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_PUBLISH:
         start_publish(app);
         break;
+    case INDIGO_REQUEST_DELETE_POST:
+        if (!indigo_session_submit_delete_post(app->request_post_uri)) {
+            indigo_app_delete_failed(app, "Could not start deleting that post.");
+        }
+        break;
     case INDIGO_REQUEST_EDIT_QUERY:
         handle_edit_query(app);
         break;
@@ -446,6 +451,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
             indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_POST_DELETED:
+            indigo_app_delete_done(app, ev.post_uri);
+            break;
+        case INDIGO_SESSION_EVENT_POST_DELETE_FAILED:
+            indigo_app_delete_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_SEARCH_PAGE: {
             unsigned n;
