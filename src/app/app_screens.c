@@ -52,6 +52,10 @@ indigo_app_begin_compose(indigo_app *app, indigo_compose_mode mode, const indigo
     app->screen = INDIGO_SCREEN_COMPOSE;
     c->mode = mode;
     c->has_target = target != NULL;
+    if (target) {
+        c->thread_count = 0;
+        memset(c->thread_texts, 0, sizeof c->thread_texts);
+    }
     c->status[0] = '\0';
     c->status_is_error = false;
     if (target) {
