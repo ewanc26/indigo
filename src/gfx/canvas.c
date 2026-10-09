@@ -40,6 +40,28 @@ indigo_canvas_rect(indigo_canvas *canvas, float x, float y, float w, float h,
 }
 
 bool
+indigo_canvas_qr(indigo_canvas *canvas, float x, float y, unsigned module_px,
+                 unsigned size, const uint8_t *modules)
+{
+    indigo_cmd *cmd;
+
+    if (!modules || size == 0 || size > 57 || module_px == 0 || canvas->qr_size != 0) {
+        return false;
+    }
+    cmd = indigo_canvas_push(canvas);
+    if (!cmd) {
+        return false;
+    }
+    memcpy(canvas->qr, modules, size * size);
+    canvas->qr_size = (uint8_t) size;
+    *cmd = (indigo_cmd) {
+        .kind = INDIGO_CMD_QR, .x = x, .y = y, .w = (float) module_px,
+        .qr_size = (uint8_t) size,
+    };
+    return true;
+}
+
+bool
 indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
                    uint32_t color, const char *format, ...)
 {
