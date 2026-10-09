@@ -4,6 +4,7 @@
 #include "app/timeline.h"
 
 #include <stdbool.h>
+#include <wolfram/qr.h>
 
 #define INDIGO_NOTIFICATION_MAX 30
 #define INDIGO_PROFILE_BIO_MAX 320
@@ -216,6 +217,10 @@ typedef struct {
     /* True while the menu is the attachment picker, so the top screen can say
      * where the pictures come from. */
     bool picking_image;
+    bool showing_link;
+    char link_url[INDIGO_FACET_TARGET_MAX];
+    int qr_size;
+    uint8_t qr[WF_QR_MAX_SIZE * WF_QR_MAX_SIZE];
     indigo_menu_item items[INDIGO_MENU_MAX];
     unsigned count;
     unsigned selected;
@@ -233,6 +238,9 @@ void indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *acco
  * camera's subfolders), with `camera` set for the camera rows. A Close item
  * follows, so an empty picker still has a way out. `title` becomes "Images". */
 void indigo_menu_build_images(indigo_menu *m, const char *images_dir, const char *camera_dir);
+/* Open the selected web link in the menu's QR view; false means the URL could
+ * not be encoded, but the URL is still retained for display. */
+bool indigo_menu_show_link(indigo_menu *m, const char *url);
 /* Move the selection, keeping it inside the `rows` visible rows. */
 bool indigo_menu_move(indigo_menu *m, int delta, unsigned rows);
 /* The item shown in visible row `row`, or NULL when that row is empty. */
