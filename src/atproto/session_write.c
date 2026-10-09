@@ -19,6 +19,61 @@ indigo_session_do_publish(const indigo_job *j)
         indigo_session_publish_event(&ev);
         return;
     }
+    if (j->thread_count > 0) {
+        const char *texts[INDIGO_THREAD_POSTS_MAX];
+        wf_agent_post_result first = {0};
+        wf_agent_post_result last = {0};
+        size_t posted = 0;
+
+        if (j->thread_count < 2 || j->thread_count > INDIGO_THREAD_POSTS_MAX) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        for (unsigned i = 0; i < j->thread_count; i++) {
+            if (!j->thread_texts[i][0]) {
+                ev.failure = WF_FAIL_OTHER;
+                indigo_session_publish_event(&ev);
+                return;
+            }
+            texts[i] = j->thread_texts[i];
+        }
+        st = wf_agent_post_thread(g_session.agent, texts, j->thread_count, &posted,
+                                  &first, &last);
+        if (first.uri && strlen(first.uri) < sizeof ev.record_uri) {
+            snprintf(ev.record_uri, sizeof ev.record_uri, "%s", first.uri);
+        }
+        if (posted > 0 && j->reply_gate > 0 && first.uri && first.uri[0]) {
+            wf_status gate_status = wf_agent_set_reply_gate(g_session.agent, first.uri,
+                                                             (wf_reply_gate) j->reply_gate);
+            if (gate_status != WF_OK) {
+                indigo_log_warn("thread reply gate failed (wolfram status %d) for %s",
+                                (int) gate_status, first.uri);
+            }
+        }
+        if (st == WF_OK) {
+            ev.kind = INDIGO_SESSION_EVENT_PUBLISHED;
+            indigo_log_info("published thread (%u posts)", j->thread_count);
+        } else if (posted > 0) {
+            ev.kind = INDIGO_SESSION_EVENT_PUBLISHED;
+            ev.partial = true;
+            ev.posted_count = (unsigned) posted;
+            ev.thread_count = j->thread_count;
+            snprintf(ev.message, sizeof ev.message,
+                     "Only %u of %u thread posts were published. Earlier posts are live; the rest were not sent.",
+                     ev.posted_count, ev.thread_count);
+            indigo_log_warn("thread partially published: %u of %u (wolfram status %d)",
+                            ev.posted_count, ev.thread_count, (int) st);
+        } else {
+            ev.failure = wf_failure_classify(st, 0, NULL);
+            indigo_log_warn("thread publish failed: wolfram status %d (%s)", (int) st,
+                            wf_failure_tag(ev.failure));
+        }
+        wf_agent_post_result_free(&first);
+        wf_agent_post_result_free(&last);
+        indigo_session_publish_event(&ev);
+        return;
+    }
     if (j->image_path[0]) {
         st = wf_agent_upload_image_file(g_session.agent, j->image_path, j->image_alt, &images);
         if (st != WF_OK) {
@@ -86,6 +141,24 @@ indigo_session_do_publish(const indigo_job *j)
     }
     wf_agent_post_result_free(&res);
     indigo_session_publish_event(&ev);
+}
+
+bool
+indigo_session_submit_publish_thread(const char *const *texts, unsigned count, int reply_gate)
+{
+    indigo_job j = {.kind = JOB_PUBLISH, .mode = INDIGO_COMPOSE_POST,
+                    .reply_gate = reply_gate, .thread_count = count};
+
+    if (!texts || count < 2 || count > INDIGO_THREAD_POSTS_MAX) {
+        return false;
+    }
+    for (unsigned i = 0; i < count; i++) {
+        if (!texts[i] || !texts[i][0] || strlen(texts[i]) >= sizeof j.thread_texts[i]) {
+            return false;
+        }
+        snprintf(j.thread_texts[i], sizeof j.thread_texts[i], "%s", texts[i]);
+    }
+    return indigo_session_enqueue(&j);
 }
 
 bool
