@@ -9,6 +9,7 @@ as the release notes.
 ## [Unreleased]
 
 ### Added
+- Show web links from the More menu as QR codes on the top screen, with the full address on the bottom screen, so a phone can open a link the 3DS cannot. Uses Wolfram's wf_qr_encode; URLs too long for the encoder remain readable without a code. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Delete your own post from the thread screen, with explicit confirmation and a worker-side check that the AT-URI belongs to the signed-in account. ([#22](https://github.com/ewanc26/indigo/issues/22))
 
 - The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
