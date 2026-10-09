@@ -95,6 +95,12 @@ indigo_layout_utf8_length(const char *s)
 const char *
 indigo_layout_compose_title(const indigo_compose *c)
 {
+    static char thread_title[32];
+
+    if (c->thread_count > 0) {
+        snprintf(thread_title, sizeof thread_title, "Thread: post %u", c->thread_count + 1);
+        return thread_title;
+    }
     return c->mode == INDIGO_COMPOSE_REPLY   ? "Reply"
            : c->mode == INDIGO_COMPOSE_QUOTE ? "Quote post"
                                              : "New post";
