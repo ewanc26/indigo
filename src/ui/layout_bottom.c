@@ -168,6 +168,24 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
 
+    if (app->menu.showing_link) {
+        indigo_line lines[5];
+        int truncated = 0;
+        unsigned n;
+        indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Link address");
+        indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+        n = indigo_wrap(app->menu.link_url, 48, lines, 4, &truncated);
+        for (unsigned i = 0; i < n; i++) {
+            indigo_canvas_text(c, 14, 52 + 23.0f * (float) i, 0.55f, COL_TEXT,
+                               "%.*s%s", (int) lines[i].len,
+                               app->menu.link_url + lines[i].start,
+                               truncated && i + 1 == n ? "..." : "");
+        }
+        if (app->menu.qr_size == 0) {
+            indigo_canvas_text(c, 14, 170, 0.55f, COL_TEXT_DIM, "QR unavailable for this URL.");
+        }
+        return;
+    }
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "%s", app->menu.title);
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Close");
 
