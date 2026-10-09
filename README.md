@@ -38,7 +38,7 @@ The mark is an indigo bunting on a twig, a small songbird named after the dye. I
 
 On top of **0.5.0**'s full-size image viewer (the `Image` button, or ZR on a New 3DS), muted words and hide-reposts in the home timeline and custom feeds, and search results that page in as you scroll, up to sixty entries.
 
-And **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
+And **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, text-only threads of up to eight posts, QR link sharing, likes and reposts, actor and post search, curated lists, saved custom feeds, and mute and block.
 
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
