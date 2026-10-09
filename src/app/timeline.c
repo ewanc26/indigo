@@ -53,6 +53,46 @@ indigo_timeline_append(indigo_timeline *t, const indigo_post *p)
     return true;
 }
 
+bool
+indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
+{
+    unsigned out = 0;
+    bool removed = false;
+    unsigned old_selected = t->selected;
+
+    if (!t || !uri || !uri[0]) {
+        return false;
+    }
+    for (unsigned i = 0; i < t->count; i++) {
+        if (strcmp(t->posts[i].uri, uri) == 0) {
+            removed = true;
+            continue;
+        }
+        if (out != i) {
+            t->posts[out] = t->posts[i];
+        }
+        out++;
+    }
+    if (!removed) {
+        return false;
+    }
+    t->count = out;
+    if (out == 0) {
+        t->selected = 0;
+        t->scroll = 0;
+    } else {
+        if (old_selected > t->count) {
+            old_selected = t->count;
+        }
+        t->selected = old_selected;
+        if (t->selected >= t->count) {
+            t->selected = t->count - 1;
+        }
+        keep_visible(t, INDIGO_TIMELINE_ROWS);
+    }
+    return true;
+}
+
 static void
 keep_visible(indigo_timeline *t, unsigned rows)
 {
