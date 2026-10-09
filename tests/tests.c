@@ -1006,6 +1006,46 @@ test_compose_flow(void)
 }
 
 static void
+test_compose_thread_touch_flow(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field field;
+    indigo_rect thread_button;
+    indigo_rect send_button;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.compose.mode = INDIGO_COMPOSE_POST;
+    snprintf(app.compose.text, sizeof app.compose.text, "first post");
+    thread_button = indigo_layout_button_rect(INDIGO_ACTION_THREAD_EXTEND);
+    CHECK(indigo_layout_hit_app(&app, (int) (thread_button.x + thread_button.w / 2),
+                                (int) (thread_button.y + thread_button.h / 2)) ==
+          INDIGO_ACTION_THREAD_EXTEND);
+    in.touch_pressed = true;
+    in.touch_x = (int) (thread_button.x + thread_button.w / 2);
+    in.touch_y = (int) (thread_button.y + thread_button.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(app.compose.thread_count == 1);
+    CHECK(strcmp(app.compose.thread_texts[0], "first post") == 0);
+    CHECK(app.compose.text[0] == '\0');
+
+    /* The same row is a full-width image control on replies and quotes. */
+    app.compose.has_target = true;
+    CHECK(indigo_layout_hit_app(&app, 290, 130) == INDIGO_ACTION_ATTACH);
+    app.compose.has_target = false;
+    snprintf(app.compose.text, sizeof app.compose.text, "second post");
+    send_button = indigo_layout_button_rect(INDIGO_ACTION_SEND);
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (send_button.x + send_button.w / 2);
+    in.touch_y = (int) (send_button.y + send_button.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &field) == INDIGO_REQUEST_PUBLISH);
+    CHECK(app.compose.sending);
+}
+
+static void
 test_partial_thread_publish_clears_draft(void)
 {
     indigo_app app;
@@ -5673,6 +5713,7 @@ main(void)
     test_attach_camera_folder();
     test_store_file();
     test_compose_flow();
+    test_compose_thread_touch_flow();
     test_partial_thread_publish_clears_draft();
     test_notifications();
     test_normalise_service();
