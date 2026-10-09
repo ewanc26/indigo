@@ -574,7 +574,7 @@ indigo_app_delete_done(indigo_app *app, const char *post_uri)
 {
     app->confirm_delete = false;
     app->delete_uri[0] = '\0';
-    indigo_timeline_remove_post(&app->timeline, post_uri);
+    indigo_timeline_remove_post(&app->timeline, post_uri, INDIGO_TIMELINE_ROWS);
     /* Search and author-post results use the same bounded post array. */
     if (indigo_search_is_posts(&app->search)) {
         unsigned out = 0;
