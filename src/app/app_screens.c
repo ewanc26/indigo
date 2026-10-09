@@ -76,6 +76,11 @@ attach_or_detach(indigo_app *app)
     if (c->sending) {
         return;
     }
+    if (c->thread_count > 0) {
+        indigo_copy_utf8(c->status, sizeof c->status, "Thread posts are text-only.");
+        c->status_is_error = true;
+        return;
+    }
     if (indigo_compose_has_image(c)) {
         indigo_compose_clear_image(c);
         return;
@@ -471,6 +476,14 @@ indigo_app_update_compose(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_TOGGLE:
             compose_second_button(app);
+            break;
+        case INDIGO_ACTION_THREAD_EXTEND:
+            if (!indigo_compose_extend(c)) {
+                indigo_copy_utf8(c->status, sizeof c->status,
+                                 c->text[0] ? "This draft cannot be extended into a thread."
+                                            : "Write this post before adding it to a thread.");
+                c->status_is_error = true;
+            }
             break;
         case INDIGO_ACTION_ATTACH:
             attach_or_detach(app);
