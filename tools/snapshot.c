@@ -153,6 +153,35 @@ draw_run(image *img, const char *text, unsigned from, unsigned to, float pen,
 }
 
 static void
+draw_qr(image *img, const indigo_canvas *canvas, const indigo_cmd *cmd)
+{
+    int px = (int) cmd->w;
+    int size = (int) cmd->qr_size;
+    int side = (size + 8) * px;
+    indigo_cmd rect = {.kind = INDIGO_CMD_RECT, .x = cmd->x, .y = cmd->y,
+                       .w = (float) side, .h = (float) side,
+                       .color = INDIGO_RGBA(255, 255, 255, 255)};
+    draw_rect(img, &rect);
+    for (int row = 0; row < size; row++) {
+        int col = 0;
+        while (col < size) {
+            int start;
+            while (col < size && !canvas->qr[row * size + col]) col++;
+            start = col;
+            while (col < size && canvas->qr[row * size + col]) col++;
+            if (col > start) {
+                rect.x = cmd->x + (float) (start + 4) * (float) px;
+                rect.y = cmd->y + (float) (row + 4) * (float) px;
+                rect.w = (float) (col - start) * (float) px;
+                rect.h = (float) px;
+                rect.color = INDIGO_RGBA(0, 0, 0, 255);
+                draw_rect(img, &rect);
+            }
+        }
+    }
+}
+
+static void
 draw_text(image *img, const indigo_canvas *canvas, const indigo_cmd *cmd)
 {
     indigo_segment segs[2 * INDIGO_CANVAS_MAX_SPANS + 1];
@@ -177,6 +206,8 @@ render(const indigo_canvas *canvas)
             draw_rect(&img, cmd);
         } else if (cmd->kind == INDIGO_CMD_IMAGE) {
             draw_image(&img, cmd);
+        } else if (cmd->kind == INDIGO_CMD_QR) {
+            draw_qr(&img, canvas, cmd);
         } else {
             draw_text(&img, canvas, cmd);
         }
