@@ -126,9 +126,11 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_open_profile(app, it->payload);
         break;
     case INDIGO_MENU_SHOW_TAG:
-    case INDIGO_MENU_SHOW_LINK:
         indigo_app_go_back(app);
         say(app, it->label);
+        break;
+    case INDIGO_MENU_SHOW_LINK:
+        (void) indigo_menu_show_link(&app->menu, it->payload);
         break;
     case INDIGO_MENU_LIKED_BY:
     case INDIGO_MENU_REPOSTED_BY: {
@@ -217,7 +219,17 @@ menu_choose(indigo_app *app, unsigned item)
 void
 indigo_app_update_menu(indigo_app *app, const indigo_input *input)
 {
-    int drag = indigo_app_drag_rows(app, input);
+    int drag;
+
+    if (app->menu.showing_link) {
+        if (input->back || (input->touch_pressed &&
+            indigo_layout_hit_app(app, input->touch_x, input->touch_y) == INDIGO_ACTION_BACK)) {
+            app->menu.showing_link = false;
+            app->menu.qr_size = 0;
+        }
+        return;
+    }
+    drag = indigo_app_drag_rows(app, input);
 
     if (input->up) {
         indigo_menu_move(&app->menu, -1, MENU_ITEMS);
