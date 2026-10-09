@@ -293,6 +293,14 @@ indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
         }
         return INDIGO_ACTION_NONE;
     }
+    /* Delete occupies the fourth pill in place of Profile on your own post.
+     * Route that shared rectangle to the control that is actually drawn. */
+    if (app && app->screen == INDIGO_SCREEN_THREAD &&
+        indigo_app_selected_post_is_own(app) &&
+        inside(indigo_layout_button_rect(INDIGO_ACTION_DELETE), touch_x, touch_y,
+               app->settings.large_targets)) {
+        return INDIGO_ACTION_DELETE;
+    }
     return indigo_layout_hit_settings(app ? app->screen : INDIGO_SCREEN_SIGNIN,
                                       app ? app->settings.large_targets : false,
                                       touch_x, touch_y);
