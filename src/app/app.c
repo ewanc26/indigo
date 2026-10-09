@@ -1,5 +1,7 @@
 #include "app/app_internal.h"
 
+#include <strings.h>
+
 void
 indigo_app_set_status(indigo_signin *s, const char *msg, bool is_error)
 {
@@ -146,6 +148,15 @@ indigo_timeline *
 indigo_app_active_list(indigo_app *app)
 {
     return app->screen == INDIGO_SCREEN_THREAD ? &app->thread : &app->timeline;
+}
+
+bool
+indigo_app_selected_post_is_own(const indigo_app *app)
+{
+    const indigo_timeline *t = app->screen == INDIGO_SCREEN_THREAD ? &app->thread : &app->timeline;
+    const indigo_post *p = indigo_timeline_selected(t);
+
+    return p && app->signin.account[0] && strcasecmp(p->handle, app->signin.account) == 0;
 }
 
 void
