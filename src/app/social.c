@@ -3,6 +3,7 @@
 #include <wolfram/attach.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -244,6 +245,34 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_UPDATE, "Check for updates", "");
     add_item(m, INDIGO_MENU_SIGN_OUT, "Sign out", "");
     add_item(m, INDIGO_MENU_CLOSE, "Close menu", "");
+}
+
+bool
+indigo_menu_show_link(indigo_menu *m, const char *url)
+{
+    uint8_t *modules = NULL;
+    int size = 0;
+    wf_status status;
+
+    if (!m || !url || !url[0]) {
+        return false;
+    }
+    m->showing_link = true;
+    m->qr_size = 0;
+    memset(m->qr, 0, sizeof m->qr);
+    indigo_copy_utf8(m->link_url, sizeof m->link_url, url);
+    if (strncmp(url, "https://", 8) != 0 && strncmp(url, "http://", 7) != 0) {
+        return false;
+    }
+    status = wf_qr_encode(m->link_url, WF_QR_ECC_M, &modules, &size);
+    if (status != WF_OK || !modules || size < 1 || size > WF_QR_MAX_SIZE) {
+        free(modules);
+        return false;
+    }
+    memcpy(m->qr, modules, (size_t) size * (size_t) size);
+    m->qr_size = size;
+    free(modules);
+    return true;
 }
 
 void
