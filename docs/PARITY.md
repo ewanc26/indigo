@@ -40,7 +40,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Direct messages | issue cobalt#107 | issue #22 | not started | Follow Cobalt's design first; read-only inbox and replying are the proposed first steps. |
 | Post to a thread (several posts at once) | yes | issue #22 | not started | Cobalt supports up to eight text posts in one thread; Indigo should follow once the design settles. |
 | Video poster and external-media embeds | partial, cobalt#102 | issue #22 | not started | Link cards are implemented; poster-frame and other external-media parity remains open. |
-| Open a link on a phone via QR code | yes | issue #22 | not started | Cobalt uses Wolfram's QR encoder; Indigo has no equivalent flow yet. |
+| Open a link on a phone via QR code | yes | implemented | not started | Indigo: the More menu's link page encodes with Wolfram's wf_qr_encode, displays the QR matrix on the top screen and the address below; host-tested, not scanned from a physical screen. |
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
 | Followers, following | yes | implemented, paged | host |
