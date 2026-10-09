@@ -81,6 +81,9 @@ worker(void *arg)
         case JOB_POST_ACTION:
             indigo_session_do_post_action(&j);
             break;
+        case JOB_DELETE_POST:
+            indigo_session_do_delete_post(&j);
+            break;
         case JOB_THREAD:
             indigo_session_do_thread(&j);
             break;
