@@ -462,6 +462,54 @@ test_delete_post_result_removes_stale_rows(void)
 }
 
 static void
+test_compose_thread_draft(void)
+{
+    indigo_compose c = {0};
+    const char *texts[INDIGO_THREAD_POSTS_MAX];
+
+    c.mode = INDIGO_COMPOSE_POST;
+    CHECK(indigo_compose_can_extend(&c));
+    CHECK(!indigo_compose_extend(&c));
+
+    snprintf(c.text, sizeof c.text, "first");
+    CHECK(indigo_compose_extend(&c));
+    CHECK(c.thread_count == 1);
+    CHECK(c.text[0] == '\0');
+    CHECK(!c.status_is_error);
+    snprintf(c.text, sizeof c.text, "second");
+    CHECK(indigo_compose_extend(&c));
+    snprintf(c.text, sizeof c.text, "third");
+    CHECK(indigo_compose_thread_texts(&c, texts) == 3);
+    CHECK(strcmp(texts[0], "first") == 0);
+    CHECK(strcmp(texts[1], "second") == 0);
+    CHECK(strcmp(texts[2], "third") == 0);
+
+    /* The current post counts toward the eight-post limit. */
+    while (indigo_compose_can_extend(&c)) {
+        snprintf(c.text, sizeof c.text, "more");
+        CHECK(indigo_compose_extend(&c));
+    }
+    CHECK(c.thread_count == INDIGO_THREAD_POSTS_MAX - 1);
+    snprintf(c.text, sizeof c.text, "last");
+    CHECK(!indigo_compose_can_extend(&c));
+    CHECK(indigo_compose_thread_texts(&c, texts) == INDIGO_THREAD_POSTS_MAX);
+    CHECK(strcmp(texts[INDIGO_THREAD_POSTS_MAX - 1], "last") == 0);
+
+    /* Images, replies and quotes cannot be extended into a thread. */
+    memset(&c, 0, sizeof c);
+    c.mode = INDIGO_COMPOSE_POST;
+    snprintf(c.image, sizeof c.image, "/photo.jpg");
+    CHECK(!indigo_compose_can_extend(&c));
+    c.image[0] = '\0';
+    c.has_target = true;
+    c.mode = INDIGO_COMPOSE_REPLY;
+    CHECK(!indigo_compose_can_extend(&c));
+    c.mode = INDIGO_COMPOSE_QUOTE;
+    CHECK(!indigo_compose_can_extend(&c));
+    CHECK(indigo_compose_thread_texts(NULL, texts) == 0);
+}
+
+static void
 test_compose_reply_gate(void)
 {
     indigo_compose c = {0};
@@ -955,6 +1003,31 @@ test_compose_flow(void)
     CHECK(app.compose.text[0] == '\0');
     CHECK(app.screen == INDIGO_SCREEN_THREAD);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD);
+}
+
+static void
+test_partial_thread_publish_clears_draft(void)
+{
+    indigo_app app;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.history[0] = INDIGO_SCREEN_HOME;
+    app.history_count = 1;
+    app.compose.mode = INDIGO_COMPOSE_POST;
+    app.compose.thread_count = 1;
+    snprintf(app.compose.thread_texts[0], sizeof app.compose.thread_texts[0], "already posted");
+    snprintf(app.compose.text, sizeof app.compose.text, "not posted");
+    app.compose.sending = true;
+
+    indigo_app_publish_partial(&app, "Only 1 of 2 thread posts were published.");
+    CHECK(app.compose.thread_count == 0);
+    CHECK(app.compose.thread_texts[0][0] == '\0');
+    CHECK(app.compose.text[0] == '\0');
+    CHECK(!app.compose.sending);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(strcmp(app.timeline.status, "Only 1 of 2 thread posts were published.") == 0);
+    CHECK(app.timeline.status_is_error);
 }
 
 static void
@@ -5592,6 +5665,7 @@ main(void)
     test_thread_navigation();
     test_delete_post_confirmation();
     test_delete_post_result_removes_stale_rows();
+    test_compose_thread_draft();
     test_compose_reply_gate();
     test_new_post_reply_gate();
     test_compose_gate_text_fits();
@@ -5599,6 +5673,7 @@ main(void)
     test_attach_camera_folder();
     test_store_file();
     test_compose_flow();
+    test_partial_thread_publish_clears_draft();
     test_notifications();
     test_normalise_service();
     test_normalise_handle();
