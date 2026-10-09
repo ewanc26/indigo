@@ -60,6 +60,7 @@ typedef enum {
     INDIGO_ACTION_DELETE_CANCEL,
     INDIGO_ACTION_UPDATE,
     INDIGO_ACTION_ATTACH,
+    INDIGO_ACTION_THREAD_EXTEND,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */
