@@ -56,6 +56,7 @@ typedef enum {
     INDIGO_REQUEST_UNLIKE,
     INDIGO_REQUEST_REPOST,
     INDIGO_REQUEST_UNREPOST,
+    INDIGO_REQUEST_DELETE_POST,
     INDIGO_REQUEST_THREAD,
     INDIGO_REQUEST_PROFILE,
     INDIGO_REQUEST_NOTIFICATIONS,
@@ -134,6 +135,9 @@ typedef struct {
     indigo_timeline thread;
     unsigned thread_focus;
     char thread_uri[INDIGO_POST_URI_MAX];
+    /* A destructive action is inert until the confirmation screen accepts it. */
+    bool confirm_delete;
+    char delete_uri[INDIGO_POST_URI_MAX];
     indigo_menu menu;
     indigo_profile profile;
     indigo_notifications notifications;
@@ -183,6 +187,11 @@ void indigo_app_set_like(indigo_app *app, const char *post_uri, const char *like
                          bool pending);
 void indigo_app_set_repost(indigo_app *app, const char *post_uri, const char *repost_uri,
                            bool pending);
+/* True when the selected post is authored by the signed-in handle. The
+ * protocol adapter performs the authoritative DID check before deletion. */
+bool indigo_app_selected_post_is_own(const indigo_app *app);
+void indigo_app_delete_done(indigo_app *app, const char *post_uri);
+void indigo_app_delete_failed(indigo_app *app, const char *message);
 
 /* Results fed back by the platform glue. */
 void indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
