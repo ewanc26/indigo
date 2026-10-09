@@ -384,6 +384,76 @@ test_thread_navigation(void)
 }
 
 static void
+test_delete_post_confirmation(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "my post");
+    indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_DELETE);
+    indigo_field field;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    strcpy(app.signin.account, "me.test");
+    strcpy(p.handle, "me.test");
+    indigo_timeline_append(&app.thread, &p);
+
+    /* Opening the prompt is inert, and Back cancels without a request. */
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + r.w / 2);
+    in.touch_y = (int) (r.y + r.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(app.confirm_delete);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(!app.confirm_delete);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+
+    /* A physical confirmation is the only point that creates the request. */
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + r.w / 2);
+    in.touch_y = (int) (r.y + r.h / 2);
+    indigo_app_update(&app, &in);
+    CHECK(app.confirm_delete);
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(!app.confirm_delete);
+    CHECK(indigo_app_take_request(&app, &field) == INDIGO_REQUEST_DELETE_POST);
+    CHECK(strcmp(app.request_post_uri, p.uri) == 0);
+
+    /* A post by a different handle never gets the delete action. */
+    strcpy(app.signin.account, "someone.else");
+    in = (indigo_input) {0};
+    in.page_down = true;
+    indigo_app_update(&app, &in);
+    CHECK(!app.confirm_delete);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+}
+
+static void
+test_delete_post_result_removes_stale_rows(void)
+{
+    indigo_app app;
+    indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "my post");
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    app.history[0] = INDIGO_SCREEN_HOME;
+    app.history_count = 1;
+    indigo_timeline_append(&app.timeline, &p);
+    indigo_timeline_append(&app.thread, &p);
+    indigo_app_delete_done(&app, p.uri);
+    CHECK(app.timeline.count == 0);
+    CHECK(app.thread.count == 0);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+    CHECK(strcmp(app.timeline.status, "Post deleted.") == 0);
+}
+
+static void
 test_compose_reply_gate(void)
 {
     indigo_compose c = {0};
@@ -5491,6 +5561,8 @@ main(void)
     test_buttons_spaced_and_on_screen();
     test_layout_invariants();
     test_thread_navigation();
+    test_delete_post_confirmation();
+    test_delete_post_result_removes_stale_rows();
     test_compose_reply_gate();
     test_new_post_reply_gate();
     test_compose_gate_text_fits();
