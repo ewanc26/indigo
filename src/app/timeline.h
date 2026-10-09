@@ -125,7 +125,7 @@ void indigo_timeline_clear(indigo_timeline *t);
 /* Copy a post in; false (and nothing stored) when the list is full. */
 bool indigo_timeline_append(indigo_timeline *t, const indigo_post *p);
 /* Remove every copy of a post from a bounded list and keep selection in range. */
-bool indigo_timeline_remove_post(indigo_timeline *t, const char *uri);
+bool indigo_timeline_remove_post(indigo_timeline *t, const char *uri, unsigned rows);
 
 /* Move the selection, clamped to the list; keeps it inside the window of
  * `rows` visible rows. Returns true if the selection changed. */
