@@ -59,6 +59,7 @@ bool
 indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
 {
     unsigned out = 0;
+    unsigned removed_before_selected = 0;
     bool removed = false;
     unsigned old_selected;
 
@@ -69,6 +70,9 @@ indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
     for (unsigned i = 0; i < t->count; i++) {
         if (strcmp(t->posts[i].uri, uri) == 0) {
             removed = true;
+            if (i < old_selected) {
+                removed_before_selected++;
+            }
             continue;
         }
         if (out != i) {
@@ -84,13 +88,10 @@ indigo_timeline_remove_post(indigo_timeline *t, const char *uri)
         t->selected = 0;
         t->scroll = 0;
     } else {
-        if (old_selected > t->count) {
-            old_selected = t->count;
-        }
-        t->selected = old_selected;
-        if (t->selected >= t->count) {
-            t->selected = t->count - 1;
-        }
+        old_selected = old_selected > removed_before_selected
+                           ? old_selected - removed_before_selected
+                           : 0;
+        t->selected = old_selected < t->count ? old_selected : t->count - 1;
         keep_visible(t, INDIGO_TIMELINE_ROWS);
     }
     return true;
