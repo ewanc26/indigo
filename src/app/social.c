@@ -114,6 +114,40 @@ indigo_compose_toggle(indigo_compose *c)
 }
 
 bool
+indigo_compose_can_extend(const indigo_compose *c)
+{
+    return c && !c->sending && c->mode == INDIGO_COMPOSE_POST && !c->has_target &&
+           !c->image[0] && c->thread_count + 1 < INDIGO_THREAD_POSTS_MAX;
+}
+
+bool
+indigo_compose_extend(indigo_compose *c)
+{
+    if (!indigo_compose_can_extend(c) || !c->text[0]) {
+        return false;
+    }
+    indigo_copy_utf8(c->thread_texts[c->thread_count], sizeof c->thread_texts[0], c->text);
+    c->thread_count++;
+    c->text[0] = '\0';
+    indigo_copy_utf8(c->status, sizeof c->status, "Post added to thread. Write the next post.");
+    c->status_is_error = false;
+    return true;
+}
+
+int
+indigo_compose_thread_texts(const indigo_compose *c, const char *out[INDIGO_THREAD_POSTS_MAX])
+{
+    if (!c || !out || !c->text[0]) {
+        return 0;
+    }
+    for (unsigned i = 0; i < c->thread_count; i++) {
+        out[i] = c->thread_texts[i];
+    }
+    out[c->thread_count] = c->text;
+    return (int) c->thread_count + 1;
+}
+
+bool
 indigo_compose_can_gate(const indigo_compose *c)
 {
     /* A top-level post is the only mode with no target, and it is the only one
