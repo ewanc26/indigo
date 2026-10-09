@@ -172,6 +172,25 @@ build_top_menu(const indigo_app *app, indigo_canvas *c)
 {
     char note[200];
 
+    if (app->menu.showing_link) {
+        if (app->menu.qr_size > 0) {
+            unsigned modules = (unsigned) app->menu.qr_size;
+            unsigned px = (unsigned) (INDIGO_TOP_HEIGHT - 48) / (modules + 8);
+            unsigned side;
+            if (px > 4) px = 4;
+            if (px == 0) px = 1;
+            side = (modules + 8) * px;
+            indigo_layout_top_title(c, "Open link on phone", "B  Back");
+            indigo_canvas_qr(c, (INDIGO_TOP_WIDTH - (float) side) / 2.0f,
+                             44.0f + (INDIGO_TOP_HEIGHT - 44.0f - (float) side) / 2.0f,
+                             px, modules, app->menu.qr);
+        } else {
+            indigo_layout_top_title(c, "Link", "B  Back");
+            indigo_canvas_text(c, 18, 72, 0.65f, COL_TEXT, "Could not encode this URL.");
+            indigo_canvas_text(c, 18, 100, 0.55f, COL_TEXT_DIM, "Use the address on the bottom screen.");
+        }
+        return;
+    }
     if (app->menu.picking_image) {
         indigo_layout_top_title(c, "Add image", "B  Close");
         indigo_canvas_text(c, 18, 56, 0.6f, COL_TEXT_SOFT, "Choose a picture from");
