@@ -9,6 +9,7 @@
 #define INDIGO_NOTIFICATION_MAX 30
 #define INDIGO_PROFILE_BIO_MAX 320
 #define INDIGO_DRAFT_MAX 1024
+#define INDIGO_THREAD_POSTS_MAX 8
 /* did:plc: identifiers are short, but a custom-domain did is whatever the
  * domain's PLC record allows, so leave room rather than truncating one.
  * Matches INDIGO_SEARCH_DID_MAX; the profile needs its own copy because
@@ -135,6 +136,10 @@ typedef struct {
     indigo_post target;
     char root_uri[INDIGO_POST_URI_MAX];
     char root_cid[INDIGO_POST_CID_MAX];
+    /* Previously written posts in this top-level text thread. The current
+     * text remains the post being edited, so count + 1 is the draft size. */
+    unsigned thread_count;
+    char thread_texts[INDIGO_THREAD_POSTS_MAX - 1][INDIGO_DRAFT_MAX];
     bool has_target;
     bool sending;
     char status[INDIGO_POST_NOTE_MAX];
@@ -254,6 +259,11 @@ void indigo_compose_clear_image(indigo_compose *c);
 const char *indigo_compose_image_name(const indigo_compose *c);
 /* Quote is only offered when there is a post to quote. */
 bool indigo_compose_can_toggle(const indigo_compose *c);
+/* Multi-post threads are top-level text-only drafts, up to eight posts total. */
+bool indigo_compose_can_extend(const indigo_compose *c);
+bool indigo_compose_extend(indigo_compose *c);
+int indigo_compose_thread_texts(const indigo_compose *c,
+                                const char *out[INDIGO_THREAD_POSTS_MAX]);
 void indigo_compose_toggle(indigo_compose *c);
 /* A reply gate is only offered on a new top-level post. This says which
  * control compose is showing; indigo_compose_gate_cycle is what declines to
