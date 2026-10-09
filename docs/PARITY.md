@@ -39,7 +39,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Delete your own post | yes | implemented | not started | Indigo: confirmation in the thread view; the worker verifies the post AT-URI belongs to the signed-in DID before calling Wolfram. Host tests and 3DS build pass; hardware behaviour is unverified. |
 | Direct messages | issue cobalt#107 | issue #22 | not started | Follow Cobalt's design first; read-only inbox and replying are the proposed first steps. |
 | Post to a thread (several posts at once) | yes | implemented | not started | Indigo: Add to thread builds up to eight top-level text posts, sent through Wolfram's wf_agent_post_thread. Text-only; partial publication is reported and the draft is cleared to prevent duplicates. Host-tested; hardware behaviour is unverified. |
-| Video poster and external-media embeds | partial, cobalt#102 | issue #22 | not started | Link cards are implemented; poster-frame and other external-media parity remains open. |
+| Video poster and external-media embeds | partial, cobalt#102 | partial, issue #22 | not started | Indigo already draws a video poster with a cannot-play label (host test: test_layout_draws_video_poster); video duration metadata and other external-media variants remain open. |
 | Open a link on a phone via QR code | yes | implemented | not started | Indigo: the More menu's link page encodes with Wolfram's wf_qr_encode, displays the QR matrix on the top screen and the address below; host-tested, not scanned from a physical screen. |
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
