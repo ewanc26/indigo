@@ -17,6 +17,11 @@ on:
         description: Version to release (x.y.z); its CHANGELOG section must be on main
         required: true
         type: string
+      repair:
+        description: Complete the release for an existing v<version> tag (rebuild and upload the assets); the tag is never moved
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,15 +42,27 @@ jobs:
         id: v
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REPAIR: ${{ inputs.repair }}
         run: |
+          repair=0
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             version="$INPUT_VERSION"
-            git rev-parse -q --verify "refs/tags/v$version" >/dev/null && { echo "v$version already exists; cut a new patch instead"; exit 1; }
+            if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+              [ "$INPUT_REPAIR" = "true" ] || { echo "v$version already exists; cut a new patch instead"; exit 1; }
+              repair=1
+            fi
           else
             version="${GITHUB_REF_NAME#v}"
           fi
+          # A repair rebuilds from the commit the tag already points at; a normal
+          # release uses the checked commit. The tag is never moved either way.
+          if [ "$repair" = 1 ]; then
+            sha="$(git rev-parse "refs/tags/v$version^{}")"
+          else
+            sha="$(git rev-parse HEAD)"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: Commit is releasable
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,18 +140,27 @@ jobs:
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: scripts/sign-manifest.sh sign release/update.json release/update.json.sig
-      - name: Create the GitHub release
+      - name: Create or complete the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ needs.check.outputs.version }}"
           scripts/release-notes.sh "$v" > "$RUNNER_TEMP/notes.md"
-          # --target makes GitHub create the annotated-or-lightweight tag v$v at
-          # the checked commit; on a tag push the tag already exists and
-          # --target is ignored.
-          gh release create "v$v" --target "${{ needs.check.outputs.sha }}" --title "Indigo $v" \
-            --notes-file "$RUNNER_TEMP/notes.md" \
-            release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json release/update.json.sig
+          # The release is created before its assets are uploaded, so an
+          # interrupted publish leaves an empty release behind. Complete that
+          # one instead of failing, from the same tag. Otherwise --target makes
+          # GitHub create the tag v$v at the checked commit; on a tag push the
+          # tag already exists and --target is ignored.
+          if gh release view "v$v" >/dev/null 2>&1; then
+            gh release upload "v$v" \
+              release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json release/update.json.sig \
+              --clobber
+            gh release edit "v$v" --title "Indigo $v" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "v$v" --target "${{ needs.check.outputs.sha }}" --title "Indigo $v" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              release/indigo.3dsx "release/indigo-$v.3dsx" "release/indigo-$v.3dsx.sha256" release/update.json release/update.json.sig
+          fi
       - name: Verify what GitHub serves
         env:
           GH_TOKEN: ${{ github.token }}
