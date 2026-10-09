@@ -282,6 +282,17 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
 indigo_action
 indigo_layout_hit_app(const indigo_app *app, int touch_x, int touch_y)
 {
+    if (app && app->screen == INDIGO_SCREEN_THREAD && app->confirm_delete) {
+        static const indigo_action confirm_actions[] = {
+            INDIGO_ACTION_DELETE_CONFIRM, INDIGO_ACTION_DELETE_CANCEL, INDIGO_ACTION_BACK};
+        for (unsigned i = 0; i < sizeof confirm_actions / sizeof confirm_actions[0]; i++) {
+            if (inside(indigo_layout_button_rect(confirm_actions[i]), touch_x, touch_y,
+                       app->settings.large_targets)) {
+                return confirm_actions[i];
+            }
+        }
+        return INDIGO_ACTION_NONE;
+    }
     return indigo_layout_hit_settings(app ? app->screen : INDIGO_SCREEN_SIGNIN,
                                       app ? app->settings.large_targets : false,
                                       touch_x, touch_y);
