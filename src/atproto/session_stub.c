@@ -105,6 +105,13 @@ indigo_session_submit_post_action(indigo_post_action action, const char *post_ur
 }
 
 bool
+indigo_session_submit_delete_post(const char *post_uri)
+{
+    (void) post_uri;
+    return false;
+}
+
+bool
 indigo_session_submit_thread(const char *uri)
 {
     (void) uri;
