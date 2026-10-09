@@ -6,6 +6,23 @@ adds its entry under `## [Unreleased]`, linking itself. A release PR renames
 that section to the version, and the Release workflow publishes that section
 as the release notes.
 
+## [0.12.1] - 2026-10-08
+
+### Fixed
+
+- Cache encode fix (BUG 2); session guard macro (BUG 1); PARITY.md updated.
+- Indentation/formatting cleaned.
+- Build info included in diagnostics.
+
+### Added
+
+- Cache codec/store (feat/oncard-cache, v1 format).
+
+### Changed
+
+- Indigo version: 0.12.1 (linear from 0.12.0).
+
+
 ## [Unreleased]
 
 ### Added

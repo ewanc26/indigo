@@ -541,6 +541,9 @@ main(int argc, char **argv)
     if (settings.diagnostics && !indigo_log_open_file(LOG_PATH)) {
         indigo_log_warn("no log file; continuing with stderr only");
     }
+    if (settings.diagnostics) {
+        indigo_log_info("wolfram v0.39.0 (linked)");
+    }
 
     /* Before RomFS is mounted: recovery may have to move the .3dsx that RomFS
      * reads from. argv[0] is the path the Homebrew Menu launched. */
