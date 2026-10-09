@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <wolfram/qr.h>
 
 #define INDIGO_CANVAS_MAX_CMDS 128
 #define INDIGO_CANVAS_TEXT_BYTES 4096
@@ -82,7 +83,7 @@ typedef struct {
     indigo_canvas_image_ref images[INDIGO_CANVAS_MAX_IMAGES];
     /* At most one QR matrix per display list; QR is rendered by each backend. */
     uint8_t qr_size;
-    uint8_t qr[57 * 57];
+    uint8_t qr[WF_QR_MAX_SIZE * WF_QR_MAX_SIZE];
     char text[INDIGO_CANVAS_TEXT_BYTES];
 } indigo_canvas;
 
