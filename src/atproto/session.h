@@ -78,6 +78,12 @@ typedef struct {
     unsigned focus;
     /* PUBLISHED: what was published (the app refreshes the right view). */
     indigo_compose_mode compose_mode;
+    /* A thread can partially publish: those posts are live, so the draft must
+     * be cleared instead of being offered for a duplicate retry. */
+    bool partial;
+    unsigned posted_count;
+    unsigned thread_count;
+    char message[INDIGO_POST_NOTE_MAX];
     /* FOLLOW_*: what was attempted. `actor` is the subject did; a follow puts
      * its new record URI in `record_uri`, while an unfollow deletes the URI
      * the app already had and so reports none. */
@@ -131,6 +137,9 @@ bool indigo_session_submit_notifications(void);
  *
  * `image_path` (NULL or "" for none) is uploaded and attached with `image_alt`;
  * if the upload fails nothing is posted. */
+/* Publish 2 to INDIGO_THREAD_POSTS_MAX top-level text posts as one thread. */
+bool indigo_session_submit_publish_thread(const char *const *texts, unsigned count,
+                                          int reply_gate);
 bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *target_uri, const char *target_cid,
                                    const char *root_uri, const char *root_cid,
