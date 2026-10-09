@@ -51,6 +51,14 @@ test_canvas_basics(void)
     CHECK(indigo_canvas_text(&c, 5, 6, 1.0f, 0, "hi %d", 42));
     CHECK(c.count == 2);
     CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[1]), "hi 42") == 0);
+    {
+        uint8_t modules[21 * 21] = {0};
+        modules[0] = 1;
+        CHECK(indigo_canvas_qr(&c, 10, 20, 2, 21, modules));
+        CHECK(c.cmds[2].kind == INDIGO_CMD_QR);
+        CHECK(c.cmds[2].qr_size == 21);
+        CHECK(c.qr_size == 21 && c.qr[0] == 1);
+    }
     CHECK(!c.overflow);
 }
 
@@ -1983,6 +1991,14 @@ test_facet_menu(void)
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
     CHECK(menu.items[17].kind == INDIGO_MENU_CLOSE);
+    CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
+    CHECK(menu.showing_link);
+    CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
+    CHECK(menu.qr_size >= 21 && menu.qr_size <= WF_QR_MAX_SIZE);
+    CHECK(menu.qr[0] == 1 && menu.qr[6] == 1 && menu.qr[6 * menu.qr_size] == 1);
+    CHECK(menu.qr[menu.qr_size + 1] == 0);
+    CHECK(!indigo_menu_show_link(&menu, "not a URL"));
+    CHECK(menu.qr_size == 0);
 
     /* Choosing a mention opens that person's profile by did. */
     indigo_app_init(&app);
@@ -2002,6 +2018,19 @@ test_facet_menu(void)
     CHECK(app.screen == INDIGO_SCREEN_MENU);
     CHECK(app.menu.count == 18);
 
+    /* A link opens a QR view within the menu; Back returns to the menu rows. */
+    app.menu.selected = 2;
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU && app.menu.showing_link);
+    CHECK(app.menu.qr_size > 0);
+    in = (indigo_input) {0};
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU && !app.menu.showing_link);
+
+    app.menu.selected = 0;
     in = (indigo_input) {0};
     in.confirm = true;
     indigo_app_update(&app, &in);
