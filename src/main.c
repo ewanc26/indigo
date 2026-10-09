@@ -110,9 +110,21 @@ start_publish(indigo_app *app)
 {
     const indigo_compose *c = &app->compose;
 
-    if (!indigo_session_submit_publish(c->mode, c->text, c->has_target ? c->target.uri : "",
-                                       c->has_target ? c->target.cid : "", c->root_uri,
-                                       c->root_cid, (int) c->reply_gate, c->image, c->image_alt)) {
+    bool started;
+
+    if (c->thread_count > 0) {
+        const char *texts[INDIGO_THREAD_POSTS_MAX];
+        int count = indigo_compose_thread_texts(c, texts);
+        started = count >= 2 && indigo_session_submit_publish_thread(texts, (unsigned) count,
+                                                                      (int) c->reply_gate);
+    } else {
+        started = indigo_session_submit_publish(c->mode, c->text,
+                                                c->has_target ? c->target.uri : "",
+                                                c->has_target ? c->target.cid : "", c->root_uri,
+                                                c->root_cid, (int) c->reply_gate, c->image,
+                                                c->image_alt);
+    }
+    if (!started) {
         indigo_app_publish_failed(app, "Could not start posting.");
     }
 }
@@ -447,7 +459,11 @@ handle_events(indigo_app *app)
             indigo_app_notifications_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
-            indigo_app_publish_done(app);
+            if (ev.partial) {
+                indigo_app_publish_partial(app, ev.message);
+            } else {
+                indigo_app_publish_done(app);
+            }
             break;
         case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
             indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
