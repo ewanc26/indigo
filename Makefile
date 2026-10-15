@@ -56,9 +56,16 @@ PORTLIBS := $(DEVKITPRO)/portlibs/3ds
 WOLFRAM_ROOT ?= $(TOPDIR)/../wolfram
 WOLFRAM_BUILD ?= $(WOLFRAM_ROOT)/build-3ds
 WOLFRAM_LIB := $(WOLFRAM_BUILD)/libwolfram.a
+# The version of the checkout being linked, read from its CMake project() line; the
+# pin in wolfram.ref is checked against it with a warning, never a failure.
+WOLFRAM_VERSION := $(shell sed -n 's/^  VERSION \([0-9.]*\).*/\1/p' $(WOLFRAM_ROOT)/CMakeLists.txt 2>/dev/null | head -1)
+WOLFRAM_PIN := $(shell tr -d '[:space:]' < $(TOPDIR)/wolfram.ref 2>/dev/null | sed 's/^v//')
+ifneq ($(WOLFRAM_VERSION),$(WOLFRAM_PIN))
+  $(warning Wolfram checkout is $(or $(WOLFRAM_VERSION),unknown), but wolfram.ref pins $(or $(WOLFRAM_PIN),nothing))
+endif
 
 ifneq ($(wildcard $(WOLFRAM_LIB)),)
-  WOLFRAM_CFLAGS := -DWOLFRAM_3DS -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
+  WOLFRAM_CFLAGS := -DWOLFRAM_3DS -DINDIGO_WOLFRAM_VERSION=\"$(or $(WOLFRAM_VERSION),unknown)\" -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
   WOLFRAM_LIBS := $(WOLFRAM_LIB)                   $(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a                   $(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a
 else
   $(warning Wolfram is not built for 3DS at $(WOLFRAM_LIB); building without protocol support. Run: make wolfram-3ds)
