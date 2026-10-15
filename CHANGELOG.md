@@ -14,7 +14,7 @@ as the release notes.
 
 ### Changed
 
-- The self-updater accepts the stable `indigo.3dsx` name in an update manifest, at that release's own URL, as well as `indigo-<version>.3dsx`. A later release can stop publishing the versioned copy without stranding installed builds.
+- The self-updater accepts the stable `indigo.3dsx` name in an update manifest, at that release's own URL, as well as `indigo-<version>.3dsx`. A later release can stop publishing the versioned copy without stranding installed builds. ([#96](https://github.com/ewanc26/indigo/pull/96))
 
 ## [0.13.0] - 2026-10-15
 
