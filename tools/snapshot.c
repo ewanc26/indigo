@@ -652,6 +652,13 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Bob");
         indigo_copy_utf8(page.items[1].handle, sizeof page.items[1].handle, "@bob.example");
         indigo_app_requests_loaded(app, &page);
+    } else if (s->screen == INDIGO_SCREEN_QUEUE) {
+        /* Queued posts: empty, then two saved posts with the first selected. */
+        if (s->timeline == 1) {
+            indigo_queue_add(&app->queue, "Saved for later: a draft I wrote on the bus.", 1700000000);
+            indigo_queue_add(&app->queue, "Second post, waiting until I am online.", 1700000600);
+        }
+        app->queue_selected = 0;
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -913,6 +920,8 @@ main(int argc, char **argv)
         {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
         {"requests", INDIGO_SCREEN_CHAT_REQUESTS, false, 0, 0, 0, 0, false},
         {"chat-thread", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
+        {"queue-empty", INDIGO_SCREEN_QUEUE, false, 0, 0, 0, 0, false},
+        {"queue", INDIGO_SCREEN_QUEUE, false, 0, 0, 1, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},

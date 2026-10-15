@@ -652,6 +652,9 @@ publish_finish(indigo_app *app, const char *notice)
 void
 indigo_app_publish_done(indigo_app *app)
 {
+    if (indigo_app_queue_publish_done(app)) {
+        return;
+    }
     publish_finish(app, NULL);
 }
 
@@ -666,6 +669,10 @@ void
 indigo_app_publish_failed(indigo_app *app, const char *message)
 {
     indigo_compose *c = &app->compose;
+
+    if (indigo_app_queue_publish_failed(app, message)) {
+        return;
+    }
 
     c->sending = false;
     indigo_copy_utf8(c->status, sizeof c->status, message);

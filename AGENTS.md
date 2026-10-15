@@ -425,6 +425,16 @@ the first refresh replaces it. It is saved only from a fresh home-timeline page,
 never a feed, and it is removed on sign-out with the decoded images. A damaged
 file is set aside as `.bad`; a missing or damaged cache never blocks boot.
 
+### Offline queue
+
+`store/queue_codec` and `store/queue_store` keep the posts saved with Save
+later in `queue.dat`: a versioned, one-post-per-line file with an `end` marker,
+text escaped as for the timeline cache. `app/post_queue` holds up to eight plain
+posts in memory; `main.c` loads it at startup and `app/app_queue.c` rewrites it
+on every change. A damaged file is set aside as `.bad` and the queue starts
+empty. Only a plain top-level post can be saved: the compose screen offers Save
+later only without a reply, quote, thread or image.
+
 ## 15. Offline behaviour
 
 Separate:
@@ -436,7 +446,7 @@ Separate:
 
 Do not create an implicit queue that publishes old actions without the user understanding that they were queued.
 
-If an offline compose queue is added, provide explicit inspection, retry and discard controls.
+The offline compose queue (section 14) provides the three controls this section asks for, and nothing else sends from it. Inspection is the Queued posts screen in the More menu. Retry is Send on a row, which publishes through the same request as a new post; a send that fails returns the text to the queue with the reason shown. Discard is Refresh on a row, and takes a second press on the same post. Send only runs when the compose buffer is empty, so a draft is never overwritten. If the app closes mid-send, the post is still in `queue.dat` and reappears: the person sees a second copy and decides.
 
 ## 16. Accessibility
 

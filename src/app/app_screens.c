@@ -193,6 +193,10 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_blocks(app);
         break;
+    case INDIGO_MENU_QUEUE:
+        indigo_app_go_back(app);
+        indigo_app_open_queue(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         indigo_app_go_back(app);
         indigo_app_open_profile(app, app->signin.account);
@@ -498,6 +502,9 @@ indigo_app_update_compose(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_SEND:
             send_compose(app);
+            break;
+        case INDIGO_ACTION_SAVE_LATER:
+            indigo_app_save_compose_later(app);
             break;
         case INDIGO_ACTION_BACK:
             indigo_app_go_back(app);
