@@ -191,3 +191,76 @@ indigo_chat_inbox_append_from_wolfram(indigo_chat_inbox *out,
     }
     return added;
 }
+
+void
+indigo_chat_thread_clear(indigo_chat_thread *thread)
+{
+    if (!thread) {
+        return;
+    }
+    thread->count = 0;
+    thread->selected = 0;
+    thread->scroll = 0;
+    thread->loading = false;
+    thread->status[0] = '\0';
+    thread->status_is_error = false;
+}
+
+bool
+indigo_chat_thread_select(indigo_chat_thread *thread, unsigned index, unsigned rows)
+{
+    if (!thread || index >= thread->count || index == thread->selected) {
+        return false;
+    }
+    thread->selected = index;
+    keep_visible(&thread->scroll, index, rows);
+    return true;
+}
+
+bool
+indigo_chat_thread_move(indigo_chat_thread *thread, int delta, unsigned rows)
+{
+    long target;
+
+    if (!thread || thread->count == 0) {
+        return false;
+    }
+    target = (long) thread->selected + delta;
+    if (target < 0) {
+        target = 0;
+    }
+    if (target >= (long) thread->count) {
+        target = (long) thread->count - 1;
+    }
+    return indigo_chat_thread_select(thread, (unsigned) target, rows);
+}
+
+int
+indigo_chat_thread_fill_from_wolfram(indigo_chat_thread *out,
+                                     const struct wf_chat_message_list *list,
+                                     const char *viewer_did)
+{
+    const wf_chat_message_list *typed = (const wf_chat_message_list *) list;
+    size_t n;
+
+    if (!out || !typed) {
+        return 0;
+    }
+
+    n = typed->message_count < INDIGO_CHAT_MESSAGES_MAX ? typed->message_count
+                                                       : INDIGO_CHAT_MESSAGES_MAX;
+    indigo_chat_thread_clear(out);
+    for (size_t k = 0; k < n; k++) {
+        const wf_chat_message *src = &typed->messages[k];
+        indigo_chat_message *dst = &out->items[n - 1 - k];
+
+        memset(dst, 0, sizeof *dst);
+        indigo_copy_utf8(dst->text, sizeof dst->text, src->text ? src->text : "");
+        dst->mine = viewer_did && src->sender && strcmp(src->sender, viewer_did) == 0;
+    }
+    out->count = (unsigned) n;
+    if (out->count > 0) {
+        indigo_chat_thread_select(out, out->count - 1, INDIGO_CHAT_THREAD_ROWS);
+    }
+    return (int) n;
+}

@@ -188,6 +188,29 @@ build_bottom_messages(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_chat_thread(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_thread *t = &app->chat_thread;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Messages");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_CHAT_THREAD_ROWS; row++) {
+        unsigned idx = t->scroll + row;
+        const indigo_chat_message *it;
+        char title[96];
+
+        if (idx >= t->count) {
+            break;
+        }
+        it = &t->items[idx];
+        snprintf(title, sizeof title, "%s", it->mine ? "You" : (t->title[0] ? t->title : "Them"));
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == t->selected,
+                               title, it->text, "");
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
 build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
@@ -546,6 +569,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_MESSAGES:
         build_bottom_messages(app, c);
+        break;
+    case INDIGO_SCREEN_CHAT_THREAD:
+        build_bottom_chat_thread(app, c);
         break;
     case INDIGO_SCREEN_MENU:
         build_bottom_menu(app, c);
