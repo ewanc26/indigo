@@ -37,6 +37,8 @@ void indigo_app_toggle_repost(indigo_app *app);
 int indigo_app_drag_rows(const indigo_app *app, const indigo_input *input);
 void indigo_app_update_home(indigo_app *app, const indigo_input *input);
 void indigo_app_update_notifications(indigo_app *app, const indigo_input *input);
+void indigo_app_open_messages(indigo_app *app);
+void indigo_app_update_messages(indigo_app *app, const indigo_input *input);
 void indigo_app_update_profile(indigo_app *app, const indigo_input *input);
 void indigo_app_update_thread(indigo_app *app, const indigo_input *input);
 

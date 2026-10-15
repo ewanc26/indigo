@@ -132,6 +132,20 @@ indigo_session_submit_notifications(void)
 }
 
 bool
+indigo_session_submit_chat_inbox(void)
+{
+    return false;
+}
+
+const indigo_chat_inbox *
+indigo_session_chat_inbox(void)
+{
+    static const indigo_chat_inbox empty;
+
+    return &empty;
+}
+
+bool
 indigo_session_submit_publish_thread(const char *const *texts, unsigned count, int reply_gate)
 {
     (void) texts;

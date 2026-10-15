@@ -164,6 +164,30 @@ build_bottom_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_messages(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_inbox *m = &app->messages;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Messages");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = m->scroll + row;
+        const indigo_chat_convo *it;
+        char title[96];
+
+        if (idx >= m->count) {
+            break;
+        }
+        it = &m->items[idx];
+        snprintf(title, sizeof title, "%s%.30s", it->unread > 0 ? "* " : "",
+                 it->name[0] ? it->name : it->handle);
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == m->selected,
+                               title, it->preview[0] ? it->preview : "No messages yet", "");
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, m->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
 build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
@@ -519,6 +543,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_NOTIFICATIONS:
         build_bottom_notifications(app, c);
+        break;
+    case INDIGO_SCREEN_MESSAGES:
+        build_bottom_messages(app, c);
         break;
     case INDIGO_SCREEN_MENU:
         build_bottom_menu(app, c);

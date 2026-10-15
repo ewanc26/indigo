@@ -37,13 +37,29 @@ typedef struct {
 
 typedef struct {
    indigo_chat_convo items[INDIGO_CHAT_CONVOS_MAX];
-   int count;
+   unsigned count;
    int unread;                            /* unread messages across the inbox */
    char cursor[INDIGO_CURSOR_MAX];
    bool has_more;
+   /* The list state the screen keeps, as indigo_notifications does. */
+   unsigned selected;
+   unsigned scroll;
+   bool loading;
+   char status[INDIGO_POST_NOTE_MAX];
+   bool status_is_error;
 } indigo_chat_inbox;
 
 void indigo_chat_inbox_reset(indigo_chat_inbox *inbox);
+
+/* Reset the rows and the list state too: selection, loading and status. */
+void indigo_chat_inbox_clear(indigo_chat_inbox *inbox);
+
+/* Select `index` and keep it inside a window of `rows`. False when it is out of
+ * range or already selected. */
+bool indigo_chat_inbox_select(indigo_chat_inbox *inbox, unsigned index, unsigned rows);
+
+/* Move the selection by `delta`, clamped to the list. */
+bool indigo_chat_inbox_move(indigo_chat_inbox *inbox, int delta, unsigned rows);
 
 /* Index of the first member whose DID is not the viewer's, or -1 when there is
  * none. A convo with only the viewer has nobody to show. */
