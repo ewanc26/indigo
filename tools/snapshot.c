@@ -636,6 +636,7 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(page.items[2].name, sizeof page.items[2].name, "devlog.example");
         indigo_copy_utf8(page.items[2].handle, sizeof page.items[2].handle, "@devlog.example");
         indigo_app_messages_loaded(app, &page);
+        app->requests_count = 2;
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
