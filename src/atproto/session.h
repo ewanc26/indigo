@@ -39,6 +39,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_GRAPH_FAILED,
     INDIGO_SESSION_EVENT_CHAT_PAGE,
     INDIGO_SESSION_EVENT_CHAT_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE,
+    INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -133,6 +135,11 @@ bool indigo_session_submit_notifications(void);
  * once CHAT_PAGE arrives. */
 bool indigo_session_submit_chat_inbox(void);
 const indigo_chat_inbox *indigo_session_chat_inbox(void);
+
+/* Fetch the newest messages of one conversation. Read them with
+ * indigo_session_chat_thread once CHAT_THREAD_PAGE arrives. */
+bool indigo_session_submit_chat_messages(const char *convo_id);
+const indigo_chat_thread *indigo_session_chat_thread(void);
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
  * and `target_*` the post being answered; for a quote, `target_*` is quoted.
  *
