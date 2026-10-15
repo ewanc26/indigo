@@ -82,19 +82,6 @@ indigo_session_do_convos(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
-static void
-fill_message(const wf_chat_message *wm, indigo_message *o)
-{
-    memset(o, 0, sizeof *o);
-    indigo_copy_utf8(o->id, sizeof o->id, wm->id);
-    indigo_copy_utf8(o->text, sizeof o->text, wm->text);
-    indigo_copy_utf8(o->sender, sizeof o->sender, wm->sender);
-    indigo_copy_utf8(o->sent_at, sizeof o->sent_at, wm->sent_at);
-
-    const char *my_did = g_session.agent ? wf_agent_get_did(g_session.agent) : NULL;
-    o->is_mine = (my_did && wm->sender && strcmp(wm->sender, my_did) == 0);
-}
-
 void
 indigo_session_do_send_message(const indigo_job *j)
 {

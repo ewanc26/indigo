@@ -338,6 +338,7 @@ handle_requests(indigo_app *app)
             indigo_app_message_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_SAVE_SETTINGS:
         indigo_settings_store_save(SETTINGS_PATH, &app->settings);
         break;
     case INDIGO_REQUEST_UPDATE_CHECK:
