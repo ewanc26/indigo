@@ -229,7 +229,7 @@ void indigo_session_do_author_feed(const indigo_job *j);
 void indigo_session_do_feed(const indigo_job *j);
 void indigo_session_do_notifications(void);
 void indigo_session_do_chat_inbox(void);
-void indigo_session_do_chat_requests(void);
+void indigo_session_do_chat_requests(const char *cursor);
 void indigo_session_do_chat_messages(const indigo_job *j);
 void indigo_session_do_chat_send(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);

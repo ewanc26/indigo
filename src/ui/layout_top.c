@@ -92,6 +92,33 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_requests(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_inbox *r = &app->requests;
+    const indigo_chat_convo *sel = r->selected < r->count ? &r->items[r->selected] : NULL;
+
+    indigo_layout_top_title(c, "Requests", "B  Back   SEL  Reload");
+    if (!sel) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           r->loading ? "Loading requests..." : "No requests.");
+        if (r->status[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f, r->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%s", r->status);
+        }
+        return;
+    }
+    indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u%s", r->selected + 1, r->count,
+                       r->has_more ? "+" : "");
+    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
+    if (sel->handle[0]) {
+        indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
+    }
+    if (sel->preview[0]) {
+        indigo_layout_top_paragraph(c, 18, 100, 0.6f, COL_TEXT, 4, sel->preview);
+    }
+}
+
+static void
 build_top_messages(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_chat_inbox *m = &app->messages;
@@ -477,6 +504,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_MESSAGES:
         build_top_messages(app, c);
+        return;
+    case INDIGO_SCREEN_CHAT_REQUESTS:
+        build_top_requests(app, c);
         return;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_top_chat_thread(app, c);

@@ -84,6 +84,8 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_OPEN:
     case INDIGO_ACTION_REPLY:
         return s_pill[2];
+    case INDIGO_ACTION_REQUESTS:
+        return s_pill[2];
     case INDIGO_ACTION_REFRESH:
     case INDIGO_ACTION_AUTHOR:
     case INDIGO_ACTION_DELETE:
@@ -221,6 +223,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action messages_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
+        INDIGO_ACTION_REQUESTS, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+    static const indigo_action requests_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action menu_actions[] = {
         INDIGO_ACTION_MENU0, INDIGO_ACTION_MENU1, INDIGO_ACTION_MENU2, INDIGO_ACTION_MENU3,
@@ -263,6 +268,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_MESSAGES:
         USE(messages_actions);
+        break;
+    case INDIGO_SCREEN_CHAT_REQUESTS:
+        USE(requests_actions);
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         USE(chat_thread_actions);
