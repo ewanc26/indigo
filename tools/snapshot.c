@@ -603,6 +603,23 @@ fill_social(indigo_app *app, const scenario *s)
         n[2].kind = INDIGO_NOTE_FOLLOW;
         indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
         indigo_app_notifications_loaded(app, n, 3);
+    } else if (s->screen == INDIGO_SCREEN_MESSAGES) {
+        indigo_chat_inbox page;
+
+        memset(&page, 0, sizeof page);
+        page.count = 3;
+        page.unread = 2;
+        indigo_copy_utf8(page.items[0].name, sizeof page.items[0].name, "Rhiannon");
+        indigo_copy_utf8(page.items[0].handle, sizeof page.items[0].handle, "@rhi.example.social");
+        indigo_copy_utf8(page.items[0].preview, sizeof page.items[0].preview,
+                         "Are we still on for Saturday? I have the good scissors.");
+        page.items[0].unread = 2;
+        page.items[1].group = true;
+        indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Group");
+        indigo_copy_utf8(page.items[1].preview, sizeof page.items[1].preview, "Release notes are up");
+        indigo_copy_utf8(page.items[2].name, sizeof page.items[2].name, "devlog.example");
+        indigo_copy_utf8(page.items[2].handle, sizeof page.items[2].handle, "@devlog.example");
+        indigo_app_messages_loaded(app, &page);
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -861,6 +878,7 @@ main(int argc, char **argv)
         {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0, false},
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
+        {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},

@@ -820,6 +820,8 @@ The current repository has:
 
 The renderer and input system are now real 3DS homebrew foundations rather than console-text-only placeholders.
 
+A read-only direct message inbox (`INDIGO_SCREEN_MESSAGES`, `src/app/app_messages.c`, `src/atproto/chat.c`) is on the More menu. It takes Wolfram's `listConvos` page as the session's `chat` inbox, and the screen keeps its own selection, scroll and status in that same struct, as the notifications list does. Opening a conversation waits for the message view.
+
 Phase 5 is complete: compose, replies, likes/reposts, notifications and actor search are all in. Phase 6 is under way — settings UI and persistence are done and loaded at startup, the media pipeline, avatars, post images and link cards are in, and what remains is session persistence polish, cache, drafts, a full-size image viewer, accessibility wiring, and distribution metadata — plus parity with Cobalt, which is tracked against Cobalt's README rather than this list.
 
 Keep this document current whenever those boundaries change.

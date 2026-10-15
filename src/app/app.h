@@ -2,6 +2,7 @@
 #define INDIGO_APP_H
 
 #include <stdbool.h>
+#include "atproto/chat.h"
 #include <stddef.h>
 
 #include "app/search.h"
@@ -30,6 +31,7 @@ typedef enum {
     INDIGO_SCREEN_SETTINGS,
     INDIGO_SCREEN_IMAGE,
     INDIGO_SCREEN_UPDATE,
+    INDIGO_SCREEN_MESSAGES,
 } indigo_screen;
 
 typedef enum {
@@ -66,6 +68,7 @@ typedef enum {
     INDIGO_REQUEST_EDIT_QUERY,
     INDIGO_REQUEST_SEARCH,
     INDIGO_REQUEST_FOLLOW,
+    INDIGO_REQUEST_CHAT_INBOX,
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
@@ -141,6 +144,7 @@ typedef struct {
     indigo_menu menu;
     indigo_profile profile;
     indigo_notifications notifications;
+    indigo_chat_inbox messages;
     indigo_compose compose;
     /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
      * unless a test points them elsewhere. */
@@ -202,6 +206,8 @@ void indigo_app_profile_failed(indigo_app *app, const char *message);
 void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
                                      unsigned count);
 void indigo_app_notifications_failed(indigo_app *app, const char *message);
+void indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src);
+void indigo_app_messages_failed(indigo_app *app, const char *message);
 /* The search query came back from the keyboard. */
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,

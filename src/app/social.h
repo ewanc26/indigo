@@ -188,6 +188,7 @@ const indigo_notification *indigo_notifications_selected(const indigo_notificati
 typedef enum {
     INDIGO_MENU_COMPOSE = 0,
     INDIGO_MENU_NOTIFICATIONS,
+    INDIGO_MENU_MESSAGES,
     INDIGO_MENU_FIND_PEOPLE,
     INDIGO_MENU_FIND_POSTS,
     INDIGO_MENU_LISTS,

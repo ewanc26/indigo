@@ -267,6 +267,7 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     }
     add_item(m, INDIGO_MENU_COMPOSE, "New post", "");
     add_item(m, INDIGO_MENU_NOTIFICATIONS, "Notifications", "");
+    add_item(m, INDIGO_MENU_MESSAGES, "Messages", "");
     add_item(m, INDIGO_MENU_FIND_PEOPLE, "Find people", "");
     add_item(m, INDIGO_MENU_FIND_POSTS, "Find posts", "");
     add_item(m, INDIGO_MENU_LISTS, "Lists", "");

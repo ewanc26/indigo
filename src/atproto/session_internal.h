@@ -66,6 +66,7 @@ typedef enum {
     JOB_THREAD,
     JOB_PROFILE,
     JOB_NOTIFICATIONS,
+    JOB_CHAT_INBOX,
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
@@ -151,6 +152,7 @@ typedef struct {
     indigo_profile profile;
     indigo_notification notes[INDIGO_NOTIFICATION_MAX];
     unsigned note_count;
+    indigo_chat_inbox chat;
     indigo_actor actors[INDIGO_SEARCH_MAX];
     unsigned actor_count;
 /* Post search keeps its own results: indigo_post is a different type from
@@ -219,6 +221,7 @@ bool indigo_session_to_post(const wf_agent_feed_item *item, indigo_post *out);
 void indigo_session_do_author_feed(const indigo_job *j);
 void indigo_session_do_feed(const indigo_job *j);
 void indigo_session_do_notifications(void);
+void indigo_session_do_chat_inbox(void);
 void indigo_session_do_post_action(const indigo_job *j);
 void indigo_session_do_post_search(const indigo_job *j);
 void indigo_session_do_thread(const indigo_job *j);
