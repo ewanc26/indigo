@@ -254,7 +254,9 @@ write_chunk(FILE *f, const char *type, const uint8_t *data, size_t len)
     crc = crc32_update(crc, data, len);
     put32(tail, crc);
     fwrite(head, 1, 8, f);
-    fwrite(data, 1, len, f);
+    if (len > 0) {
+        fwrite(data, 1, len, f); /* an empty chunk has no data, and data may be NULL */
+    }
     fwrite(tail, 1, 4, f);
 }
 
@@ -637,6 +639,19 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(page.items[2].handle, sizeof page.items[2].handle, "@devlog.example");
         indigo_app_messages_loaded(app, &page);
         app->requests_count = 2;
+    } else if (s->screen == INDIGO_SCREEN_CHAT_REQUESTS) {
+        static indigo_chat_inbox page;
+
+        memset(&page, 0, sizeof page);
+        page.count = 2;
+        page.has_more = true;
+        indigo_copy_utf8(page.items[0].name, sizeof page.items[0].name, "Morning Walks");
+        indigo_copy_utf8(page.items[0].handle, sizeof page.items[0].handle, "@walks.example");
+        indigo_copy_utf8(page.items[0].preview, sizeof page.items[0].preview,
+                         "Hi, I would like to talk about the river route.");
+        indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Bob");
+        indigo_copy_utf8(page.items[1].handle, sizeof page.items[1].handle, "@bob.example");
+        indigo_app_requests_loaded(app, &page);
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -896,6 +911,7 @@ main(int argc, char **argv)
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
         {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
+        {"requests", INDIGO_SCREEN_CHAT_REQUESTS, false, 0, 0, 0, 0, false},
         {"chat-thread", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},

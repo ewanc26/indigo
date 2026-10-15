@@ -103,7 +103,7 @@ worker(void *arg)
             indigo_session_do_chat_send(&j);
             break;
         case JOB_CHAT_REQUESTS:
-            indigo_session_do_chat_requests();
+            indigo_session_do_chat_requests(j.cursor);
             break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);

@@ -151,6 +151,13 @@ indigo_session_submit_chat_requests(void)
     return false;
 }
 
+bool
+indigo_session_submit_chat_requests_more(const char *cursor)
+{
+    (void) cursor;
+    return false;
+}
+
 const indigo_chat_inbox *
 indigo_session_chat_requests(void)
 {

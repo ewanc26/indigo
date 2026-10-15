@@ -4,6 +4,86 @@
 #include "app/app_internal.h"
 
 static void
+request_more(indigo_app *app)
+{
+    indigo_chat_inbox *r = &app->requests;
+
+    if (!r->loading && r->has_more && app->request == INDIGO_REQUEST_NONE) {
+        r->loading = true;
+        app->request = INDIGO_REQUEST_CHAT_REQUESTS_MORE;
+    }
+}
+
+static void
+request_reload(indigo_app *app)
+{
+    indigo_chat_inbox *r = &app->requests;
+
+    if (!r->loading && app->request == INDIGO_REQUEST_NONE) {
+        r->loading = true;
+        app->request = INDIGO_REQUEST_CHAT_REQUESTS;
+    }
+}
+
+void
+indigo_app_open_requests(indigo_app *app)
+{
+    if (app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    indigo_chat_inbox_clear(&app->requests);
+    app->requests.loading = true;
+    app->request = INDIGO_REQUEST_CHAT_REQUESTS;
+}
+
+/* The request list. Read-only like the inbox: a request cannot be accepted yet.
+ * Moving past the last loaded row asks for the next page when there is one. */
+void
+indigo_app_update_chat_requests(indigo_app *app, const indigo_input *input)
+{
+    indigo_chat_inbox *r = &app->requests;
+    int drag = indigo_app_drag_rows(app, input);
+
+    if (input->up) indigo_chat_inbox_move(r, -1, INDIGO_TIMELINE_ROWS);
+    if (input->down) indigo_chat_inbox_move(r, 1, INDIGO_TIMELINE_ROWS);
+    if (input->page_up) indigo_chat_inbox_move(r, -INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    if (input->page_down) indigo_chat_inbox_move(r, INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    if (drag != 0) indigo_chat_inbox_move(r, drag, INDIGO_TIMELINE_ROWS);
+    if (r->count > 0 && r->selected + 1 >= r->count) {
+        request_more(app);
+    }
+    if (input->back) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (input->refresh) {
+        request_reload(app);
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        switch (a) {
+        case INDIGO_ACTION_ROW0:
+        case INDIGO_ACTION_ROW1:
+        case INDIGO_ACTION_ROW2:
+            indigo_chat_inbox_select(r, r->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
+                                     INDIGO_TIMELINE_ROWS);
+            break;
+        case INDIGO_ACTION_REFRESH:
+            request_reload(app);
+            break;
+        case INDIGO_ACTION_BACK:
+            indigo_app_go_back(app);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+static void
 request_refresh(indigo_app *app)
 {
     indigo_chat_inbox *m = &app->messages;
@@ -60,6 +140,9 @@ indigo_app_update_messages(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_REFRESH:
             request_refresh(app);
+            break;
+        case INDIGO_ACTION_REQUESTS:
+            indigo_app_open_requests(app);
             break;
         case INDIGO_ACTION_BACK:
             indigo_app_go_back(app);
