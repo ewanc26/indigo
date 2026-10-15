@@ -285,10 +285,15 @@ indigo_session_do_feed(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
-void
-indigo_session_do_chat_inbox(void)
+/* The inbox and the request inbox share one body. They differ only in the list
+ * call and in where the rows go; requests use listConvoRequests, which the
+ * lexicon prefers over listConvos with a status filter. */
+static void
+run_chat_list(bool requests)
 {
-    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_FAILED};
+    indigo_session_event ev = {.kind = requests ? INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED
+                                                : INDIGO_SESSION_EVENT_CHAT_FAILED};
+    indigo_chat_inbox *dst = requests ? &g_session.requests : &g_session.chat;
     wf_chat_convo_list list;
     wf_status st;
 
@@ -298,20 +303,36 @@ indigo_session_do_chat_inbox(void)
         return;
     }
     memset(&list, 0, sizeof list);
-    st = wf_agent_chat_list_convos(g_session.agent, INDIGO_CHAT_CONVOS_MAX, NULL, &list);
+    if (requests) {
+        st = wf_agent_chat_list_convo_requests_typed(g_session.agent, INDIGO_CHAT_CONVOS_MAX,
+                                                     NULL, &list);
+    } else {
+        st = wf_agent_chat_list_convos(g_session.agent, INDIGO_CHAT_CONVOS_MAX, NULL, &list);
+    }
     if (st != WF_OK) {
-        indigo_session_publish_failure(&ev, "messages", st);
+        indigo_session_publish_failure(&ev, requests ? "message requests" : "messages", st);
         return;
     }
 
-    indigo_chat_inbox_clear(&g_session.chat);
-    indigo_chat_inbox_append_from_wolfram(&g_session.chat, &list,
-                                          wf_agent_get_did(g_session.agent));
+    indigo_chat_inbox_clear(dst);
+    indigo_chat_inbox_append_from_wolfram(dst, &list, wf_agent_get_did(g_session.agent));
     wf_chat_convo_list_free(&list);
 
-    ev.kind = INDIGO_SESSION_EVENT_CHAT_PAGE;
-    ev.page_count = g_session.chat.count;
+    ev.kind = requests ? INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE : INDIGO_SESSION_EVENT_CHAT_PAGE;
+    ev.page_count = dst->count;
     indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_inbox(void)
+{
+    run_chat_list(false);
+}
+
+void
+indigo_session_do_chat_requests(void)
+{
+    run_chat_list(true);
 }
 
 void
@@ -502,6 +523,20 @@ const indigo_chat_inbox *
 indigo_session_chat_inbox(void)
 {
     return &g_session.chat;
+}
+
+bool
+indigo_session_submit_chat_requests(void)
+{
+    indigo_job j = {.kind = JOB_CHAT_REQUESTS};
+
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_chat_inbox *
+indigo_session_chat_requests(void)
+{
+    return &g_session.requests;
 }
 
 bool
