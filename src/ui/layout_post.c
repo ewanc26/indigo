@@ -200,7 +200,11 @@ draw_post_link(indigo_canvas *c, const indigo_post *p)
     }
     /* The title, when there was one, sits above the URI it belongs to. */
     y = EMBED_Y + (float) CARD_INSET + (float) POST_LINE_PITCH * (float) n;
-    indigo_canvas_text(c, text_x, y, 0.55f, COL_TEXT_DIM, "%.38s", p->embed_uri);
+    /* A two-line title leaves no room for the URI inside the card: drop it rather
+     * than draw it across the card's bottom edge. */
+    if (y + 12.0f <= EMBED_Y + EMBED_H) {
+        indigo_canvas_text(c, text_x, y, 0.55f, COL_TEXT_DIM, "%.38s", p->embed_uri);
+    }
     if (p->embed_thumb[0]) {
         indigo_canvas_image(c, EMBED_X + EMBED_W - (float) (CARD_INSET + CARD_THUMB),
                             EMBED_Y + (float) (CARD_INSET - 4), CARD_THUMB, CARD_THUMB,
@@ -268,10 +272,10 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
                         : "B  Menu   SEL  Reload   START  Exit";
     float hint_x = 18.0f + (float) strlen(title) * INDIGO_CHAR_WIDTH * 0.8f + 12.0f;
     /* The hint is drawn at HINT_SCALE, and its end is kept clear of the counter
-     * at x=330. Measured in Azahar, the hint runs about 8 px a character at 0.5,
+     * at x=342. Measured in Azahar, the hint runs about 8 px a character at 0.5,
      * wider than the layout's estimate, so the hint is drawn smaller to keep it
      * clear of the counter. */
-    float hint_end = 326.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.45f;
+    float hint_end = 336.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.45f;
     unsigned units;
 
     if (hint_x < 116.0f) {
@@ -301,7 +305,7 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, hint_x, 12, 0.45f, COL_TEXT_DIM, "%s", hint);
     }
     if (p) {
-        indigo_canvas_text(c, 330, 12, 0.6f, COL_TEXT_DIM, "%u / %u%s", t->selected + 1,
+        indigo_canvas_text(c, 342, 12, 0.6f, COL_TEXT_DIM, "%u / %u%s", t->selected + 1,
                            t->count, t->has_more ? "+" : "");
     }
 

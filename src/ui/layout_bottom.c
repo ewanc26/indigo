@@ -292,9 +292,9 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
     if (d->thread_count > 0) {
         indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT_DIM, "Threads are text-only");
     } else if (indigo_compose_has_image(d)) {
-        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Remove image - Select");
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Remove image");
     } else {
-        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Add image - Select");
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Add image");
     }
     if (!d->has_target) {
         const char *thread_label = d->thread_count + 1 >= INDIGO_THREAD_POSTS_MAX
