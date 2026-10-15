@@ -9,8 +9,8 @@
  * does not say who the viewer is, so the counterpart is the member whose DID
  * is not the signed-in account's.
  *
- * Only the inbox lives here. Reading messages, replying and requests come
- * later.
+ * The inbox and the request inbox's list live here. Accepting a request, the
+ * request screen, reading messages and replying come later.
  */
 
 #include "app/timeline.h"
@@ -60,6 +60,11 @@ bool indigo_chat_inbox_select(indigo_chat_inbox *inbox, unsigned index, unsigned
 
 /* Move the selection by `delta`, clamped to the list. */
 bool indigo_chat_inbox_move(indigo_chat_inbox *inbox, int delta, unsigned rows);
+
+/* The request inbox's count as text: "No requests", "1 request" or "N requests".
+ * False when `out` is NULL, `cap` is 0 or the text does not fit in `cap` bytes
+ * with its terminator; `out` is then left empty. */
+bool indigo_chat_requests_label(int count, char *out, size_t cap);
 
 /* Index of the first member whose DID is not the viewer's, or -1 when there is
  * none. A convo with only the viewer has nobody to show. */

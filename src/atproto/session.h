@@ -43,6 +43,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED,
     INDIGO_SESSION_EVENT_CHAT_SEND_DONE,
     INDIGO_SESSION_EVENT_CHAT_SEND_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE,
+    INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -137,6 +139,13 @@ bool indigo_session_submit_notifications(void);
  * once CHAT_PAGE arrives. */
 bool indigo_session_submit_chat_inbox(void);
 const indigo_chat_inbox *indigo_session_chat_inbox(void);
+
+/* Fetch the direct message request inbox: conversations someone else started
+ * that the account has not accepted. Read the rows with
+ * indigo_session_chat_requests once CHAT_REQUESTS_PAGE arrives. Nothing here
+ * accepts a request. */
+bool indigo_session_submit_chat_requests(void);
+const indigo_chat_inbox *indigo_session_chat_requests(void);
 
 /* Fetch the newest messages of one conversation. Read them with
  * indigo_session_chat_thread once CHAT_THREAD_PAGE arrives. */
