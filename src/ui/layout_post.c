@@ -42,7 +42,7 @@ indigo_layout_image_button(indigo_canvas *c, const indigo_app *app)
  * budget the caller has: a post with an embed gives up three of its five. */
 static void
 draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines,
-               unsigned text_scale)
+               unsigned text_scale, float top)
 {
     indigo_line lines[POST_TEXT_LINES];
     int truncated;
@@ -69,7 +69,7 @@ draw_post_text(indigo_canvas *c, const indigo_post *p, unsigned max_lines,
         bool last = truncated && i + 1 == n;
 
         /* %.*s keeps this to the line; the ellipsis marks cut-off text. */
-        indigo_canvas_text(c, POST_TEXT_X, POST_TEXT_Y + pitch * (float) i,
+        indigo_canvas_text(c, POST_TEXT_X, top + pitch * (float) i,
                            scale, COL_TEXT, "%.*s%s", (int) len, at,
                            last ? "..." : "");
         for (unsigned f = 0; f < p->facet_count; f++) {
@@ -224,7 +224,11 @@ indigo_layout_draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_a
     bool embed = post_draws_embed(p);
     float band_h = EMBED_H;
 
-    draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES, text_scale);
+    /* Beside a link card the text starts 4px higher: two lines at the default
+     * pitch then end above the card's top edge, where the second line's
+     * descenders were being covered. */
+    draw_post_text(c, p, embed ? POST_TEXT_LINES_EMBED : POST_TEXT_LINES, text_scale,
+                   POST_TEXT_Y - (embed ? 4.0f : 0.0f));
     if (embed) {
         if (p->embed_kind == INDIGO_EMBED_LINK) {
             draw_post_link(c, p);
@@ -264,12 +268,12 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     const indigo_post *p = indigo_timeline_selected(t);
 
     const char *title = thread ? "Thread" : app->feed_uri[0] ? app->feed_name : "Home";
-    /* A feed name is longer than "Home", and the counter above the rows wants
-     * the right of the bar, so the feed hint drops the START reminder to keep
-     * room for the name: START still exits, as it does on every list screen. */
+    /* Home keeps START in the bar, because START exit must be hinted on Home (the
+     * test that checks this is in tests/tests.c). Reload is the Reload pill at
+     * the bottom of the screen, so the bar does not need to repeat it. */
     const char *hint = thread             ? "B  Back   SEL  Profile"
                         : app->feed_uri[0] ? "B  Feeds   SEL  Reload"
-                        : "B  Menu   SEL  Reload   START  Exit";
+                        : "B  Menu   START  Exit";
     float hint_x = 18.0f + (float) strlen(title) * INDIGO_CHAR_WIDTH * 0.8f + 12.0f;
     /* The hint is drawn at HINT_SCALE, and its end is kept clear of the counter
      * at x=342. Measured in Azahar, the hint runs about 8 px a character at 0.5,
@@ -300,7 +304,7 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
      * spent. */
     if (image_button_shown(app) && t->status[0]) {
         indigo_canvas_text(c, hint_x, 12, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%.60s", t->status);
+                           "%.28s", t->status);
     } else {
         indigo_canvas_text(c, hint_x, 12, 0.45f, COL_TEXT_DIM, "%s", hint);
     }
@@ -350,6 +354,6 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 330, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "Loading...");
     } else if (t->status[0]) {
         indigo_canvas_text(c, 190, 36, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%s", t->status);
+                           "%.26s", t->status);
     }
 }

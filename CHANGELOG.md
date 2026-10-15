@@ -6,6 +6,10 @@ adds its entry under `## [Unreleased]`, linking itself. A release PR renames
 that section to the version, and the Release workflow publishes that section
 as the release notes.
 
+### Fixed
+
+- The screens read cleanly on the 3DS: the Profile counts no longer run into the Posts button, Settings fits its hint and build line, the Home and Menu page counters no longer sit on the header hints, the author box and the attach button text fit, long update and status lines wrap or cut cleanly, and a post's last line is no longer hidden behind its link card.
+
 ## [Unreleased]
 
 ### Added
