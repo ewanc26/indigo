@@ -183,7 +183,31 @@ build_bottom_messages(const indigo_app *app, indigo_canvas *c)
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == m->selected,
                                title, it->preview[0] ? it->preview : "No messages yet", "");
     }
+    indigo_layout_action_pill(c, INDIGO_ACTION_REQUESTS, false, false,
+                              app->requests_count > 0 ? COL_PILL_ACTIVE : COL_PILL, "Pending");
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, m->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
+build_bottom_requests(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_inbox *r = &app->requests;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Requests");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = r->scroll + row;
+        const indigo_chat_convo *it;
+
+        if (idx >= r->count) {
+            break;
+        }
+        it = &r->items[idx];
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == r->selected,
+                               it->name[0] ? it->name : it->handle,
+                               it->preview[0] ? it->preview : "No message yet", "");
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, r->loading, false, COL_PILL_ACTIVE, "Reload");
 }
 
 static void
@@ -569,6 +593,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_MESSAGES:
         build_bottom_messages(app, c);
+        break;
+    case INDIGO_SCREEN_CHAT_REQUESTS:
+        build_bottom_requests(app, c);
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_bottom_chat_thread(app, c);
