@@ -100,9 +100,9 @@
 #define POST_NOTE_Y 196
 #define POST_COUNTER_Y 214
 #define EMBED_X 18
-#define EMBED_Y 132
+#define EMBED_Y 136
 #define EMBED_W 364
-#define EMBED_H 60
+#define EMBED_H 56
 /* Alt text: the scale it is drawn at, and the picture height kept when it has
  * taken lines out of the band. A 4:3 photo at the floor is still 40x30. */
 #define ALT_SCALE 0.55f
