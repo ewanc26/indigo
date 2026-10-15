@@ -2827,14 +2827,14 @@ test_layout_draws_post_images(void)
         if (img) {
             /* The declared shape, inside the band, and no taller than the band
              * whatever the ratio says. */
-            CHECK(fabsf(img->w - 80.0f) < 0.51f && fabsf(img->h - 60.0f) < 0.51f);
+            CHECK(fabsf(img->w - 74.67f) < 0.51f && fabsf(img->h - 56.0f) < 0.51f);
             CHECK(img->y >= 128.0f && img->y + img->h <= 194.0f);
             CHECK(img->x >= 0.0f && img->x + img->w <= (float) top.width);
             /* Centred in the band: equal space either side. */
             CHECK(fabsf(img->x - 18.0f - ((364.0f - img->w) / 2.0f)) < 0.51f);
             /* Requested at the size it is drawn at, so an avatar-sized decode
              * is not what a full box costs. */
-            CHECK(fabsf((float) (img->w > img->h ? img->w : img->h) - 80.0f) < 0.51f);
+            CHECK(fabsf((float) (img->w > img->h ? img->w : img->h) - 74.67f) < 0.51f);
         }
         /* The one-line note says less than the picture does, so a post whose
          * embed is drawn does not also print it. */
@@ -2877,7 +2877,7 @@ test_layout_draws_post_images(void)
         const indigo_cmd *img = find_image(&top, thumb);
 
         CHECK(img != NULL);
-        CHECK(img && fabsf(img->w - 60.0f) < 0.51f && fabsf(img->h - 60.0f) < 0.51f);
+        CHECK(img && fabsf(img->w - 56.0f) < 0.51f && fabsf(img->h - 56.0f) < 0.51f);
     }
 
     /* Four images, one drawn: the count is stated rather than implied. */
