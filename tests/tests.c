@@ -1162,6 +1162,89 @@ test_partial_thread_publish_clears_draft(void)
 }
 
 static void
+test_messages_list(void)
+{
+    indigo_chat_inbox m;
+
+    memset(&m, 0, sizeof m);
+    m.count = 3;
+    CHECK(indigo_chat_inbox_move(&m, 1, 2));
+    CHECK(m.selected == 1);
+    CHECK(indigo_chat_inbox_move(&m, 5, 2));
+    CHECK(m.selected == 2);
+    CHECK(m.scroll == 1);
+    CHECK(!indigo_chat_inbox_move(&m, 1, 2));
+    CHECK(indigo_chat_inbox_select(&m, 0, 2));
+    CHECK(m.scroll == 0);
+    CHECK(!indigo_chat_inbox_select(&m, 9, 2));
+
+    /* Clearing takes the rows and the list state, so a new page starts at the top. */
+    m.loading = true;
+    snprintf(m.status, sizeof m.status, "%s", "old");
+    m.cursor[0] = 'x';
+    indigo_chat_inbox_clear(&m);
+    CHECK(m.count == 0 && m.selected == 0 && m.scroll == 0);
+    CHECK(!m.loading && m.status[0] == '\0' && m.cursor[0] == '\0');
+}
+
+static void
+test_messages_loaded_and_failed(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_chat_inbox page;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MENU);
+    /* The menu starts on New post; Messages is the third row. */
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_MESSAGES);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_INBOX);
+    CHECK(app.messages.loading);
+
+    memset(&page, 0, sizeof page);
+    page.count = 1;
+    page.unread = 2;
+    page.has_more = true;
+    snprintf(page.items[0].name, sizeof page.items[0].name, "%s", "Ann");
+    snprintf(page.items[0].preview, sizeof page.items[0].preview, "%s", "see you");
+    page.items[0].unread = 2;
+    snprintf(page.cursor, sizeof page.cursor, "%s", "next");
+    indigo_app_messages_loaded(&app, &page);
+    CHECK(app.messages.count == 1);
+    CHECK(app.messages.unread == 2);
+    CHECK(!app.messages.loading);
+    CHECK(app.messages.has_more);
+    CHECK(strcmp(app.messages.cursor, "next") == 0);
+    CHECK(strcmp(app.messages.items[0].name, "Ann") == 0);
+
+    /* A failed refresh keeps the rows already on screen and says why. */
+    indigo_app_messages_failed(&app, "Network is down.");
+    CHECK(app.messages.count == 1);
+    CHECK(!app.messages.loading);
+    CHECK(app.messages.status_is_error);
+    CHECK(strcmp(app.messages.status, "Network is down.") == 0);
+
+    /* An empty page says so instead of showing a blank list. */
+    memset(&page, 0, sizeof page);
+    indigo_app_messages_loaded(&app, &page);
+    CHECK(app.messages.count == 0);
+    CHECK(strcmp(app.messages.status, "No messages yet.") == 0);
+}
+
+static void
 test_notifications(void)
 {
     indigo_app app;
@@ -1365,20 +1448,21 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 13);
-    CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
-    CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
-    CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
-    CHECK(app.menu.items[6].kind == INDIGO_MENU_MUTED);
-    CHECK(app.menu.items[7].kind == INDIGO_MENU_BLOCKED);
-    CHECK(app.menu.items[9].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[10].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[11].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[8].label, "My profile") == 0);
+    CHECK(app.menu.count == 14);
+    CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
+    CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
+    CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
+    CHECK(app.menu.items[6].kind == INDIGO_MENU_FEEDS);
+    CHECK(app.menu.items[7].kind == INDIGO_MENU_MUTED);
+    CHECK(app.menu.items[8].kind == INDIGO_MENU_BLOCKED);
+    CHECK(app.menu.items[10].kind == INDIGO_MENU_SETTINGS);
+    CHECK(app.menu.items[11].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[12].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[9].label, "My profile") == 0);
 
-    /* Sign out is the twelfth item, so it sits below the window until the
+    /* Sign out is the thirteenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 11; i++) {
+    for (unsigned i = 0; i < 12; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -2180,9 +2264,9 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets, the two entries about the post, then the twelve app
+    /* Three facet targets, the two entries about the post, then the thirteen app
      * actions. */
-    CHECK(menu.count == 18);
+    CHECK(menu.count == 19);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -2194,7 +2278,7 @@ test_facet_menu(void)
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[17].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[18].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -2220,7 +2304,7 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 18);
+    CHECK(app.menu.count == 19);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -2299,7 +2383,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 15);
+    CHECK(menu.count == 16);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
@@ -2308,12 +2392,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 15);
+    CHECK(menu.count == 16);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 13);
-    CHECK(strcmp(menu.items[8].label, "Your profile") == 0);
+    CHECK(menu.count == 14);
+    CHECK(strcmp(menu.items[9].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -2338,8 +2422,8 @@ test_facet_menu_edges(void)
         indigo_copy_utf8(big.text, sizeof big.text, text);
 
         indigo_menu_build(&menu, &big, "me.example.com");
-        /* Eight facets plus the twelve app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 15);
+        /* Eight facets plus the thirteen app actions, and no more than the cap. */
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 16);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -3192,6 +3276,10 @@ test_search_flow(void)
     in.back = true;
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
+    /* Find people is the third row: Messages now sits above it. */
+    in = (indigo_input) {0};
+    in.down = true;
+    indigo_app_update(&app, &in);
     in = (indigo_input) {0};
     in.down = true;
     indigo_app_update(&app, &in);
@@ -3770,8 +3858,8 @@ test_post_search(void)
         indigo_app_update(&app, &in);
     }
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.items[3].kind == INDIGO_MENU_FIND_POSTS);
-    for (unsigned i = 0; i < 3; i++) {
+    CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
+    for (unsigned i = 0; i < 4; i++) {
         indigo_app_update(&app, &(indigo_input) {.down = true});
     }
     indigo_app_update(&app, &(indigo_input) {.confirm = true});
@@ -3946,9 +4034,9 @@ test_lists(void)
                          .touch_y = (int) (r.y + 4)};
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.items[4].kind == INDIGO_MENU_LISTS);
-    /* Move to Lists (index 4) and confirm. */
-    for (unsigned i = 0; i < 4; i++) {
+    CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
+    /* Move to Lists (index 5) and confirm. */
+    for (unsigned i = 0; i < 5; i++) {
         indigo_app_update(&app, &(indigo_input) {.down = true});
     }
     indigo_app_update(&app, &(indigo_input) {.confirm = true});
@@ -4049,9 +4137,9 @@ test_feeds(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.items[5].kind == INDIGO_MENU_FEEDS);
-    /* Move to Feeds (index 5) and confirm. */
-    for (unsigned i = 0; i < 5; i++) {
+    CHECK(app.menu.items[6].kind == INDIGO_MENU_FEEDS);
+    /* Move to Feeds (index 6) and confirm. */
+    for (unsigned i = 0; i < 6; i++) {
         indigo_app_update(&app, &(indigo_input) {.down = true});
     }
     indigo_app_update(&app, &(indigo_input) {.confirm = true});
@@ -5807,6 +5895,8 @@ main(void)
     test_compose_flow();
     test_compose_thread_touch_flow();
     test_partial_thread_publish_clears_draft();
+    test_messages_list();
+    test_messages_loaded_and_failed();
     test_notifications();
     test_normalise_service();
     test_normalise_handle();

@@ -93,6 +93,9 @@ worker(void *arg)
         case JOB_NOTIFICATIONS:
             indigo_session_do_notifications();
             break;
+        case JOB_CHAT_INBOX:
+            indigo_session_do_chat_inbox();
+            break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);
             break;

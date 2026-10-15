@@ -286,6 +286,35 @@ indigo_session_do_feed(const indigo_job *j)
 }
 
 void
+indigo_session_do_chat_inbox(void)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_FAILED};
+    wf_chat_convo_list list;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    st = wf_agent_chat_list_convos(g_session.agent, INDIGO_CHAT_CONVOS_MAX, NULL, &list);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "messages", st);
+        return;
+    }
+
+    indigo_chat_inbox_clear(&g_session.chat);
+    indigo_chat_inbox_append_from_wolfram(&g_session.chat, &list,
+                                          wf_agent_get_did(g_session.agent));
+    wf_chat_convo_list_free(&list);
+
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_PAGE;
+    ev.page_count = g_session.chat.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
 indigo_session_do_notifications(void)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
@@ -404,6 +433,20 @@ indigo_session_submit_notifications(void)
     indigo_job j = {.kind = JOB_NOTIFICATIONS};
 
     return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_inbox(void)
+{
+    indigo_job j = {.kind = JOB_CHAT_INBOX};
+
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_chat_inbox *
+indigo_session_chat_inbox(void)
+{
+    return &g_session.chat;
 }
 
 bool
