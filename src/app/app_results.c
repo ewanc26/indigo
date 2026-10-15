@@ -69,6 +69,7 @@ indigo_app_signed_out(indigo_app *app, const char *message)
      * account's; the next sign-in starts with them empty. */
     memset(&app->messages, 0, sizeof app->messages);
     memset(&app->chat_thread, 0, sizeof app->chat_thread);
+    app->requests_count = 0;
     app->history_count = 0;
     indigo_app_set_status(s, message, false);
     app->screen = INDIGO_SCREEN_SIGNIN;
