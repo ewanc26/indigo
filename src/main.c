@@ -157,6 +157,18 @@ handle_edit_query(indigo_app *app)
 }
 
 static void
+handle_edit_reply(indigo_app *app)
+{
+    char text[INDIGO_CHAT_REPLY_MAX];
+    indigo_text_result r = indigo_text_edit("Reply", app->chat_thread.reply, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_copy_utf8(app->chat_thread.reply, sizeof app->chat_thread.reply, text);
+    }
+}
+
+static void
 handle_requests(indigo_app *app)
 {
     indigo_field f;
@@ -228,6 +240,14 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_CHAT_INBOX:
         if (!indigo_session_submit_chat_inbox()) {
             indigo_app_messages_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_REPLY:
+        handle_edit_reply(app);
+        break;
+    case INDIGO_REQUEST_CHAT_SEND:
+        if (!indigo_session_submit_chat_send(app->request_post_uri, app->chat_thread.reply)) {
+            indigo_app_chat_send_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_CHAT_THREAD:
@@ -479,6 +499,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED:
             indigo_app_chat_thread_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_SEND_DONE:
+            indigo_app_chat_send_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_SEND_FAILED:
+            indigo_app_chat_send_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {
