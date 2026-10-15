@@ -413,8 +413,10 @@ build_top_update(const indigo_app *app, indigo_canvas *c)
     indigo_layout_top_title(c, "Update", "");
     indigo_canvas_text(c, 18, 44, 0.65f, COL_TEXT, "This build: %s",
                        u->current[0] ? u->current : "unknown");
-    indigo_canvas_text(c, 18, 62, 0.5f, COL_TEXT_DIM, "%s (build %d, %s)", INDIGO_BUILD_COMMIT,
-                       INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
+    /* The first line already names the build; this line adds the number and the
+     * date, so the commit is not repeated. */
+    indigo_canvas_text(c, 18, 62, 0.5f, COL_TEXT_DIM, "build %d, %s", INDIGO_BUILD_NUMBER,
+                       INDIGO_BUILD_DATE);
 
     switch (u->state) {
     case INDIGO_UPDATER_UNAVAILABLE:
