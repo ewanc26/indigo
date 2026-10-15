@@ -69,6 +69,7 @@ typedef enum {
     JOB_CHAT_INBOX,
     JOB_CHAT_MESSAGES,
     JOB_CHAT_SEND,
+    JOB_CHAT_REQUESTS,
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
@@ -155,6 +156,9 @@ typedef struct {
     indigo_notification notes[INDIGO_NOTIFICATION_MAX];
     unsigned note_count;
     indigo_chat_inbox chat;
+    /* Conversations waiting for the account to accept them, kept apart from
+     * the inbox so loading one never disturbs the other. */
+    indigo_chat_inbox requests;
     indigo_chat_thread chat_thread;
     indigo_actor actors[INDIGO_SEARCH_MAX];
     unsigned actor_count;
@@ -225,6 +229,7 @@ void indigo_session_do_author_feed(const indigo_job *j);
 void indigo_session_do_feed(const indigo_job *j);
 void indigo_session_do_notifications(void);
 void indigo_session_do_chat_inbox(void);
+void indigo_session_do_chat_requests(void);
 void indigo_session_do_chat_messages(const indigo_job *j);
 void indigo_session_do_chat_send(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);

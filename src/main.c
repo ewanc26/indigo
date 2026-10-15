@@ -506,6 +506,9 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_CHAT_SEND_FAILED:
             indigo_app_chat_send_failed(app, indigo_failure_message(ev.failure));
             break;
+        case INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE:
+        case INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED:
+            break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {
                 indigo_app_publish_partial(app, ev.message);
