@@ -114,13 +114,12 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
         indigo_rect fl = indigo_layout_button_rect(INDIGO_ACTION_FOLLOWERS);
         indigo_rect fg = indigo_layout_button_rect(INDIGO_ACTION_FOLLOWING);
 
+        /* One line each: the pills are 34 px tall and two lines of text do not fit. */
         indigo_canvas_rect(c, fl.x, fl.y, fl.w, fl.h, COL_PILL);
-        indigo_canvas_text(c, fl.x + 10, fl.y + 5, 0.55f, COL_TEXT_SOFT, "Followers");
-        indigo_canvas_text(c, fl.x + 10, fl.y + 21, 0.7f, COL_TEXT, "%u", p->followers);
+        indigo_canvas_text(c, fl.x + 10, fl.y + 11, 0.6f, COL_TEXT, "Followers %u", p->followers);
 
         indigo_canvas_rect(c, fg.x, fg.y, fg.w, fg.h, COL_PILL);
-        indigo_canvas_text(c, fg.x + 10, fg.y + 5, 0.55f, COL_TEXT_SOFT, "Following");
-        indigo_canvas_text(c, fg.x + 10, fg.y + 21, 0.7f, COL_TEXT, "%u", p->follows);
+        indigo_canvas_text(c, fg.x + 10, fg.y + 11, 0.6f, COL_TEXT, "Following %u", p->follows);
 
         indigo_rect pb = indigo_layout_button_rect(INDIGO_ACTION_POSTS);
 
@@ -237,7 +236,8 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Close");
 
     snprintf(position, sizeof position, "%u of %u", app->menu.selected + 1, app->menu.count);
-    indigo_canvas_text(c, 14, 26, 0.55f, COL_TEXT_DIM, "%s", position);
+    /* Below the title (which ends near y 27) and above the first row at y 50. */
+    indigo_canvas_text(c, 14, 32, 0.55f, COL_TEXT_DIM, "%s", position);
 
     for (unsigned i = 0; i < INDIGO_MENU_ROWS; i++) {
         const indigo_menu_item *it = indigo_menu_row(&app->menu, i, INDIGO_MENU_ROWS);
