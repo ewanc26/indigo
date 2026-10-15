@@ -150,6 +150,8 @@ typedef struct {
     indigo_notifications notifications;
     indigo_chat_inbox messages;
     indigo_chat_thread chat_thread;
+    /* Pending message requests on the signed-in account; 0 hides the line. */
+    int requests_count;
     indigo_compose compose;
     /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
      * unless a test points them elsewhere. */
