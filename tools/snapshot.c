@@ -603,6 +603,20 @@ fill_social(indigo_app *app, const scenario *s)
         n[2].kind = INDIGO_NOTE_FOLLOW;
         indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
         indigo_app_notifications_loaded(app, n, 3);
+    } else if (s->screen == INDIGO_SCREEN_CHAT_THREAD) {
+        indigo_chat_thread page;
+
+        memset(&page, 0, sizeof page);
+        page.count = 3;
+        indigo_copy_utf8(app->chat_thread.title, sizeof app->chat_thread.title, "Bob");
+        indigo_copy_utf8(page.items[0].text, sizeof page.items[0].text,
+                         "Hello! Did you get my note about the hedge?");
+        page.items[1].mine = true;
+        indigo_copy_utf8(page.items[1].text, sizeof page.items[1].text,
+                         "Yes, still on for Saturday?");
+        indigo_copy_utf8(page.items[2].text, sizeof page.items[2].text,
+                         "See you Saturday. Bring the good scissors.");
+        indigo_app_chat_thread_loaded(app, &page);
     } else if (s->screen == INDIGO_SCREEN_MESSAGES) {
         indigo_chat_inbox page;
 
@@ -879,6 +893,7 @@ main(int argc, char **argv)
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
         {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
+        {"chat-thread", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},

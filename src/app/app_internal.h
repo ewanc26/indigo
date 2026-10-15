@@ -39,6 +39,8 @@ void indigo_app_update_home(indigo_app *app, const indigo_input *input);
 void indigo_app_update_notifications(indigo_app *app, const indigo_input *input);
 void indigo_app_open_messages(indigo_app *app);
 void indigo_app_update_messages(indigo_app *app, const indigo_input *input);
+void indigo_app_open_chat_thread(indigo_app *app, const char *convo_id, const char *title);
+void indigo_app_update_chat_thread(indigo_app *app, const indigo_input *input);
 void indigo_app_update_profile(indigo_app *app, const indigo_input *input);
 void indigo_app_update_thread(indigo_app *app, const indigo_input *input);
 

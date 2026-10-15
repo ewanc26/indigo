@@ -120,6 +120,28 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_thread *t = &app->chat_thread;
+    const indigo_chat_message *sel = t->selected < t->count ? &t->items[t->selected] : NULL;
+
+    indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
+    if (!sel) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           t->loading ? "Loading messages..." : "Nothing to show.");
+        if (t->status[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%s", t->status);
+        }
+        return;
+    }
+    indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", t->selected + 1, t->count);
+    indigo_canvas_text(c, 18, 52, 0.7f, sel->mine ? COL_LINK : COL_TEXT_SOFT, "%s",
+                       sel->mine ? "You" : (t->title[0] ? t->title : "Them"));
+    indigo_layout_top_paragraph(c, 18, 84, 0.6f, COL_TEXT, 6, sel->text);
+}
+
+static void
 build_top_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
@@ -442,6 +464,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_MESSAGES:
         build_top_messages(app, c);
+        return;
+    case INDIGO_SCREEN_CHAT_THREAD:
+        build_top_chat_thread(app, c);
         return;
     case INDIGO_SCREEN_MENU:
         build_top_menu(app, c);
