@@ -70,6 +70,46 @@ int indigo_chat_pick_counterpart(const char *const *member_dids, size_t count,
 int indigo_chat_other_member_count(const char *const *member_dids, size_t count,
                                    const char *viewer_did);
 
+/* How many messages a conversation holds, the newest first from the server. */
+#define INDIGO_CHAT_MESSAGES_MAX 20
+/* Rows of the message list on the bottom screen. */
+#define INDIGO_CHAT_THREAD_ROWS  3
+
+typedef struct {
+   char text[INDIGO_POST_TEXT_MAX];
+   bool mine;                             /* sent by the signed-in account */
+} indigo_chat_message;
+
+/*
+ * One conversation, oldest message first, with the list state the screen keeps.
+ * The title and convo id belong to the screen and survive a reload; the rows and
+ * selection are replaced by each page.
+ */
+typedef struct {
+   char convo_id[INDIGO_CHAT_ID_MAX];
+   char title[INDIGO_POST_NAME_MAX];
+   indigo_chat_message items[INDIGO_CHAT_MESSAGES_MAX];
+   unsigned count;
+   unsigned selected;
+   unsigned scroll;
+   bool loading;
+   char status[INDIGO_POST_NOTE_MAX];
+   bool status_is_error;
+} indigo_chat_thread;
+
+struct wf_chat_message_list;
+
+/* Clear the rows and list state; the title and convo id are kept. */
+void indigo_chat_thread_clear(indigo_chat_thread *thread);
+bool indigo_chat_thread_select(indigo_chat_thread *thread, unsigned index, unsigned rows);
+bool indigo_chat_thread_move(indigo_chat_thread *thread, int delta, unsigned rows);
+
+/* Replace the rows with a getMessages page. The server sends newest first, so the
+ * page is reversed into place and the newest message is selected. */
+int indigo_chat_thread_fill_from_wolfram(indigo_chat_thread *out,
+                                         const struct wf_chat_message_list *list,
+                                         const char *viewer_did);
+
 struct wf_chat_convo_list;
 
 /* Append every convo in a parsed listConvos page that has a counterpart.

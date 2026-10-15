@@ -96,6 +96,9 @@ worker(void *arg)
         case JOB_CHAT_INBOX:
             indigo_session_do_chat_inbox();
             break;
+        case JOB_CHAT_MESSAGES:
+            indigo_session_do_chat_messages(&j);
+            break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);
             break;
