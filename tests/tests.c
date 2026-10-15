@@ -2040,6 +2040,59 @@ test_queue_store(void)
     }
 }
 
+/* The Queued posts send path, without a network: a send takes the post out of
+ * the queue and into flight, a second send is refused while it is out, a failure
+ * puts the text back with the reason, and a success clears the compose buffer
+ * and leaves the queue as it was. */
+static void
+test_queue_send_path(void)
+{
+    static indigo_app app;
+
+    indigo_app_init(&app);
+    indigo_queue_init(&app.queue);
+    CHECK(indigo_queue_add(&app.queue, "first draft", 100));
+    CHECK(indigo_queue_add(&app.queue, "second draft", 200));
+
+    indigo_app_queue_send(&app, 0);
+    CHECK(app.queue_send_pending);
+    CHECK(app.compose.sending);
+    CHECK(app.request == INDIGO_REQUEST_PUBLISH);
+    CHECK(strcmp(app.compose.text, "first draft") == 0);
+    CHECK(app.queue.count == 1);
+    CHECK(strcmp(app.queue_inflight.text, "first draft") == 0);
+
+    /* A second send while the first is in flight changes nothing. */
+    indigo_app_queue_send(&app, 0);
+    CHECK(app.queue.count == 1);
+    CHECK(strcmp(app.queue_status, "A queued post is already being sent.") == 0);
+
+    /* Failure: the text goes back to the end of the queue, with the reason. */
+    CHECK(indigo_app_queue_publish_failed(&app, "Server said no."));
+    app.request = INDIGO_REQUEST_NONE; /* the job finished; the connection is free */
+    CHECK(!app.queue_send_pending);
+    CHECK(!app.compose.sending);
+    CHECK(app.compose.text[0] == '\0');
+    CHECK(app.queue.count == 2);
+    CHECK(strcmp(app.queue.items[1].text, "first draft") == 0);
+    CHECK(strcmp(app.queue_status, "Server said no.") == 0);
+    CHECK(app.queue_status_is_error);
+
+    /* Retry the same post, and success: the queue keeps the other one. */
+    indigo_app_queue_send(&app, 1);
+    CHECK(strcmp(app.compose.text, "first draft") == 0);
+    CHECK(indigo_app_queue_publish_done(&app));
+    CHECK(!app.queue_send_pending);
+    CHECK(app.compose.text[0] == '\0');
+    CHECK(app.queue.count == 1);
+    CHECK(strcmp(app.queue.items[0].text, "second draft") == 0);
+    CHECK(strcmp(app.queue_status, "Sent from the queue.") == 0);
+
+    /* A result with nothing in flight is not ours to handle. */
+    CHECK(!indigo_app_queue_publish_done(&app));
+    CHECK(!indigo_app_queue_publish_failed(&app, "stray"));
+}
+
 static void
 test_post_queue(void)
 {
@@ -6484,6 +6537,7 @@ main(void)
     test_settings_store();
     test_post_queue();
     test_queue_store();
+    test_queue_send_path();
     test_cache_codec();
     test_timeline_cache();
     test_cache_store();
