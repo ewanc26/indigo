@@ -133,6 +133,39 @@ test_chat_inbox_counterpart(void)
 }
 
 static void
+test_chat_long_id(void)
+{
+    char longid[200];
+    wf_agent_profile_view m[2];
+    wf_chat_convo convos[2];
+    wf_chat_convo_list page;
+    indigo_chat_inbox got;
+
+    /* An id longer than the bridge accepts is left out, not shown with a cut id. */
+    memset(longid, 'x', 199);
+    longid[199] = '\0';
+    memset(m, 0, sizeof m);
+    m[0].did = (char *)"did:plc:me";
+    m[1].did = (char *)"did:plc:ann";
+    m[1].handle = (char *)"ann.test";
+    memset(convos, 0, sizeof convos);
+    convos[0].id = longid;
+    convos[0].members = m;
+    convos[0].member_count = 2;
+    convos[1].id = (char *)"short-id";
+    convos[1].members = m;
+    convos[1].member_count = 2;
+    memset(&page, 0, sizeof page);
+    page.convos = convos;
+    page.convo_count = 2;
+
+    memset(&got, 0, sizeof got);
+    CHECK(indigo_chat_inbox_append_from_wolfram(&got, &page, "did:plc:me") == 1);
+    CHECK(got.count == 1);
+    CHECK(strcmp(got.items[0].id, "short-id") == 0);
+}
+
+static void
 test_chat_requests_label(void)
 {
     char buf[64];
@@ -6076,6 +6109,7 @@ main(void)
     test_canvas_basics();
     test_chat_inbox_counterpart();
     test_chat_requests_label();
+    test_chat_long_id();
     test_signed_out_clears_messages();
     test_requests_paging();
     test_canvas_overflow_is_bounded();

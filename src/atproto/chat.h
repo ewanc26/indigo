@@ -23,7 +23,9 @@ extern "C" {
 #endif
 
 #define INDIGO_CHAT_CONVOS_MAX  30
-#define INDIGO_CHAT_ID_MAX      64
+/* A conversation id as the bridge accepts it: 1 to 128 characters (validConvoId in
+ * bridge/src/domain/api.ts), plus the terminator. */
+#define INDIGO_CHAT_ID_MAX      129
 #define INDIGO_CHAT_PREVIEW_MAX 128
 
 typedef struct {
