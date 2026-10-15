@@ -603,6 +603,38 @@ fill_social(indigo_app *app, const scenario *s)
         n[2].kind = INDIGO_NOTE_FOLLOW;
         indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
         indigo_app_notifications_loaded(app, n, 3);
+    } else if (s->screen == INDIGO_SCREEN_DMS) {
+        if (s->timeline == 0) {
+            /* Convo list, loading state. */
+            app->dms.loading = true;
+        } else if (s->timeline == 1) {
+            /* Convo list with conversations. */
+            indigo_convo c[2];
+            memset(c, 0, sizeof c);
+            snprintf(c[0].id, sizeof c[0].id, "msg:1234");
+            snprintf(c[0].handle, sizeof c[0].handle, "rhi.example.social");
+            snprintf(c[0].name, sizeof c[0].name, "Rhiannon");
+            snprintf(c[0].last_text, sizeof c[0].last_text, "Rivers before roads, always.");
+            c[0].has_unread = true;
+            c[0].unread = 2;
+            snprintf(c[1].id, sizeof c[1].id, "msg:5678");
+            snprintf(c[1].handle, sizeof c[1].handle, "cobalt.example");
+            snprintf(c[1].name, sizeof c[1].name, "Cobalt");
+            snprintf(c[1].last_text, sizeof c[1].last_text, "Shipped v0.10.5 today.");
+            indigo_app_convos_loaded(app, c, 2, NULL);
+            app->dms.selected = 0;
+        } else if (s->timeline == 2) {
+            /* Message view with messages. */
+            indigo_message m[2];
+            memset(m, 0, sizeof m);
+            snprintf(m[0].text, sizeof m[0].text, "How does the convo look on 3DS?");
+            snprintf(m[0].sender, sizeof m[0].sender, "rhi.example.social");
+            snprintf(m[1].text, sizeof m[1].text, "Pretty good so far!");
+            snprintf(m[1].sender, sizeof m[1].sender, "did:plc:me");
+            m[1].is_mine = true;
+            indigo_copy_utf8(app->dms.active_id, sizeof app->dms.active_id, "msg:1234");
+            indigo_app_messages_loaded(app, m, 2, NULL);
+        }
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -861,6 +893,9 @@ main(int argc, char **argv)
         {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0, false},
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
+        {"dms-loading", INDIGO_SCREEN_DMS, false, 0, 0, 0, 0, false},
+        {"dms", INDIGO_SCREEN_DMS, false, 0, 0, 1, 0, false},
+        {"dms-convo", INDIGO_SCREEN_DMS, false, 0, 0, 2, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},

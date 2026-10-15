@@ -114,6 +114,9 @@ typedef struct {
     char cursor[INDIGO_CURSOR_MAX];
     bool has_more;
     bool loading;
+    /* Set by a reset fetch and cleared when its first page lands, so the
+     * caller can tell the start of a fresh timeline from a later page. */
+    bool awaiting_first_page;
     /* A line for the person, never containing credentials. */
     char status[INDIGO_POST_NOTE_MAX];
     bool status_is_error;
@@ -138,7 +141,9 @@ bool indigo_timeline_wants_page(const indigo_timeline *t);
 
 /* Start/finish a fetch. `reset` replaces the list; otherwise it appends. */
 void indigo_timeline_begin_fetch(indigo_timeline *t, bool reset);
-void indigo_timeline_finish_fetch(indigo_timeline *t, const char *next_cursor);
+/* Returns true when this page completed a reset fetch: the first page of a
+ * fresh timeline, which is what the on-card cache keeps. */
+bool indigo_timeline_finish_fetch(indigo_timeline *t, const char *next_cursor);
 void indigo_timeline_fail_fetch(indigo_timeline *t, const char *message);
 
 /* Like/repost state, keyed by post URI (the list may have been replaced while

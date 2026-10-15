@@ -267,6 +267,31 @@ indigo_session_submit_feed(const char *feed_uri, const char *cursor)
     return false;
 }
 
+bool
+indigo_session_submit_convos(const char *cursor, bool paging)
+{
+    (void) cursor;
+    (void) paging;
+    return false;
+}
+
+bool
+indigo_session_submit_messages(const char *convo_id, const char *cursor, bool paging)
+{
+    (void) convo_id;
+    (void) cursor;
+    (void) paging;
+    return false;
+}
+
+bool
+indigo_session_submit_send_message(const char *convo_id, const char *text)
+{
+    (void) convo_id;
+    (void) text;
+    return false;
+}
+
 void
 indigo_session_post_search_results(const indigo_post **posts, unsigned *count)
 {
@@ -283,6 +308,20 @@ indigo_session_feeds_results(const indigo_list **feeds, unsigned *count)
 
 const indigo_actor *
 indigo_session_search_results(unsigned *count)
+{
+    *count = 0;
+    return NULL;
+}
+
+const indigo_convo *
+indigo_session_convos(unsigned *count)
+{
+    *count = 0;
+    return NULL;
+}
+
+const indigo_message *
+indigo_session_messages(unsigned *count)
 {
     *count = 0;
     return NULL;

@@ -274,6 +274,51 @@ indigo_app_open_notifications(indigo_app *app)
 }
 
 void
+indigo_app_open_dms(indigo_app *app)
+{
+    if (app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_DMS;
+    indigo_dms_clear_list(&app->dms);
+    app->dms.loading = true;
+    app->request = INDIGO_REQUEST_DMS;
+}
+
+void
+indigo_app_open_convo(indigo_app *app, const char *convo_id)
+{
+    if (app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_DMS;
+    indigo_copy_utf8(app->dms.active_id, sizeof app->dms.active_id, convo_id);
+    indigo_dms_clear_messages(&app->dms);
+    app->dms.loading_messages = true;
+    app->request = INDIGO_REQUEST_DMS_MESSAGES;
+}
+
+void
+indigo_app_send_message(indigo_app *app)
+{
+    indigo_dms *d = &app->dms;
+
+    if (!d->active_id[0] || d->sending || d->draft[0] == '\0' ||
+        app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_copy_utf8(app->request_convo_id, sizeof app->request_convo_id,
+                     d->active_id);
+    indigo_copy_utf8(app->request_message, sizeof app->request_message,
+                     d->draft);
+    d->sending = true;
+    d->draft[0] = '\0';
+    app->request = INDIGO_REQUEST_SEND_MESSAGE;
+}
+
+void
 indigo_app_open_menu(indigo_app *app)
 {
     indigo_app_push_screen(app);
@@ -371,6 +416,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_UPDATE:
         indigo_app_update_update(app, input);
+        break;
+    case INDIGO_SCREEN_DMS:
+        indigo_app_update_dms(app, input);
         break;
     }
 }

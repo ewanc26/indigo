@@ -216,6 +216,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
     static const indigo_action note_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+    static const indigo_action dms_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
+        INDIGO_ACTION_SEND, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action menu_actions[] = {
         INDIGO_ACTION_MENU0, INDIGO_ACTION_MENU1, INDIGO_ACTION_MENU2, INDIGO_ACTION_MENU3,
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
@@ -257,6 +260,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_MENU:
         USE(menu_actions);
+        break;
+    case INDIGO_SCREEN_DMS:
+        USE(dms_actions);
         break;
     case INDIGO_SCREEN_COMPOSE:
         USE(compose_actions);

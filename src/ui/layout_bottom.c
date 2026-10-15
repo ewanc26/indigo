@@ -164,6 +164,47 @@ build_bottom_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_dms(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_dms *d = &app->dms;
+
+    if (d->active_id[0]) {
+        /* Message compose view. */
+        indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Messages");
+        indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+
+        /* Show the draft text so far. */
+        if (d->draft[0]) {
+            indigo_canvas_text(c, 14, 72, 0.6f, COL_TEXT_SOFT, "%.40s", d->draft);
+        }
+        indigo_layout_action_pill(c, INDIGO_ACTION_SEND, d->sending, false, COL_PILL_ACTIVE, "A Send");
+        indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, d->loading_messages, false, COL_PILL_ACTIVE, "Reload");
+        return;
+    }
+
+    /* Convo list view: mirrors notifications. */
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Messages");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = d->scroll + row;
+        const indigo_convo *it;
+        char title[96];
+
+        if (idx >= d->count) {
+            break;
+        }
+        it = &d->convos[idx];
+        snprintf(title, sizeof title, "%s%.30s", it->has_unread ? "* " : "",
+                 it->name[0] ? it->name : it->handle);
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                               idx == d->selected, title,
+                               it->last_text[0] ? it->last_text : "", it->avatar);
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE, "A Open");
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, d->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
 build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
@@ -537,6 +578,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_UPDATE:
         build_bottom_update(app, c);
+        break;
+    case INDIGO_SCREEN_DMS:
+        build_bottom_dms(app, c);
         break;
     }
 }

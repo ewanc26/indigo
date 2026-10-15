@@ -167,25 +167,31 @@ indigo_timeline_begin_fetch(indigo_timeline *t, bool reset)
         indigo_timeline_clear(t);
     }
     t->loading = true;
+    t->awaiting_first_page = reset;
     t->status[0] = '\0';
     t->status_is_error = false;
 }
 
-void
+bool
 indigo_timeline_finish_fetch(indigo_timeline *t, const char *next_cursor)
 {
+    bool first = t->awaiting_first_page;
+
     t->loading = false;
+    t->awaiting_first_page = false;
     indigo_copy_utf8(t->cursor, sizeof t->cursor, next_cursor);
     t->has_more = t->cursor[0] != '\0' && t->count < INDIGO_TIMELINE_MAX;
     if (t->count == 0) {
         indigo_copy_utf8(t->status, sizeof t->status, "Nothing here yet.");
     }
+    return first;
 }
 
 void
 indigo_timeline_fail_fetch(indigo_timeline *t, const char *message)
 {
     t->loading = false;
+    t->awaiting_first_page = false;
     indigo_copy_utf8(t->status, sizeof t->status, message);
     t->status_is_error = true;
 }

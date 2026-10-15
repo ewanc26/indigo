@@ -64,6 +64,7 @@ indigo_app_signed_out(indigo_app *app, const char *message)
     indigo_timeline_clear(&app->timeline);
     indigo_timeline_clear(&app->thread);
     indigo_notifications_clear(&app->notifications);
+    memset(&app->dms, 0, sizeof app->dms);
     memset(&app->profile, 0, sizeof app->profile);
     app->history_count = 0;
     indigo_app_set_status(s, message, false);
@@ -131,6 +132,84 @@ indigo_app_notifications_failed(indigo_app *app, const char *message)
     app->notifications.loading = false;
     indigo_copy_utf8(app->notifications.status, sizeof app->notifications.status, message);
     app->notifications.status_is_error = true;
+}
+
+void
+indigo_app_convos_loaded(indigo_app *app, const indigo_convo *convos, unsigned count,
+                         const char *next_cursor)
+{
+    indigo_dms *d = &app->dms;
+
+    indigo_dms_clear_list(d);
+    for (unsigned i = 0; convos && i < count && i < INDIGO_CONVO_MAX; i++) {
+        if (!indigo_dms_append_convo(d, &convos[i])) {
+            break;
+        }
+    }
+    indigo_copy_utf8(d->cursor, sizeof d->cursor, next_cursor ? next_cursor : "");
+    d->has_more = next_cursor && next_cursor[0];
+    d->loading = false;
+    if (d->count == 0) {
+        indigo_copy_utf8(d->status, sizeof d->status, "No conversations yet.");
+    }
+}
+
+void
+indigo_app_convos_failed(indigo_app *app, const char *message)
+{
+    indigo_dms *d = &app->dms;
+
+    d->loading = false;
+    indigo_copy_utf8(d->status, sizeof d->status, message);
+    d->status_is_error = true;
+}
+
+void
+indigo_app_messages_loaded(indigo_app *app, const indigo_message *messages, unsigned count,
+                           const char *next_cursor)
+{
+    indigo_dms *d = &app->dms;
+
+    indigo_dms_clear_messages(d);
+    for (unsigned i = 0; messages && i < count && i < INDIGO_MESSAGE_MAX; i++) {
+        if (!indigo_dms_append_message(d, &messages[i])) {
+            break;
+        }
+    }
+    indigo_copy_utf8(d->cursor, sizeof d->cursor, next_cursor ? next_cursor : "");
+    d->loading_messages = false;
+    if (d->message_count == 0) {
+        indigo_copy_utf8(d->status_msg, sizeof d->status_msg, "No messages yet.");
+    }
+}
+
+void
+indigo_app_messages_failed(indigo_app *app, const char *message)
+{
+    indigo_dms *d = &app->dms;
+
+    d->loading_messages = false;
+    indigo_copy_utf8(d->status_msg, sizeof d->status_msg, message);
+    d->status_msg_is_error = true;
+}
+
+void
+indigo_app_message_sent(indigo_app *app)
+{
+    indigo_dms *d = &app->dms;
+
+    d->sending = false;
+    d->draft[0] = '\0';
+}
+
+void
+indigo_app_message_failed(indigo_app *app, const char *message)
+{
+    indigo_dms *d = &app->dms;
+
+    d->sending = false;
+    indigo_copy_utf8(d->status_msg, sizeof d->status_msg, message);
+    d->status_msg_is_error = true;
 }
 
 void

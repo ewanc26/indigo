@@ -1,6 +1,7 @@
 #ifndef INDIGO_SESSION_H
 #define INDIGO_SESSION_H
 
+#include "app/dms.h"
 #include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
@@ -36,6 +37,12 @@ typedef enum {
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
     INDIGO_SESSION_EVENT_GRAPH_DONE,
     INDIGO_SESSION_EVENT_GRAPH_FAILED,
+    INDIGO_SESSION_EVENT_CONVOS_PAGE,
+    INDIGO_SESSION_EVENT_CONVOS_FAILED,
+    INDIGO_SESSION_EVENT_MESSAGES_PAGE,
+    INDIGO_SESSION_EVENT_MESSAGES_FAILED,
+    INDIGO_SESSION_EVENT_MESSAGE_SENT,
+    INDIGO_SESSION_EVENT_MESSAGE_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -92,6 +99,11 @@ typedef struct {
     /* GRAPH_*: what was attempted. A block reports its new record URI in
      * `record_uri`; mute, unmute and unblock report none. */
     indigo_graph_action graph;
+    /* CONVOS_PAGE: how many convos indigo_session_convos() holds, and the
+     * cursor for the next page. */
+    unsigned convo_count;
+    /* A message was sent: true when it succeeded. */
+    bool sent;
 } indigo_session_event;
 
 /*
@@ -187,6 +199,11 @@ bool indigo_session_submit_follow(indigo_follow_action action, const char *did,
  * ignored otherwise. */
 bool indigo_session_submit_graph(indigo_graph_action action, const char *did,
                                  const char *block_uri);
+/* DMs. `cursor` NULL or empty fetches the first page of conversations; for a
+ * message page, `convo_id` selects the conversation and `cursor` the page. */
+bool indigo_session_submit_convos(const char *cursor, bool paging);
+bool indigo_session_submit_messages(const char *convo_id, const char *cursor, bool paging);
+bool indigo_session_submit_send_message(const char *convo_id, const char *text);
 
 /* True while a job is running or its event has not been polled. */
 bool indigo_session_busy(void);
@@ -198,8 +215,11 @@ const indigo_post *indigo_session_page(unsigned *count);
 /* Results of the last PROFILE_LOADED / NOTIFICATIONS_PAGE event; same
  * lifetime rule as indigo_session_page(). */
 const indigo_profile *indigo_session_profile(void);
-const indigo_notification *indigo_session_notifications(unsigned *count);
-const indigo_actor *indigo_session_search_results(unsigned *count);
+    const indigo_notification *indigo_session_notifications(unsigned *count);
+    const indigo_actor *indigo_session_search_results(unsigned *count);
+    /* DM results: convo list or message page. Same lifetime rule as the rest. */
+    const indigo_convo *indigo_session_convos(unsigned *count);
+    const indigo_message *indigo_session_messages(unsigned *count);
 
 /* Returns true and fills `out` when a job finished since the last poll. */
 bool indigo_session_poll(indigo_session_event *out);
