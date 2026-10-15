@@ -123,6 +123,13 @@ indigo_update_asset_ok(const char *version, const char *name, const char *url)
     }
     snprintf(want_name, sizeof want_name, "indigo-%s.3dsx", version);
     snprintf(want_url, sizeof want_url, "%s%s", prefix, want_name);
+    if (strcmp(name, want_name) == 0 && strcmp(url, want_url) == 0) {
+        return true;
+    }
+    /* Every release also carries the stable name, and a later release's manifest
+     * may name it instead. Both names are from this repository's own release. */
+    snprintf(want_name, sizeof want_name, "indigo.3dsx");
+    snprintf(want_url, sizeof want_url, "%s%s", prefix, want_name);
     return strcmp(name, want_name) == 0 && strcmp(url, want_url) == 0;
 }
 
