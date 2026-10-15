@@ -164,7 +164,19 @@ indigo_layout_list_row(indigo_canvas *c, indigo_action a, bool selected, const c
      * truncated as tightly as an unindented one rather than running under the
      * row's right edge. */
     units = (unsigned) ((r.x + ROW_W - 10 - text_x) / (INDIGO_CHAR_WIDTH * 0.55f));
-    indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", title);
+    /* A title longer than the row is cut with an ellipsis at the row's edge,
+     * rather than clipped mid-letter by the canvas. */
+    {
+        unsigned title_units = (unsigned) ((r.x + ROW_W - 10 - text_x) / (INDIGO_CHAR_WIDTH * 0.6f));
+        size_t n = strlen(title);
+        if (n > title_units && title_units > 3) {
+            char shown[INDIGO_POST_NAME_MAX * 2];
+            snprintf(shown, sizeof shown, "%.*s...", (int) (title_units - 3), title);
+            indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", shown);
+        } else {
+            indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", title);
+        }
+    }
     if (indigo_wrap(body, units, &line, 1, &cut) == 0) {
         line = (indigo_line) {0, 0};
     }
