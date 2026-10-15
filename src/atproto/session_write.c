@@ -60,7 +60,7 @@ indigo_session_do_publish(const indigo_job *j)
             ev.posted_count = (unsigned) posted;
             ev.thread_count = j->thread_count;
             snprintf(ev.message, sizeof ev.message,
-                     "Only %u of %u thread posts were published. Earlier posts are live; the rest were not sent.",
+                     "Only %u of %u thread posts went out. The rest did not.",
                      ev.posted_count, ev.thread_count);
             indigo_log_warn("thread partially published: %u of %u (wolfram status %d)",
                             ev.posted_count, ev.thread_count, (int) st);
