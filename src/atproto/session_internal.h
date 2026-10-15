@@ -118,6 +118,7 @@ typedef struct {
     /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
+    char convo_messages_id[INDIGO_POST_URI_MAX];
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;

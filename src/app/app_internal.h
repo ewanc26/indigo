@@ -29,6 +29,7 @@ void indigo_app_refresh_timeline(indigo_app *app);
 void indigo_app_open_thread(indigo_app *app, const char *uri);
 void indigo_app_open_profile(indigo_app *app, const char *actor);
 void indigo_app_open_notifications(indigo_app *app);
+void indigo_app_send_message(indigo_app *app);
 void indigo_app_open_menu(indigo_app *app);
 void indigo_app_toggle_like(indigo_app *app);
 void indigo_app_toggle_repost(indigo_app *app);

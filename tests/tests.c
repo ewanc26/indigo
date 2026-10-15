@@ -13,6 +13,9 @@
 #include "store/draft_store.h"
 #include "store/file.h"
 #include "store/settings_store.h"
+#include "store/cache_store.h"
+#include "app/timeline_cache.h"
+#include "app/post_queue.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
 #include "ui/layout.h"
@@ -1987,6 +1990,292 @@ test_draft_store(void)
         }
     }
     CHECK(indigo_draft_store_load(path, out, sizeof out) == INDIGO_STORE_MISSING);
+}
+
+/* The offline compose queue: order kept, nothing published on its own, and text
+ * refused rather than cut. */
+static void
+test_post_queue(void)
+{
+    static indigo_post_queue q;
+    static indigo_queued_post got;
+    char big[INDIGO_QUEUE_TEXT_MAX + 1];
+
+    indigo_queue_init(&q);
+    CHECK(indigo_queue_get(&q, 0) == NULL);
+    CHECK(!indigo_queue_add(&q, "", 1));
+    CHECK(!indigo_queue_add(&q, NULL, 1));
+    CHECK(q.count == 0);
+
+    CHECK(indigo_queue_add(&q, "first", 100));
+    CHECK(indigo_queue_add(&q, "second", 200));
+    CHECK(indigo_queue_add(&q, "third", 300));
+    CHECK(strcmp(indigo_queue_get(&q, 0)->text, "first") == 0);
+    CHECK(indigo_queue_get(&q, 2)->queued_at == 300);
+    CHECK(indigo_queue_get(&q, 3) == NULL);
+
+    /* Discarding the middle post keeps the others in order. */
+    CHECK(indigo_queue_discard(&q, 1));
+    CHECK(q.count == 2);
+    CHECK(strcmp(indigo_queue_get(&q, 1)->text, "third") == 0);
+    CHECK(!indigo_queue_discard(&q, 5));
+
+    /* Taking hands one post over for the person to send, and removes it. A
+     * failed send is retried by putting the post back. */
+    CHECK(indigo_queue_take(&q, 0, &got));
+    CHECK(strcmp(got.text, "first") == 0);
+    CHECK(q.count == 1);
+    CHECK(!indigo_queue_take(&q, 4, &got));
+    CHECK(indigo_queue_add(&q, got.text, got.queued_at));
+    CHECK(q.count == 2);
+
+    /* Over-long text is refused, not cut. */
+    memset(big, 'a', sizeof big - 1);
+    big[sizeof big - 1] = '\0';
+    CHECK(!indigo_queue_add(&q, big, 400));
+    CHECK(q.count == 2);
+
+    /* Full at INDIGO_QUEUE_MAX: the next add is refused and nothing moves. */
+    indigo_queue_init(&q);
+    for (unsigned i = 0; i < INDIGO_QUEUE_MAX; i++) {
+        CHECK(indigo_queue_add(&q, "p", (long long) i));
+    }
+    CHECK(!indigo_queue_add(&q, "overflow", 999));
+    CHECK(q.count == INDIGO_QUEUE_MAX);
+    CHECK(indigo_queue_get(&q, INDIGO_QUEUE_MAX - 1)->queued_at ==
+          (long long) (INDIGO_QUEUE_MAX - 1));
+}
+
+static void
+test_cache_codec(void)
+{
+    static indigo_cache_timeline in, out;
+    static char buf[INDIGO_CACHE_FILE_MAX];
+    size_t len = 0;
+
+    indigo_cache_timeline_clear(&in);
+    snprintf(in.posts[0].uri, sizeof in.posts[0].uri, "at://did:plc:abc/app.bsky.feed.post/3kx1");
+    snprintf(in.posts[0].cid, sizeof in.posts[0].cid, "bafyreia1");
+    /* Newline, tab, backslash and a carriage return must survive the round
+     * trip without splitting the record. */
+    snprintf(in.posts[0].text, sizeof in.posts[0].text, "line one\nline\ttwo \\ back\r end");
+    snprintf(in.posts[1].uri, sizeof in.posts[1].uri, "at://did:plc:abc/app.bsky.feed.post/3kx2");
+    snprintf(in.posts[1].cid, sizeof in.posts[1].cid, "bafyreia2");
+    snprintf(in.posts[1].text, sizeof in.posts[1].text, "caf\xc3\xa9 \xe2\x9c\x93");
+    /* A display name may hold a tab and a line break; it is escaped, so the
+     * record survives as one line. The handle is written plain. */
+    snprintf(in.posts[0].handle, sizeof in.posts[0].handle, "alice.test");
+    snprintf(in.posts[0].display_name, sizeof in.posts[0].display_name, "Al\tice\nA.");
+    snprintf(in.posts[1].handle, sizeof in.posts[1].handle, "bob.test");
+    in.count = 2;
+
+    CHECK(indigo_cache_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(len > 0 && len <= INDIGO_CACHE_FILE_MAX);
+    CHECK(indigo_cache_decode(buf, len, &out) == INDIGO_CODEC_OK);
+    CHECK(out.count == 2);
+    CHECK(strcmp(out.posts[0].uri, in.posts[0].uri) == 0);
+    CHECK(strcmp(out.posts[0].cid, in.posts[0].cid) == 0);
+    CHECK(strcmp(out.posts[0].text, in.posts[0].text) == 0);
+    CHECK(strcmp(out.posts[1].text, in.posts[1].text) == 0);
+    CHECK(strcmp(out.posts[0].handle, "alice.test") == 0);
+    CHECK(strcmp(out.posts[0].display_name, "Al\tice\nA.") == 0);
+    CHECK(strcmp(out.posts[1].handle, "bob.test") == 0);
+
+    /* A file cut short anywhere is refused whole, and leaves nothing behind. */
+    for (size_t cut = 0; cut < len; cut++) {
+        indigo_codec_status st = indigo_cache_decode(buf, cut, &out);
+
+        CHECK(st != INDIGO_CODEC_OK);
+        CHECK(out.count == 0);
+    }
+
+    CHECK(indigo_cache_decode("", 0, &out) == INDIGO_CODEC_EMPTY);
+    CHECK(indigo_cache_decode("garbage\n", 8, &out) == INDIGO_CODEC_CORRUPT);
+    {
+        const char *ver = "indigo-cache 2\nend\n";
+        const char *noend = "indigo-cache 1\n";
+        const char *badesc = "indigo-cache 1\npost\tat://x\tc\tbad\\q\nend\n";
+        const char *nofield = "indigo-cache 1\npost\tat://x\tc\nend\n";
+
+        CHECK(indigo_cache_decode(ver, strlen(ver), &out) == INDIGO_CODEC_BAD_VERSION);
+        CHECK(indigo_cache_decode(noend, strlen(noend), &out) == INDIGO_CODEC_INCOMPLETE);
+        CHECK(indigo_cache_decode(badesc, strlen(badesc), &out) == INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_cache_decode(nofield, strlen(nofield), &out) == INDIGO_CODEC_CORRUPT);
+        CHECK(indigo_cache_decode("indigo-cache 1\nend\n", 19, &out) == INDIGO_CODEC_OK);
+        CHECK(out.count == 0);
+    }
+
+    /* A field that would break its line is refused, not written. */
+    {
+        static indigo_cache_timeline bad;
+
+        indigo_cache_timeline_clear(&bad);
+        snprintf(bad.posts[0].uri, sizeof bad.posts[0].uri, "at://a\tb");
+        snprintf(bad.posts[0].cid, sizeof bad.posts[0].cid, "c");
+        bad.count = 1;
+        CHECK(indigo_cache_encode(&bad, buf, sizeof buf, &len) == INDIGO_CODEC_INCOMPLETE);
+
+        snprintf(bad.posts[0].uri, sizeof bad.posts[0].uri, "%s", "");
+        CHECK(indigo_cache_encode(&bad, buf, sizeof buf, &len) == INDIGO_CODEC_INCOMPLETE);
+
+        bad.count = INDIGO_CACHE_POSTS_MAX + 1;
+        CHECK(indigo_cache_encode(&bad, buf, sizeof buf, &len) == INDIGO_CODEC_TOO_BIG);
+    }
+
+    /* The longest text a post can hold, multi-byte characters included, comes
+     * back byte for byte. */
+    {
+        static indigo_cache_timeline widest;
+        size_t n = 0;
+
+        indigo_cache_timeline_clear(&widest);
+        snprintf(widest.posts[0].uri, sizeof widest.posts[0].uri, "at://u");
+        snprintf(widest.posts[0].cid, sizeof widest.posts[0].cid, "c");
+        widest.posts[0].text[n++] = 'a';
+        for (int i = 0; i < 149; i++) {
+            widest.posts[0].text[n++] = '\xc3';
+            widest.posts[0].text[n++] = '\xa9';
+        }
+        widest.posts[0].text[n] = '\0';
+        widest.count = 1;
+
+        CHECK(strlen(widest.posts[0].text) == INDIGO_CACHE_TEXT_MAX - 1);
+        CHECK(indigo_cache_encode(&widest, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+        CHECK(indigo_cache_decode(buf, len, &out) == INDIGO_CODEC_OK);
+        CHECK(strcmp(out.posts[0].text, widest.posts[0].text) == 0);
+    }
+
+    /* A full page of worst-case posts still fits the store's buffer. */
+    {
+        static indigo_cache_timeline full;
+        char wide[INDIGO_CACHE_TEXT_MAX];
+
+        indigo_cache_timeline_clear(&full);
+        memset(wide, '\\', sizeof wide - 1);
+        wide[sizeof wide - 1] = '\0';
+        for (size_t i = 0; i < INDIGO_CACHE_POSTS_MAX; i++) {
+            memset(full.posts[i].uri, 'u', INDIGO_CACHE_URI_MAX - 1);
+            memset(full.posts[i].cid, 'c', INDIGO_CACHE_CID_MAX - 1);
+            snprintf(full.posts[i].text, sizeof full.posts[i].text, "%s", wide);
+        }
+        full.count = INDIGO_CACHE_POSTS_MAX;
+
+        CHECK(indigo_cache_encode(&full, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+        CHECK(len <= INDIGO_CACHE_FILE_MAX);
+        CHECK(indigo_cache_decode(buf, len, &out) == INDIGO_CODEC_OK);
+        CHECK(out.count == INDIGO_CACHE_POSTS_MAX);
+    }
+}
+
+static void
+test_timeline_cache(void)
+{
+    static indigo_timeline t;
+    static indigo_cache_timeline c, back;
+    static indigo_timeline restored;
+
+    indigo_timeline_init(&t);
+    /* The first page of a reset fetch is the one the cache keeps. */
+    indigo_timeline_begin_fetch(&t, true);
+    for (unsigned i = 0; i < 3; i++) {
+        indigo_post p;
+
+        memset(&p, 0, sizeof p);
+        snprintf(p.uri, sizeof p.uri, "at://did:plc:x/app.bsky.feed.post/%u", i);
+        snprintf(p.cid, sizeof p.cid, "bafy%u", i);
+        snprintf(p.handle, sizeof p.handle, "user%u.test", i);
+        snprintf(p.display_name, sizeof p.display_name, "User %u", i);
+        snprintf(p.text, sizeof p.text, "post %u\nsecond line", i);
+        /* Embeds and counts are not cached; they must come back empty. */
+        p.like_count = 9;
+        p.embed_kind = INDIGO_EMBED_IMAGE;
+        CHECK(indigo_timeline_append(&t, &p));
+    }
+    CHECK(indigo_timeline_finish_fetch(&t, "page-2") == true);
+
+    /* A later page is not a fresh timeline, and a failed fetch is not one. */
+    indigo_timeline_begin_fetch(&t, false);
+    CHECK(indigo_timeline_finish_fetch(&t, "page-3") == false);
+    indigo_timeline_begin_fetch(&t, true);
+    indigo_timeline_fail_fetch(&t, "Network error.");
+    indigo_timeline_begin_fetch(&t, false);
+    CHECK(indigo_timeline_finish_fetch(&t, "page-4") == false);
+
+    indigo_timeline_begin_fetch(&t, true);
+    for (unsigned i = 0; i < 3; i++) {
+        indigo_post p;
+
+        memset(&p, 0, sizeof p);
+        snprintf(p.uri, sizeof p.uri, "at://did:plc:x/app.bsky.feed.post/%u", i);
+        snprintf(p.cid, sizeof p.cid, "bafy%u", i);
+        snprintf(p.handle, sizeof p.handle, "user%u.test", i);
+        snprintf(p.display_name, sizeof p.display_name, "User %u", i);
+        snprintf(p.text, sizeof p.text, "post %u\nsecond line", i);
+        CHECK(indigo_timeline_append(&t, &p));
+    }
+    CHECK(indigo_timeline_finish_fetch(&t, "page-2") == true);
+
+    indigo_timeline_cache_capture(&t, &c);
+    CHECK(c.count == 3);
+    CHECK(strcmp(c.posts[1].handle, "user1.test") == 0);
+
+    /* Restoring fills the rows back in, without a cursor, so nothing fetches
+     * on its own. Counts and embeds are back at their empty values. */
+    indigo_timeline_init(&restored);
+    CHECK(indigo_timeline_cache_restore(&restored, &c) == 3);
+    CHECK(restored.count == 3);
+    CHECK(strcmp(restored.posts[2].text, "post 2\nsecond line") == 0);
+    CHECK(strcmp(restored.posts[2].display_name, "User 2") == 0);
+    CHECK(restored.posts[2].like_count == 0);
+    CHECK(restored.posts[2].embed_kind == INDIGO_EMBED_NONE);
+    CHECK(restored.cursor[0] == '\0');
+    CHECK(!indigo_timeline_wants_page(&restored));
+
+    /* Through the codec and back, the rows are unchanged. */
+    {
+        static char buf[INDIGO_CACHE_FILE_MAX];
+        size_t len = 0;
+
+        CHECK(indigo_cache_encode(&c, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+        CHECK(indigo_cache_decode(buf, len, &back) == INDIGO_CODEC_OK);
+        CHECK(back.count == 3);
+        CHECK(strcmp(back.posts[0].display_name, "User 0") == 0);
+    }
+}
+
+static void
+test_cache_store(void)
+{
+    static indigo_cache_timeline in, out;
+    const char *path = "build-host/cache-test.json";
+
+    indigo_cache_timeline_clear(&in);
+    snprintf(in.posts[0].uri, sizeof in.posts[0].uri, "at://u/1");
+    snprintf(in.posts[0].cid, sizeof in.posts[0].cid, "c1");
+    snprintf(in.posts[0].text, sizeof in.posts[0].text, "hello");
+    in.count = 1;
+
+    remove(path);
+    CHECK(indigo_cache_store_load(path, &out) == INDIGO_STORE_MISSING);
+    CHECK(indigo_cache_store_save(path, &in) == INDIGO_STORE_OK);
+    CHECK(indigo_cache_store_load(path, &out) == INDIGO_STORE_OK);
+    CHECK(out.count == 1 && strcmp(out.posts[0].text, "hello") == 0);
+
+    /* A damaged cache is set aside, not deleted, and the caller sees nothing. */
+    {
+        FILE *f = fopen(path, "wb");
+
+        CHECK(f != NULL);
+        if (f) {
+            fputs("indigo-cache 1\npost\tbroken\n", f);
+            fclose(f);
+        }
+        CHECK(indigo_cache_store_load(path, &out) == INDIGO_STORE_UNREADABLE);
+        CHECK(out.count == 0);
+        CHECK(fopen(path, "rb") == NULL);
+        remove(path);
+        remove("build-host/cache-test.json.bad");
+    }
 }
 
 static void
@@ -6146,6 +6435,10 @@ main(void)
     test_settings_defaults_and_clamp();
     test_settings_codec();
     test_settings_store();
+    test_post_queue();
+    test_cache_codec();
+    test_timeline_cache();
+    test_cache_store();
     test_draft_store();
     test_settings_reach_the_app();
     test_failures();
