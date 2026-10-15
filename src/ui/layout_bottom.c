@@ -42,7 +42,7 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, thread ? "Thread" : "Timeline");
     if (!indigo_layout_image_button(c, app)) {
         indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%.22s", t->loading ? "Loading..." : t->status);
+                           "%.16s", t->loading ? "Loading..." : t->status);
     }
     /* The button hints live in the top screen's title bar; a bottom pill is
      * labelled with its action so no back hint appears twice. A feed view's B
@@ -116,10 +116,12 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
 
         /* One line each: the pills are 34 px tall and two lines of text do not fit. */
         indigo_canvas_rect(c, fl.x, fl.y, fl.w, fl.h, COL_PILL);
-        indigo_canvas_text(c, fl.x + 10, fl.y + 11, 0.6f, COL_TEXT, "Followers %u", p->followers);
+        indigo_canvas_text(c, fl.x + 10, fl.y + 4, 0.55f, COL_TEXT_SOFT, "Followers");
+        indigo_canvas_text(c, fl.x + 10, fl.y + 18, 0.7f, COL_TEXT, "%u", p->followers);
 
         indigo_canvas_rect(c, fg.x, fg.y, fg.w, fg.h, COL_PILL);
-        indigo_canvas_text(c, fg.x + 10, fg.y + 11, 0.6f, COL_TEXT, "Following %u", p->follows);
+        indigo_canvas_text(c, fg.x + 10, fg.y + 4, 0.55f, COL_TEXT_SOFT, "Following");
+        indigo_canvas_text(c, fg.x + 10, fg.y + 18, 0.7f, COL_TEXT, "%u", p->follows);
 
         indigo_rect pb = indigo_layout_button_rect(INDIGO_ACTION_POSTS);
 
@@ -266,7 +268,7 @@ build_bottom_queue(const indigo_app *app, indigo_canvas *c)
     }
     indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, q->count > 0, false, COL_PILL_ACTIVE, "A Send");
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, q->count > 0, false, COL_PILL_ACTIVE,
-                              app->queue_discard_armed ? "Y Confirm" : "Y Discard");
+                              app->queue_discard_armed ? "Confirm" : "Discard");
 }
 
 static void
@@ -426,8 +428,10 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         } else if (s->kind == INDIGO_SEARCH_AUTHOR) {
           /* The box doubles as the tab switch: it names the person and what
            * a tap on it will show instead. */
+          /* The box is narrower than a full handle and tab name, so the handle is
+           * cut and the tap hint is shortened to fit left of the Back button. */
           indigo_canvas_text(
-              c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.26s  Tap: %s",
+              c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.16s > %s",
               s->subject,
               wf_profile_tab_name(indigo_app_author_tab_after(app)));
         } else {
