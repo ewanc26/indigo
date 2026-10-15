@@ -33,6 +33,7 @@ typedef enum {
     INDIGO_SCREEN_UPDATE,
     INDIGO_SCREEN_MESSAGES,
     INDIGO_SCREEN_CHAT_THREAD,
+    INDIGO_SCREEN_CHAT_REQUESTS,
 } indigo_screen;
 
 typedef enum {
@@ -70,6 +71,8 @@ typedef enum {
     INDIGO_REQUEST_SEARCH,
     INDIGO_REQUEST_FOLLOW,
     INDIGO_REQUEST_CHAT_INBOX,
+    INDIGO_REQUEST_CHAT_REQUESTS,
+    INDIGO_REQUEST_CHAT_REQUESTS_MORE,
     INDIGO_REQUEST_CHAT_THREAD,
     INDIGO_REQUEST_EDIT_REPLY,
     INDIGO_REQUEST_CHAT_SEND,
@@ -149,6 +152,8 @@ typedef struct {
     indigo_profile profile;
     indigo_notifications notifications;
     indigo_chat_inbox messages;
+    /* The request list as the app shows it, copied from the session on each page. */
+    indigo_chat_inbox requests;
     indigo_chat_thread chat_thread;
     /* Pending message requests on the signed-in account; 0 hides the line. */
     int requests_count;
@@ -215,6 +220,10 @@ void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification 
 void indigo_app_notifications_failed(indigo_app *app, const char *message);
 void indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src);
 void indigo_app_messages_failed(indigo_app *app, const char *message);
+void indigo_app_requests_loaded(indigo_app *app, const indigo_chat_inbox *src);
+void indigo_app_requests_failed(indigo_app *app, const char *message);
+void indigo_app_open_requests(indigo_app *app);
+void indigo_app_update_chat_requests(indigo_app *app, const indigo_input *input);
 void indigo_app_chat_thread_loaded(indigo_app *app, const indigo_chat_thread *src);
 void indigo_app_chat_thread_failed(indigo_app *app, const char *message);
 void indigo_app_chat_send_done(indigo_app *app);

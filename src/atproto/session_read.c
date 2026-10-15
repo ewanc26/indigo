@@ -289,11 +289,14 @@ indigo_session_do_feed(const indigo_job *j)
  * call and in where the rows go; requests use listConvoRequests, which the
  * lexicon prefers over listConvos with a status filter. */
 static void
-run_chat_list(bool requests)
+run_chat_list(bool requests, const char *cursor)
 {
     indigo_session_event ev = {.kind = requests ? INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED
                                                 : INDIGO_SESSION_EVENT_CHAT_FAILED};
     indigo_chat_inbox *dst = requests ? &g_session.requests : &g_session.chat;
+    /* A cursor means the next page of requests: those rows are appended, not
+     * replacing the ones already shown. */
+    const bool append = requests && cursor && cursor[0] != '\0';
     wf_chat_convo_list list;
     wf_status st;
 
@@ -305,7 +308,7 @@ run_chat_list(bool requests)
     memset(&list, 0, sizeof list);
     if (requests) {
         st = wf_agent_chat_list_convo_requests_typed(g_session.agent, INDIGO_CHAT_CONVOS_MAX,
-                                                     NULL, &list);
+                                                     append ? cursor : NULL, &list);
     } else {
         st = wf_agent_chat_list_convos(g_session.agent, INDIGO_CHAT_CONVOS_MAX, NULL, &list);
     }
@@ -314,7 +317,9 @@ run_chat_list(bool requests)
         return;
     }
 
-    indigo_chat_inbox_clear(dst);
+    if (!append) {
+        indigo_chat_inbox_clear(dst);
+    }
     indigo_chat_inbox_append_from_wolfram(dst, &list, wf_agent_get_did(g_session.agent));
     wf_chat_convo_list_free(&list);
 
@@ -326,13 +331,13 @@ run_chat_list(bool requests)
 void
 indigo_session_do_chat_inbox(void)
 {
-    run_chat_list(false);
+    run_chat_list(false, NULL);
 }
 
 void
-indigo_session_do_chat_requests(void)
+indigo_session_do_chat_requests(const char *cursor)
 {
-    run_chat_list(true);
+    run_chat_list(true, cursor);
 }
 
 void
@@ -530,6 +535,18 @@ indigo_session_submit_chat_requests(void)
 {
     indigo_job j = {.kind = JOB_CHAT_REQUESTS};
 
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_requests_more(const char *cursor)
+{
+    indigo_job j = {.kind = JOB_CHAT_REQUESTS};
+
+    if (!cursor || cursor[0] == '\0') {
+        return false;
+    }
+    snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
     return indigo_session_enqueue(&j);
 }
 

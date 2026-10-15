@@ -69,6 +69,7 @@ indigo_app_signed_out(indigo_app *app, const char *message)
      * account's; the next sign-in starts with them empty. */
     memset(&app->messages, 0, sizeof app->messages);
     memset(&app->chat_thread, 0, sizeof app->chat_thread);
+    memset(&app->requests, 0, sizeof app->requests);
     app->requests_count = 0;
     app->history_count = 0;
     indigo_app_set_status(s, message, false);
@@ -743,4 +744,22 @@ indigo_app_open_settings(indigo_app *app)
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_SETTINGS;
     app->settings_selected = 0;
+}
+
+void
+indigo_app_requests_loaded(indigo_app *app, const indigo_chat_inbox *src)
+{
+    app->requests = *src;
+    app->requests.loading = false;
+    app->requests.status[0] = '\0';
+    app->requests.status_is_error = false;
+    app->requests_count = (int) src->count;
+}
+
+void
+indigo_app_requests_failed(indigo_app *app, const char *message)
+{
+    app->requests.loading = false;
+    indigo_copy_utf8(app->requests.status, sizeof app->requests.status, message);
+    app->requests.status_is_error = true;
 }

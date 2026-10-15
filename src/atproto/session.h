@@ -145,6 +145,9 @@ const indigo_chat_inbox *indigo_session_chat_inbox(void);
  * indigo_session_chat_requests once CHAT_REQUESTS_PAGE arrives. Nothing here
  * accepts a request. */
 bool indigo_session_submit_chat_requests(void);
+/* The next page of requests, from the cursor the last page reported. False when
+ * there is no cursor to continue from. */
+bool indigo_session_submit_chat_requests_more(const char *cursor);
 const indigo_chat_inbox *indigo_session_chat_requests(void);
 
 /* Fetch the newest messages of one conversation. Read them with
