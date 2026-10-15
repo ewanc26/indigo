@@ -101,6 +101,8 @@ typedef struct {
     /* GRAPH_*: what was attempted. A block reports its new record URI in
      * `record_uri`; mute, unmute and unblock report none. */
     indigo_graph_action graph;
+    /* A message was sent: true when it succeeded. */
+    bool sent;
 } indigo_session_event;
 
 /*
@@ -231,8 +233,8 @@ const indigo_post *indigo_session_page(unsigned *count);
 /* Results of the last PROFILE_LOADED / NOTIFICATIONS_PAGE event; same
  * lifetime rule as indigo_session_page(). */
 const indigo_profile *indigo_session_profile(void);
-const indigo_notification *indigo_session_notifications(unsigned *count);
-const indigo_actor *indigo_session_search_results(unsigned *count);
+    const indigo_notification *indigo_session_notifications(unsigned *count);
+    const indigo_actor *indigo_session_search_results(unsigned *count);
 
 /* Returns true and fills `out` when a job finished since the last poll. */
 bool indigo_session_poll(indigo_session_event *out);

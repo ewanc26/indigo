@@ -10,11 +10,16 @@ as the release notes.
 
 ### Added
 - Messages on the More menu opens a read-only direct message inbox: each conversation names its counterpart (or "Group"), shows the last message and the unread count, and the list pages. A is a conversation: its newest messages show on the top screen, selectable from the list below, with the account's own marked "You". A writes a reply on the software keyboard and Y sends it; a reply that fails to send stays as the draft ([#22](https://github.com/ewanc26/indigo/issues/22)).
+
+- Storage for posts written while offline: a queue of up to 8 posts that only leaves it when the person sends one, with inspect, retry and discard operations. It has no screen yet, so nothing is queued from the app.
 - Compose a text-only thread of up to eight top-level posts with Add to thread. Wolfram publishes the chain in order; if a later post fails, Indigo reports how many are already public and clears the draft so they cannot be duplicated. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Show web links from the More menu as QR codes on the top screen, with the full address on the bottom screen, so a phone can open a link the 3DS cannot. Uses Wolfram's wf_qr_encode; URLs too long for the encoder remain readable without a code. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Delete your own post from the thread screen, with explicit confirmation and a worker-side check that the AT-URI belongs to the signed-in account. ([#22](https://github.com/ewanc26/indigo/issues/22))
 
-- The image picker also lists the pictures the 3DS camera saves in `sdmc:/DCIM`, one folder down (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
+- The image picker also lists the pictures in `sdmc:/DCIM`, one folder deep (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
+
+- The home timeline is kept on the SD card between launches. While a saved session resumes, the last page is shown, and the refresh replaces it. The cache is removed on sign-out, and a damaged file is set aside as `.bad` without blocking boot. ([#13](https://github.com/ewanc26/indigo/issues/13))
+- Direct messages: a Messages row in the More menu opens the conversation list (`INDIGO_SCREEN_DMS`), reloads on A, opens a conversation on select, and sends a reply from a draft field. The worker fetches conversations and messages through `wf_agent_chat_list_convos`, `wf_agent_chat_get_messages` and `wf_agent_chat_send_message`. Host tests and snapshots pass; the 3DS build compiles.
 
 ### Changed
 

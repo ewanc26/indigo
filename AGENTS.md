@@ -413,6 +413,18 @@ and saves whenever the text changes; an empty draft removes the file. A damaged
 file is moved to `.bad`, never deleted. Nothing is ever sent without the person
 pressing send. Only the text is persisted, not what it was replying to.
 
+### Timeline cache
+
+`store/cache_codec` and `store/cache_store` keep the first page of the home
+timeline in `timeline.dat`: a versioned, one-post-per-line file with an `end`
+marker, text escaped so a post cannot split its line. `app/timeline_cache`
+moves rows to and from the codec's struct, keeping only what a row draws, so
+restored rows have no embeds, counts or viewer state. `main.c` restores the
+file only when a saved session exists, shows it while the session resumes, and
+the first refresh replaces it. It is saved only from a fresh home-timeline page,
+never a feed, and it is removed on sign-out with the decoded images. A damaged
+file is set aside as `.bad`; a missing or damaged cache never blocks boot.
+
 ## 15. Offline behaviour
 
 Separate:
