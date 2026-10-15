@@ -100,7 +100,8 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
 
     indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
     if (app->requests_count > 0 && indigo_chat_requests_label(app->requests_count, requests, sizeof requests)) {
-        indigo_canvas_text(c, 18, 36, 0.55f, COL_LINK, "%s", requests);
+        /* Right of the name, left of the N / M counter at x 330. */
+        indigo_canvas_text(c, 200, 36, 0.55f, COL_LINK, "%s", requests);
     }
     if (!sel) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
