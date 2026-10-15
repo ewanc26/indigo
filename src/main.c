@@ -8,6 +8,7 @@
 #include "input/input.h"
 #include "input/textinput.h"
 #include "store/draft_store.h"
+#include "store/queue_store.h"
 #include "store/settings_store.h"
 #include "ui/ui.h"
 #include "update/update_sd.h"
@@ -694,6 +695,12 @@ main(int argc, char **argv)
         indigo_log_warn("draft file was unreadable; it was kept as draft.dat.bad");
     }
     indigo_app_set_draft(&app, saved_draft);
+
+    /* Posts saved for later survive closing the app. A damaged file is set
+     * aside by the store, and the queue starts empty. */
+    if (indigo_queue_store_load(INDIGO_QUEUE_PATH, &app.queue) == INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("queue file was unreadable; it was kept as queue.dat.bad");
+    }
 
     /* The last home timeline, shown while the saved session is resumed. Only
      * with a saved session: the cache belongs to the account that was signed
