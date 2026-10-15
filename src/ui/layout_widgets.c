@@ -23,7 +23,8 @@ indigo_layout_top_title(indigo_canvas *c, const char *title, const char *hint)
 {
     indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, COL_BAR);
     indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", title);
-    indigo_canvas_text(c, 190, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
+    /* Starts after the longest titles and stops short of the N / M counter at x 330. */
+    indigo_canvas_text(c, 176, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
 }
 
 /* Wrap `text` into the top screen at (x, y); returns the next free y. */
