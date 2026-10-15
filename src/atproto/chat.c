@@ -76,6 +76,28 @@ indigo_chat_inbox_move(indigo_chat_inbox *inbox, int delta, unsigned rows)
     return indigo_chat_inbox_select(inbox, (unsigned) target, rows);
 }
 
+bool
+indigo_chat_requests_label(int count, char *out, size_t cap)
+{
+    int written;
+
+    if (!out || cap == 0) {
+        return false;
+    }
+    if (count <= 0) {
+        written = snprintf(out, cap, "No requests");
+    } else if (count == 1) {
+        written = snprintf(out, cap, "1 request");
+    } else {
+        written = snprintf(out, cap, "%d requests", count);
+    }
+    if (written < 0 || (size_t) written >= cap) {
+        out[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
 static bool
 is_other(const char *did, const char *viewer_did)
 {

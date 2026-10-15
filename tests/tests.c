@@ -133,6 +133,32 @@ test_chat_inbox_counterpart(void)
 }
 
 static void
+test_chat_requests_label(void)
+{
+    char buf[64];
+
+    CHECK(indigo_chat_requests_label(0, buf, sizeof buf));
+    CHECK(strcmp(buf, "No requests") == 0);
+    CHECK(indigo_chat_requests_label(-3, buf, sizeof buf));
+    CHECK(strcmp(buf, "No requests") == 0);
+    CHECK(indigo_chat_requests_label(1, buf, sizeof buf));
+    CHECK(strcmp(buf, "1 request") == 0);
+    CHECK(indigo_chat_requests_label(2, buf, sizeof buf));
+    CHECK(strcmp(buf, "2 requests") == 0);
+    CHECK(indigo_chat_requests_label(30, buf, sizeof buf));
+    CHECK(strcmp(buf, "30 requests") == 0);
+
+    /* The cap counts the terminator: "No requests" needs 12 bytes, "1 request" 10. */
+    CHECK(indigo_chat_requests_label(0, buf, 12));
+    CHECK(!indigo_chat_requests_label(0, buf, 11));
+    CHECK(buf[0] == '\0');
+    CHECK(indigo_chat_requests_label(1, buf, 10));
+    CHECK(!indigo_chat_requests_label(1, buf, 9));
+    CHECK(!indigo_chat_requests_label(2, buf, 0));
+    CHECK(!indigo_chat_requests_label(2, NULL, sizeof buf));
+}
+
+static void
 test_canvas_basics(void)
 {
     indigo_canvas c;
@@ -5978,6 +6004,7 @@ main(void)
 {
     test_canvas_basics();
     test_chat_inbox_counterpart();
+    test_chat_requests_label();
     test_canvas_overflow_is_bounded();
     test_app_navigation();
     test_touch_navigation();
