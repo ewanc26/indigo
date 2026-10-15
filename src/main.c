@@ -17,6 +17,10 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifndef INDIGO_WOLFRAM_VERSION
+#define INDIGO_WOLFRAM_VERSION "unknown" /* builds that do not pass it from the Makefile */
+#endif
+
 #define DATA_DIR "sdmc:/3ds/indigo"
 #define LOG_PATH DATA_DIR "/indigo.log"
 #define SESSION_PATH DATA_DIR "/session.dat"
@@ -625,7 +629,7 @@ main(int argc, char **argv)
         indigo_log_warn("no log file; continuing with stderr only");
     }
     if (settings.diagnostics) {
-        indigo_log_info("wolfram v0.39.0 (linked)");
+        indigo_log_info("wolfram %s (linked)", INDIGO_WOLFRAM_VERSION);
     }
 
     /* Before RomFS is mounted: recovery may have to move the .3dsx that RomFS
