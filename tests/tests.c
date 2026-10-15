@@ -6021,6 +6021,55 @@ test_signed_out_clears_messages(void)
     CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
 }
 
+static void
+test_requests_paging(void)
+{
+    static indigo_app app;
+    static indigo_chat_inbox page;
+    indigo_input in;
+
+    /* Moving past the last loaded request asks for the next page. */
+    memset(&app, 0, sizeof app);
+    memset(&in, 0, sizeof in);
+    app.screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    app.requests.count = 2;
+    app.requests.selected = 1;
+    app.requests.has_more = true;
+    snprintf(app.requests.cursor, sizeof app.requests.cursor, "%s", "page-2");
+    in.down = true;
+    indigo_app_update_chat_requests(&app, &in);
+    CHECK(app.request == INDIGO_REQUEST_CHAT_REQUESTS_MORE);
+    CHECK(app.requests.loading);
+
+    /* No further page once the server reports none. */
+    memset(&app, 0, sizeof app);
+    app.screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    app.requests.count = 2;
+    app.requests.selected = 1;
+    app.requests.has_more = false;
+    indigo_app_update_chat_requests(&app, &in);
+    CHECK(app.request == INDIGO_REQUEST_NONE);
+
+    /* A page that arrives replaces the list and clears loading. */
+    memset(&app, 0, sizeof app);
+    app.requests.loading = true;
+    memset(&page, 0, sizeof page);
+    page.count = 3;
+    page.has_more = true;
+    indigo_app_requests_loaded(&app, &page);
+    CHECK(app.requests.count == 3);
+    CHECK(app.requests.has_more);
+    CHECK(!app.requests.loading);
+    CHECK(app.requests_count == 3);
+
+    /* A failed page keeps the rows and says why. */
+    app.requests.loading = true;
+    indigo_app_requests_failed(&app, "Could not reach the server.");
+    CHECK(!app.requests.loading);
+    CHECK(app.requests.status_is_error);
+    CHECK(app.requests.count == 3);
+}
+
 int
 main(void)
 {
@@ -6028,6 +6077,7 @@ main(void)
     test_chat_inbox_counterpart();
     test_chat_requests_label();
     test_signed_out_clears_messages();
+    test_requests_paging();
     test_canvas_overflow_is_bounded();
     test_app_navigation();
     test_touch_navigation();

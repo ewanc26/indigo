@@ -385,6 +385,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
     case INDIGO_SCREEN_MESSAGES:
         indigo_app_update_messages(app, input);
         break;
+    case INDIGO_SCREEN_CHAT_REQUESTS:
+        indigo_app_update_chat_requests(app, input);
+        break;
     case INDIGO_SCREEN_CHAT_THREAD:
         indigo_app_update_chat_thread(app, input);
         break;

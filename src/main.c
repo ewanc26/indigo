@@ -248,6 +248,16 @@ handle_requests(indigo_app *app)
         /* The count of pending requests is shown on the same screen. */
         (void) indigo_session_submit_chat_requests();
         break;
+    case INDIGO_REQUEST_CHAT_REQUESTS:
+        if (!indigo_session_submit_chat_requests()) {
+            indigo_app_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_REQUESTS_MORE:
+        if (!indigo_session_submit_chat_requests_more(app->requests.cursor)) {
+            indigo_app_requests_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_EDIT_REPLY:
         handle_edit_reply(app);
         break;
@@ -513,10 +523,10 @@ handle_events(indigo_app *app)
             indigo_app_chat_send_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE:
-            app->requests_count = (int) indigo_session_chat_requests()->count;
+            indigo_app_requests_loaded(app, indigo_session_chat_requests());
             break;
         case INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED:
-            /* A failed count keeps the last one shown; the messages status says why. */
+            indigo_app_requests_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {
