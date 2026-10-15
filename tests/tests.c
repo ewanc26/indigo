@@ -6167,7 +6167,14 @@ test_update_asset_ok(void)
     CHECK(indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx", good_url));
     /* A different file name, a different release's URL, a different host, and
      * a query string tacked on: each is refused. */
+    /* The stable name is accepted only at this release's own URL. */
+    CHECK(indigo_update_asset_ok("0.7.0", "indigo.3dsx",
+                                 "https://github.com/ewanc26/indigo/releases/download/v0.7.0/indigo.3dsx"));
     CHECK(!indigo_update_asset_ok("0.7.0", "indigo.3dsx", good_url));
+    CHECK(!indigo_update_asset_ok("0.7.0", "indigo.3dsx",
+                                  "https://github.com/ewanc26/indigo/releases/download/v0.6.0/indigo.3dsx"));
+    CHECK(!indigo_update_asset_ok("0.7.0", "other.3dsx",
+                                  "https://github.com/ewanc26/indigo/releases/download/v0.7.0/other.3dsx"));
     CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
                                   "https://github.com/ewanc26/indigo/releases/download/v0.6.0/indigo-0.7.0.3dsx"));
     CHECK(!indigo_update_asset_ok("0.7.0", "indigo-0.7.0.3dsx",
