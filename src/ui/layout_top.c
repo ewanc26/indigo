@@ -92,6 +92,34 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_messages(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_inbox *m = &app->messages;
+    const indigo_chat_convo *sel = m->selected < m->count ? &m->items[m->selected] : NULL;
+
+    indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
+    if (!sel) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           m->loading ? "Loading messages..." : "Nothing to show.");
+        if (m->status[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f, m->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%s", m->status);
+        }
+        return;
+    }
+    indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", m->selected + 1, m->count);
+    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
+    if (sel->handle[0]) {
+        indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
+    }
+    indigo_canvas_text(c, 18, 96, 0.65f, sel->unread ? COL_LINK : COL_TEXT_SOFT, "%s",
+                       sel->unread ? "New messages" : "Read");
+    if (sel->preview[0]) {
+        indigo_layout_top_paragraph(c, 18, 124, 0.6f, COL_TEXT, 4, sel->preview);
+    }
+}
+
+static void
 build_top_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
@@ -411,6 +439,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_NOTIFICATIONS:
         build_top_notifications(app, c);
+        return;
+    case INDIGO_SCREEN_MESSAGES:
+        build_top_messages(app, c);
         return;
     case INDIGO_SCREEN_MENU:
         build_top_menu(app, c);

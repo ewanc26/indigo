@@ -225,6 +225,11 @@ handle_requests(indigo_app *app)
             indigo_app_notifications_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_CHAT_INBOX:
+        if (!indigo_session_submit_chat_inbox()) {
+            indigo_app_messages_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_EDIT_DRAFT:
         handle_edit_draft(app);
         break;
@@ -457,6 +462,12 @@ handle_events(indigo_app *app)
         }
         case INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED:
             indigo_app_notifications_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_PAGE:
+            indigo_app_messages_loaded(app, indigo_session_chat_inbox());
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_FAILED:
+            indigo_app_messages_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {
