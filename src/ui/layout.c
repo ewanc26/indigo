@@ -50,13 +50,13 @@ static const indigo_rect s_mute_button = {14, 86, 142, 34};
 static const indigo_rect s_block_button = {164, 86, 142, 34};
 /* Followers and following open the people list, so they carry the counts the
  * profile already holds rather than being bare navigation labels. */
-static const indigo_rect s_followers_button = {14, 126, 142, 34};
-static const indigo_rect s_following_button = {164, 126, 142, 34};
+static const indigo_rect s_followers_button = {14, 126, 142, 40};
+static const indigo_rect s_following_button = {164, 126, 142, 40};
 /* Posts and the pinned post share the last row. The bottom screen is 240 tall
  * and every row above is spoken for, so this is a pair rather than two full
  * width bars, and the status line has to fit below it. */
-static const indigo_rect s_posts_button = {14, 166, 142, 34};
-static const indigo_rect s_pinned_button = {164, 166, 142, 34};
+static const indigo_rect s_posts_button = {14, 172, 142, 34};
+static const indigo_rect s_pinned_button = {164, 172, 142, 34};
 
 indigo_rect
 indigo_layout_button_rect(indigo_action action)
