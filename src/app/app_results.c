@@ -153,6 +153,32 @@ indigo_app_messages_failed(indigo_app *app, const char *message)
 }
 
 void
+indigo_app_chat_thread_loaded(indigo_app *app, const indigo_chat_thread *src)
+{
+    indigo_chat_thread *t = &app->chat_thread;
+
+    /* The title and convo id are this screen's; only the rows come from the session. */
+    indigo_chat_thread_clear(t);
+    if (src) {
+        t->count = src->count;
+        memcpy(t->items, src->items, sizeof t->items);
+    }
+    if (t->count > 0) {
+        indigo_chat_thread_select(t, t->count - 1, INDIGO_CHAT_THREAD_ROWS);
+    } else {
+        indigo_copy_utf8(t->status, sizeof t->status, "No messages in this conversation yet.");
+    }
+}
+
+void
+indigo_app_chat_thread_failed(indigo_app *app, const char *message)
+{
+    app->chat_thread.loading = false;
+    indigo_copy_utf8(app->chat_thread.status, sizeof app->chat_thread.status, message);
+    app->chat_thread.status_is_error = true;
+}
+
+void
 indigo_app_notifications_failed(indigo_app *app, const char *message)
 {
     app->notifications.loading = false;

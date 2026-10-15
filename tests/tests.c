@@ -1162,6 +1162,59 @@ test_partial_thread_publish_clears_draft(void)
 }
 
 static void
+test_chat_thread_and_open(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_chat_thread page;
+    indigo_chat_thread t;
+
+    /* The list state: moving clamps, selecting keeps the row in its window, and
+     * clearing keeps nothing of a previous page. */
+    memset(&t, 0, sizeof t);
+    t.count = 4;
+    CHECK(indigo_chat_thread_move(&t, 9, 2));
+    CHECK(t.selected == 3 && t.scroll == 2);
+    CHECK(!indigo_chat_thread_move(&t, 1, 2));
+    CHECK(indigo_chat_thread_select(&t, 0, 2) && t.scroll == 0);
+    indigo_chat_thread_clear(&t);
+    CHECK(t.count == 0 && t.selected == 0 && !t.loading);
+
+    /* A loaded page keeps the screen's title and shows the newest message. */
+    indigo_app_init(&app);
+    snprintf(app.chat_thread.title, sizeof app.chat_thread.title, "%s", "Bob");
+    memset(&page, 0, sizeof page);
+    page.count = 3;
+    indigo_copy_utf8(page.items[0].text, sizeof page.items[0].text, "Hello");
+    indigo_copy_utf8(page.items[2].text, sizeof page.items[2].text, "See you");
+    page.items[1].mine = true;
+    indigo_app_chat_thread_loaded(&app, &page);
+    CHECK(app.chat_thread.count == 3);
+    CHECK(app.chat_thread.selected == 2);
+    CHECK(strcmp(app.chat_thread.title, "Bob") == 0);
+    CHECK(!app.chat_thread.loading);
+
+    indigo_app_chat_thread_failed(&app, "Offline.");
+    CHECK(app.chat_thread.status_is_error);
+    CHECK(strcmp(app.chat_thread.status, "Offline.") == 0);
+
+    /* Confirm on an inbox row opens the conversation, read-only, and asks for it. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MESSAGES;
+    app.messages.count = 1;
+    indigo_copy_utf8(app.messages.items[0].id, sizeof app.messages.items[0].id, "convo-bob");
+    indigo_copy_utf8(app.messages.items[0].name, sizeof app.messages.items[0].name, "Bob");
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_CHAT_THREAD);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_THREAD);
+    CHECK(strcmp(app.request_post_uri, "convo-bob") == 0);
+    CHECK(strcmp(app.chat_thread.title, "Bob") == 0);
+    CHECK(app.chat_thread.loading);
+}
+
+static void
 test_messages_list(void)
 {
     indigo_chat_inbox m;
@@ -5896,6 +5949,7 @@ main(void)
     test_compose_thread_touch_flow();
     test_partial_thread_publish_clears_draft();
     test_messages_list();
+    test_chat_thread_and_open();
     test_messages_loaded_and_failed();
     test_notifications();
     test_normalise_service();
