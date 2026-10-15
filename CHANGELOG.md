@@ -12,6 +12,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-15
+
 ### Added
 - Messages on the More menu opens a read-only direct message inbox: each conversation names its counterpart (or "Group"), shows the last message and the unread count, and the list pages. A is a conversation: its newest messages show on the top screen, selectable from the list below, with the account's own marked "You". A writes a reply on the software keyboard and Y sends it; a reply that fails to send stays as the draft ([#22](https://github.com/ewanc26/indigo/issues/22)).
 
