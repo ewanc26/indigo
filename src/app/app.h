@@ -71,6 +71,8 @@ typedef enum {
     INDIGO_REQUEST_FOLLOW,
     INDIGO_REQUEST_CHAT_INBOX,
     INDIGO_REQUEST_CHAT_THREAD,
+    INDIGO_REQUEST_EDIT_REPLY,
+    INDIGO_REQUEST_CHAT_SEND,
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
@@ -213,6 +215,8 @@ void indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src);
 void indigo_app_messages_failed(indigo_app *app, const char *message);
 void indigo_app_chat_thread_loaded(indigo_app *app, const indigo_chat_thread *src);
 void indigo_app_chat_thread_failed(indigo_app *app, const char *message);
+void indigo_app_chat_send_done(indigo_app *app);
+void indigo_app_chat_send_failed(indigo_app *app, const char *message);
 /* The search query came back from the keyboard. */
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,

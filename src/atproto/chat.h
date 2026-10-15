@@ -72,6 +72,8 @@ int indigo_chat_other_member_count(const char *const *member_dids, size_t count,
 
 /* How many messages a conversation holds, the newest first from the server. */
 #define INDIGO_CHAT_MESSAGES_MAX 20
+/* A reply in bytes, with room for the terminator. */
+#define INDIGO_CHAT_REPLY_MAX    512
 /* Rows of the message list on the bottom screen. */
 #define INDIGO_CHAT_THREAD_ROWS  3
 
@@ -95,7 +97,13 @@ typedef struct {
    bool loading;
    char status[INDIGO_POST_NOTE_MAX];
    bool status_is_error;
+   /* The reply being written. It survives a failed send and is cleared once sent. */
+   char reply[INDIGO_CHAT_REPLY_MAX];
+   bool sending;
 } indigo_chat_thread;
+
+/* A reply the chat service will take: some text that is not only spaces. */
+bool indigo_chat_reply_valid(const char *text);
 
 struct wf_chat_message_list;
 
