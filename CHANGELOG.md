@@ -23,7 +23,6 @@ as the release notes.
 - The image picker also lists the pictures in `sdmc:/DCIM`, one folder deep (`DCIM/<folder>/<image>`), after the pictures in `sdmc:/3ds/indigo/images`. Choosing one attaches it from its full path. The picker's top screen names both folders. It uses Wolfram v0.39.0's `wf_attach_scan_images_tree`. ([#74](https://github.com/ewanc26/indigo/pull/74))
 
 - The home timeline is kept on the SD card between launches. While a saved session resumes, the last page is shown, and the refresh replaces it. The cache is removed on sign-out, and a damaged file is set aside as `.bad` without blocking boot. ([#13](https://github.com/ewanc26/indigo/issues/13))
-- Direct messages: a Messages row in the More menu opens the conversation list (`INDIGO_SCREEN_DMS`), reloads on A, opens a conversation on select, and sends a reply from a draft field. The worker fetches conversations and messages through `wf_agent_chat_list_convos`, `wf_agent_chat_get_messages` and `wf_agent_chat_send_message`. Host tests and snapshots pass; the 3DS build compiles.
 
 ### Changed
 
