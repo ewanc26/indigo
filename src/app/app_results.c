@@ -65,6 +65,10 @@ indigo_app_signed_out(indigo_app *app, const char *message)
     indigo_timeline_clear(&app->thread);
     indigo_notifications_clear(&app->notifications);
     memset(&app->profile, 0, sizeof app->profile);
+    /* The message list and open thread (with any unsent reply) are the signed-out
+     * account's; the next sign-in starts with them empty. */
+    memset(&app->messages, 0, sizeof app->messages);
+    memset(&app->chat_thread, 0, sizeof app->chat_thread);
     app->history_count = 0;
     indigo_app_set_status(s, message, false);
     app->screen = INDIGO_SCREEN_SIGNIN;
