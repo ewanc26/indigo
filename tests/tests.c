@@ -16,6 +16,8 @@
 #include "store/cache_store.h"
 #include "app/timeline_cache.h"
 #include "app/post_queue.h"
+#include "store/queue_codec.h"
+#include "store/queue_store.h"
 #include "gfx/canvas.h"
 #include "input/input.h"
 #include "ui/layout.h"
@@ -1612,21 +1614,22 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 14);
+    CHECK(app.menu.count == 15);
     CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
     CHECK(app.menu.items[6].kind == INDIGO_MENU_FEEDS);
     CHECK(app.menu.items[7].kind == INDIGO_MENU_MUTED);
     CHECK(app.menu.items[8].kind == INDIGO_MENU_BLOCKED);
-    CHECK(app.menu.items[10].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[11].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[12].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[9].label, "My profile") == 0);
+    CHECK(app.menu.items[9].kind == INDIGO_MENU_QUEUE);
+    CHECK(app.menu.items[11].kind == INDIGO_MENU_SETTINGS);
+    CHECK(app.menu.items[12].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[13].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[10].label, "My profile") == 0);
 
-    /* Sign out is the thirteenth item, so it sits below the window until the
+    /* Sign out is the fourteenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 12; i++) {
+    for (unsigned i = 0; i < 13; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -1994,6 +1997,49 @@ test_draft_store(void)
 
 /* The offline compose queue: order kept, nothing published on its own, and text
  * refused rather than cut. */
+/* The queue file: what is saved comes back exactly, a cut-short file is refused
+ * whole, and a damaged file is set aside rather than deleted. */
+static void
+test_queue_store(void)
+{
+    static indigo_post_queue q, back;
+    static char buf[16384];
+    size_t len = 0;
+    const char *path = "build-host/queue-test.dat";
+
+    indigo_queue_init(&q);
+    CHECK(indigo_queue_add(&q, "first\nline\twith a tab \\ slash", 100));
+    CHECK(indigo_queue_add(&q, "plain", 200));
+    CHECK(indigo_queue_encode(&q, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_queue_decode(buf, len, &back) == INDIGO_CODEC_OK);
+    CHECK(back.count == 2);
+    CHECK(strcmp(back.items[0].text, q.items[0].text) == 0);
+    CHECK(back.items[1].queued_at == 200);
+
+    CHECK(indigo_queue_decode(buf, len - 4, &back) != INDIGO_CODEC_OK);
+    CHECK(back.count == 0);
+
+    remove(path);
+    CHECK(indigo_queue_store_load(path, &back) == INDIGO_STORE_MISSING);
+    CHECK(back.count == 0);
+    CHECK(indigo_queue_store_save(path, &q) == INDIGO_STORE_OK);
+    CHECK(indigo_queue_store_load(path, &back) == INDIGO_STORE_OK);
+    CHECK(back.count == 2);
+
+    {
+        FILE *f = fopen(path, "wb");
+        CHECK(f != NULL);
+        if (f) {
+            fputs("indigo-queue 1\n12\tcut sho", f);
+            fclose(f);
+        }
+        CHECK(indigo_queue_store_load(path, &back) == INDIGO_STORE_UNREADABLE);
+        CHECK(back.count == 0);
+        CHECK(fopen(path, "rb") == NULL);
+        remove("build-host/queue-test.dat.bad");
+    }
+}
+
 static void
 test_post_queue(void)
 {
@@ -2716,7 +2762,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the two entries about the post, then the thirteen app
      * actions. */
-    CHECK(menu.count == 19);
+    CHECK(menu.count == 20);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -2728,7 +2774,7 @@ test_facet_menu(void)
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[18].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[19].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -2754,7 +2800,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 19);
+    CHECK(app.menu.count == 20);
+    CHECK(app.menu.items[19].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -2833,7 +2880,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 16);
+    CHECK(menu.count == 17);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
@@ -2842,12 +2889,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 16);
+    CHECK(menu.count == 17);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 14);
-    CHECK(strcmp(menu.items[9].label, "Your profile") == 0);
+    CHECK(menu.count == 15);
+    CHECK(strcmp(menu.items[10].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -6436,6 +6483,7 @@ main(void)
     test_settings_codec();
     test_settings_store();
     test_post_queue();
+    test_queue_store();
     test_cache_codec();
     test_timeline_cache();
     test_cache_store();

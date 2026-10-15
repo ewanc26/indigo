@@ -27,7 +27,8 @@ static const indigo_rect s_edit_button = {14, 52, 292, 56};
 static const indigo_rect s_attach_button = {14, 116, 142, 32};
 static const indigo_rect s_thread_button = {164, 116, 142, 32};
 static const indigo_rect s_toggle_button = {14, 156, 292, 32};
-static const indigo_rect s_send_button = {14, 196, 292, 38};
+static const indigo_rect s_send_button = {14, 196, 142, 38};
+static const indigo_rect s_save_later_button = {164, 196, 142, 38};
 
 /* Sign-in form: 8px between rows so a thumb never lands on two. */
 static const indigo_rect s_field_service = {14, 52, 292, 38};
@@ -133,6 +134,8 @@ indigo_layout_button_rect(indigo_action action)
         return s_toggle_button;
     case INDIGO_ACTION_SEND:
         return s_send_button;
+    case INDIGO_ACTION_SAVE_LATER:
+        return s_save_later_button;
     case INDIGO_ACTION_FIELD_SERVICE:
         return s_field_service;
     case INDIGO_ACTION_FIELD_HANDLE:
@@ -232,7 +235,11 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
     static const indigo_action compose_actions[] = {
         INDIGO_ACTION_EDIT, INDIGO_ACTION_ATTACH, INDIGO_ACTION_THREAD_EXTEND,
-        INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_TOGGLE, INDIGO_ACTION_SEND, INDIGO_ACTION_SAVE_LATER,
+        INDIGO_ACTION_BACK};
+    static const indigo_action queue_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_OPEN,
+        INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
         INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK, INDIGO_ACTION_IMAGE};
@@ -274,6 +281,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         USE(chat_thread_actions);
+        break;
+    case INDIGO_SCREEN_QUEUE:
+        USE(queue_actions);
         break;
     case INDIGO_SCREEN_MENU:
         USE(menu_actions);
