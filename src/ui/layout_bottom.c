@@ -42,7 +42,7 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, thread ? "Thread" : "Timeline");
     if (!indigo_layout_image_button(c, app)) {
         indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%.22s", t->loading ? "Loading..." : t->status);
+                           "%.16s", t->loading ? "Loading..." : t->status);
     }
     /* The button hints live in the top screen's title bar; a bottom pill is
      * labelled with its action so no back hint appears twice. A feed view's B
@@ -115,12 +115,12 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
         indigo_rect fg = indigo_layout_button_rect(INDIGO_ACTION_FOLLOWING);
 
         indigo_canvas_rect(c, fl.x, fl.y, fl.w, fl.h, COL_PILL);
-        indigo_canvas_text(c, fl.x + 10, fl.y + 5, 0.55f, COL_TEXT_SOFT, "Followers");
-        indigo_canvas_text(c, fl.x + 10, fl.y + 21, 0.7f, COL_TEXT, "%u", p->followers);
+        indigo_canvas_text(c, fl.x + 10, fl.y + 4, 0.55f, COL_TEXT_SOFT, "Followers");
+        indigo_canvas_text(c, fl.x + 10, fl.y + 18, 0.7f, COL_TEXT, "%u", p->followers);
 
         indigo_canvas_rect(c, fg.x, fg.y, fg.w, fg.h, COL_PILL);
-        indigo_canvas_text(c, fg.x + 10, fg.y + 5, 0.55f, COL_TEXT_SOFT, "Following");
-        indigo_canvas_text(c, fg.x + 10, fg.y + 21, 0.7f, COL_TEXT, "%u", p->follows);
+        indigo_canvas_text(c, fg.x + 10, fg.y + 4, 0.55f, COL_TEXT_SOFT, "Following");
+        indigo_canvas_text(c, fg.x + 10, fg.y + 18, 0.7f, COL_TEXT, "%u", p->follows);
 
         indigo_rect pb = indigo_layout_button_rect(INDIGO_ACTION_POSTS);
 
@@ -213,8 +213,8 @@ build_bottom_queue(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Queued posts");
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
     if (q->count == 0) {
-        indigo_canvas_text(c, 14, 70, 0.6f, COL_TEXT_SOFT,
-                           "Nothing is queued. On a new post, choose Save for later.");
+        indigo_canvas_text(c, 14, 70, 0.6f, COL_TEXT_SOFT, "Nothing is queued.");
+        indigo_canvas_text(c, 14, 88, 0.55f, COL_TEXT_DIM, "On a new post, choose Save later.");
     }
     for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
         unsigned idx = page + row;
@@ -223,13 +223,19 @@ build_bottom_queue(const indigo_app *app, indigo_canvas *c)
         if (idx >= q->count) {
             break;
         }
-        snprintf(title, sizeof title, "%u. %.60s", idx + 1, q->items[idx].text);
+        /* Cut at a word-sized width with an ellipsis, rather than mid-word at the
+         * edge of the row. */
+        {
+            const char *text = q->items[idx].text;
+            size_t n = strlen(text);
+            snprintf(title, sizeof title, "%u. %.34s%s", idx + 1, text, n > 34 ? "..." : "");
+        }
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
                                idx == app->queue_selected, title, "", NULL);
     }
     indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, q->count > 0, false, COL_PILL_ACTIVE, "A Send");
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, q->count > 0, false, COL_PILL_ACTIVE,
-                              app->queue_discard_armed ? "Y Confirm" : "Y Discard");
+                              app->queue_discard_armed ? "Confirm" : "Discard");
 }
 
 static void
@@ -259,7 +265,7 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Close");
 
     snprintf(position, sizeof position, "%u of %u", app->menu.selected + 1, app->menu.count);
-    indigo_canvas_text(c, 14, 26, 0.55f, COL_TEXT_DIM, "%s", position);
+    indigo_canvas_text(c, 120, 12, 0.5f, COL_TEXT_DIM, "%s", position);
 
     for (unsigned i = 0; i < INDIGO_MENU_ROWS; i++) {
         const indigo_menu_item *it = indigo_menu_row(&app->menu, i, INDIGO_MENU_ROWS);
@@ -314,9 +320,9 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
     if (d->thread_count > 0) {
         indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT_DIM, "Threads are text-only");
     } else if (indigo_compose_has_image(d)) {
-        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Remove image - Select");
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Remove image");
     } else {
-        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Add image - Select");
+        indigo_canvas_text(c, a.x + 8, a.y + 7, 0.55f, COL_TEXT, "Add image");
     }
     if (!d->has_target) {
         const char *thread_label = d->thread_count + 1 >= INDIGO_THREAD_POSTS_MAX
@@ -388,8 +394,10 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         } else if (s->kind == INDIGO_SEARCH_AUTHOR) {
           /* The box doubles as the tab switch: it names the person and what
            * a tap on it will show instead. */
+          /* The box is narrower than a full handle and tab name, so the handle is
+           * cut and the tap hint is shortened to fit left of the Back button. */
           indigo_canvas_text(
-              c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.26s  Tap: %s",
+              c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "@%.16s > %s",
               s->subject,
               wf_profile_tab_name(indigo_app_author_tab_after(app)));
         } else {

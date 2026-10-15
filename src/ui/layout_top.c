@@ -335,23 +335,23 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
         s->theme == INDIGO_THEME_LIGHT ? "Light"
         : s->theme == INDIGO_THEME_DARK ? "Dark"
                                         : "Auto (follows system)";
-    indigo_canvas_text(c, 18, 44, 0.65f, COL_TEXT, "Theme: %s", theme_str);
-    indigo_canvas_text(c, 18, 66, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
-    indigo_canvas_text(c, 18, 88, 0.65f, COL_TEXT, "Reduce motion (reserved): %s",
+    indigo_canvas_text(c, 18, 40, 0.65f, COL_TEXT, "Theme: %s", theme_str);
+    indigo_canvas_text(c, 18, 60, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
+    indigo_canvas_text(c, 18, 80, 0.65f, COL_TEXT, "Reduce motion (reserved): %s",
                        s->reduce_motion ? "On" : "Off");
-    indigo_canvas_text(c, 18, 110, 0.65f, COL_TEXT, "High contrast: %s",
+    indigo_canvas_text(c, 18, 100, 0.65f, COL_TEXT, "High contrast: %s",
                        s->high_contrast ? "On" : "Off");
-    indigo_canvas_text(c, 18, 132, 0.65f, COL_TEXT, "Large touch targets: %s",
+    indigo_canvas_text(c, 18, 120, 0.65f, COL_TEXT, "Large touch targets: %s",
                        s->large_targets ? "On" : "Off");
-    indigo_canvas_text(c, 18, 154, 0.65f, COL_TEXT, "Image alt text: %s",
+    indigo_canvas_text(c, 18, 140, 0.65f, COL_TEXT, "Image alt text: %s",
                        s->alt_text ? "On" : "Off");
-    indigo_canvas_text(c, 18, 176, 0.65f, COL_TEXT, "Diagnostics log: %s",
+    indigo_canvas_text(c, 18, 160, 0.65f, COL_TEXT, "Diagnostics log: %s",
                        s->diagnostics ? "On (indigo.log)" : "Off");
 
     const char *feed_str = s->default_feed[0] ? s->default_feed : "Following timeline";
-    indigo_canvas_text(c, 18, 198, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
+    indigo_canvas_text(c, 18, 180, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
 
-    indigo_canvas_text(c, 18, 218, 0.55f, COL_TEXT_DIM,
+    indigo_canvas_text(c, 18, 206, 0.55f, COL_TEXT_DIM,
                        "Press A or touch an item below to change.");
 
     /* The build identity, so a bug report can name the build it came from. All
@@ -359,7 +359,7 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
      * says which release, the number orders two builds of one tag, and the date
      * says which day. Nothing else in the app prints them, which until now
      * meant the Makefile stamped three strings the linker then dropped. */
-    indigo_canvas_text(c, 18, 232, 0.5f, COL_TEXT_DIM, "%s (build %d, %s)",
+    indigo_canvas_text(c, 18, 224, 0.5f, COL_TEXT_DIM, "%s (build %d, %s)",
                        INDIGO_BUILD_COMMIT, INDIGO_BUILD_NUMBER, INDIGO_BUILD_DATE);
 }
 
@@ -421,8 +421,8 @@ build_top_update(const indigo_app *app, indigo_canvas *c)
                       "download; it does not prove the release is mine, because it is not signed.");
     } else if (u->state == INDIGO_UPDATER_DOWNLOADING || u->state == INDIGO_UPDATER_READY ||
                u->state == INDIGO_UPDATER_INSTALLED) {
-        indigo_canvas_text(c, 18, y + 6, 0.55f, COL_TEXT_DIM,
-                           "The old build is kept as indigo-previous.3dsx until the new one starts.");
+        indigo_layout_top_paragraph(c, 18, y + 6, 0.55f, COL_TEXT_DIM, 2,
+                      "The old build is kept as indigo-previous.3dsx until the new one starts.");
     }
 }
 
