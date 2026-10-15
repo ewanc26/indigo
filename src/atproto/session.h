@@ -3,6 +3,7 @@
 
 #include "app/search.h"
 #include "app/social.h"
+#include "atproto/chat.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
 
@@ -36,6 +37,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
     INDIGO_SESSION_EVENT_GRAPH_DONE,
     INDIGO_SESSION_EVENT_GRAPH_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_PAGE,
+    INDIGO_SESSION_EVENT_CHAT_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -125,6 +128,11 @@ bool indigo_session_submit_thread(const char *uri);
 /* `actor` is a handle or DID. */
 bool indigo_session_submit_profile(const char *actor);
 bool indigo_session_submit_notifications(void);
+
+/* Fetch the direct message inbox. Read the rows with indigo_session_chat_inbox
+ * once CHAT_PAGE arrives. */
+bool indigo_session_submit_chat_inbox(void);
+const indigo_chat_inbox *indigo_session_chat_inbox(void);
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
  * and `target_*` the post being answered; for a quote, `target_*` is quoted.
  *

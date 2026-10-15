@@ -165,6 +165,10 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_notifications(app);
         break;
+    case INDIGO_MENU_MESSAGES:
+        indigo_app_go_back(app);
+        indigo_app_open_messages(app);
+        break;
     case INDIGO_MENU_FIND_PEOPLE:
         indigo_app_go_back(app);
         open_search(app, INDIGO_SEARCH_PEOPLE);

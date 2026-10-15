@@ -15,8 +15,65 @@ indigo_chat_inbox_reset(indigo_chat_inbox *inbox)
     if (inbox) {
         inbox->count = 0;
         inbox->unread = 0;
+        inbox->cursor[0] = '\0';
         inbox->has_more = false;
     }
+}
+
+static void
+keep_visible(unsigned *scroll, unsigned selected, unsigned rows)
+{
+    if (rows == 0) {
+        return;
+    }
+    if (selected < *scroll) {
+        *scroll = selected;
+    } else if (selected >= *scroll + rows) {
+        *scroll = selected + 1 - rows;
+    }
+}
+
+void
+indigo_chat_inbox_clear(indigo_chat_inbox *inbox)
+{
+    if (!inbox) {
+        return;
+    }
+    indigo_chat_inbox_reset(inbox);
+    inbox->selected = 0;
+    inbox->scroll = 0;
+    inbox->loading = false;
+    inbox->status[0] = '\0';
+    inbox->status_is_error = false;
+}
+
+bool
+indigo_chat_inbox_select(indigo_chat_inbox *inbox, unsigned index, unsigned rows)
+{
+    if (!inbox || index >= inbox->count || index == inbox->selected) {
+        return false;
+    }
+    inbox->selected = index;
+    keep_visible(&inbox->scroll, index, rows);
+    return true;
+}
+
+bool
+indigo_chat_inbox_move(indigo_chat_inbox *inbox, int delta, unsigned rows)
+{
+    long target;
+
+    if (!inbox || inbox->count == 0) {
+        return false;
+    }
+    target = (long) inbox->selected + delta;
+    if (target < 0) {
+        target = 0;
+    }
+    if (target >= (long) inbox->count) {
+        target = (long) inbox->count - 1;
+    }
+    return indigo_chat_inbox_select(inbox, (unsigned) target, rows);
 }
 
 static bool

@@ -126,6 +126,33 @@ indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *item
 }
 
 void
+indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src)
+{
+    indigo_chat_inbox *m = &app->messages;
+
+    /* Keep the list state this screen owns; take only the rows from the session. */
+    indigo_chat_inbox_clear(m);
+    if (src) {
+        m->count = src->count;
+        m->unread = src->unread;
+        m->has_more = src->has_more;
+        memcpy(m->cursor, src->cursor, sizeof m->cursor);
+        memcpy(m->items, src->items, sizeof m->items);
+    }
+    if (m->count == 0) {
+        indigo_copy_utf8(m->status, sizeof m->status, "No messages yet.");
+    }
+}
+
+void
+indigo_app_messages_failed(indigo_app *app, const char *message)
+{
+    app->messages.loading = false;
+    indigo_copy_utf8(app->messages.status, sizeof app->messages.status, message);
+    app->messages.status_is_error = true;
+}
+
+void
 indigo_app_notifications_failed(indigo_app *app, const char *message)
 {
     app->notifications.loading = false;
