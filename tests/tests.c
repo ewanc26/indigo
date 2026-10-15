@@ -5999,12 +5999,35 @@ test_update_screen_asks_before_it_installs(void)
     CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
 }
 
+static void
+test_signed_out_clears_messages(void)
+{
+    static indigo_app app;
+
+    memset(&app, 0, sizeof app);
+    app.messages.count = 2;
+    snprintf(app.messages.items[0].name, sizeof app.messages.items[0].name, "%s", "Alice");
+    app.chat_thread.count = 3;
+    snprintf(app.chat_thread.reply, sizeof app.chat_thread.reply, "%s", "unsent draft");
+    app.chat_thread.sending = true;
+
+    indigo_app_signed_out(&app, "Signed out.");
+
+    CHECK(app.messages.count == 0);
+    CHECK(app.messages.items[0].name[0] == '\0');
+    CHECK(app.chat_thread.count == 0);
+    CHECK(app.chat_thread.reply[0] == '\0');
+    CHECK(!app.chat_thread.sending);
+    CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
+}
+
 int
 main(void)
 {
     test_canvas_basics();
     test_chat_inbox_counterpart();
     test_chat_requests_label();
+    test_signed_out_clears_messages();
     test_canvas_overflow_is_bounded();
     test_app_navigation();
     test_touch_navigation();

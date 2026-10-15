@@ -328,6 +328,12 @@ indigo_session_do_logout(void)
         (void) wf_agent_logout(g_session.agent);
         indigo_session_drop_agent();
     }
+    /* The direct message state belongs to the account that loaded it. Wipe the
+     * whole struct, not just the counts: names, handles and an unsent reply
+     * draft would otherwise survive into the next account on this device. */
+    memset(&g_session.chat, 0, sizeof g_session.chat);
+    memset(&g_session.requests, 0, sizeof g_session.requests);
+    memset(&g_session.chat_thread, 0, sizeof g_session.chat_thread);
     indigo_session_store_clear(g_session.path);
     indigo_log_info("signed out");
     indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_OUT, WF_FAIL_NONE, NULL);
