@@ -119,6 +119,8 @@ typedef enum {
 #define INDIGO_IMAGE_ALT_MAX 256
 /* Where images to attach are looked for. The person copies .jpg and .png files
  * here from a computer. */
+/* Offline posts saved with Save for later, kept across launches. */
+#define INDIGO_QUEUE_PATH "sdmc:/3ds/indigo/queue.dat"
 #define INDIGO_IMAGES_DIR "sdmc:/3ds/indigo/images"
 /* The 3DS camera's folder. It saves photos as DCIM/<folder>/<image>, so the
  * picker also lists the images one folder down here. */
@@ -195,6 +197,7 @@ typedef enum {
     INDIGO_MENU_MUTED,
     INDIGO_MENU_BLOCKED,
     INDIGO_MENU_DMS,
+    INDIGO_MENU_QUEUE,
     INDIGO_MENU_MY_PROFILE,
     INDIGO_MENU_SETTINGS,
     INDIGO_MENU_UPDATE,

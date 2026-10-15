@@ -205,6 +205,34 @@ build_bottom_dms(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_queue(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_post_queue *q = &app->queue;
+    unsigned page = (app->queue_selected / INDIGO_TIMELINE_ROWS) * INDIGO_TIMELINE_ROWS;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Queued posts");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    if (q->count == 0) {
+        indigo_canvas_text(c, 14, 70, 0.6f, COL_TEXT_SOFT,
+                           "Nothing is queued. On a new post, choose Save for later.");
+    }
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = page + row;
+        char title[96];
+
+        if (idx >= q->count) {
+            break;
+        }
+        snprintf(title, sizeof title, "%u. %.60s", idx + 1, q->items[idx].text);
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                               idx == app->queue_selected, title, "", NULL);
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, q->count > 0, false, COL_PILL_ACTIVE, "A Send");
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, q->count > 0, false, COL_PILL_ACTIVE,
+                              app->queue_discard_armed ? "Y Confirm" : "Y Discard");
+}
+
+static void
 build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
@@ -316,9 +344,21 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
     }
 
     indigo_canvas_rect(c, s.x, s.y, s.w, s.h, indigo_compose_ready(d) ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, s.x + 110, s.y + 9, 0.7f,
+    indigo_canvas_text(c, s.x + 30, s.y + 9, 0.7f,
                        indigo_compose_ready(d) ? COL_TEXT : COL_TEXT_DIM, "%s",
                        d->sending ? "Posting..." : "R  Post");
+
+    /* Save for later keeps the text for the Queued posts screen. Only a plain
+     * top-level post can be saved, since the queue holds nothing else. */
+    {
+        indigo_rect sl = indigo_layout_button_rect(INDIGO_ACTION_SAVE_LATER);
+        bool can_save = d->text[0] != '\0' && !d->has_target && d->thread_count == 0 &&
+                        d->image[0] == '\0' && !d->sending;
+
+        indigo_canvas_rect(c, sl.x, sl.y, sl.w, sl.h, can_save ? COL_PILL_ACTIVE : COL_PILL);
+        indigo_canvas_text(c, sl.x + 30, sl.y + 9, 0.7f, can_save ? COL_TEXT : COL_TEXT_DIM,
+                           "%s", "Save later");
+    }
 }
 
 static void
@@ -581,6 +621,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_DMS:
         build_bottom_dms(app, c);
+        break;
+    case INDIGO_SCREEN_QUEUE:
+        build_bottom_queue(app, c);
         break;
     }
 }

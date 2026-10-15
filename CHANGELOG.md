@@ -10,7 +10,7 @@ as the release notes.
 
 ### Added
 
-- Storage for posts written while offline: a queue of up to 8 posts that only leaves it when the person sends one, with inspect, retry and discard operations. It has no screen yet, so nothing is queued from the app.
+- Save a post for later from the compose screen. Saved posts are kept on the SD card (up to 8) and listed under Queued posts in the More menu, where you send or discard each one. Nothing is sent unless you choose it, and a send that fails stays queued with the reason shown.
 - Compose a text-only thread of up to eight top-level posts with Add to thread. Wolfram publishes the chain in order; if a later post fails, Indigo reports how many are already public and clears the draft so they cannot be duplicated. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Show web links from the More menu as QR codes on the top screen, with the full address on the bottom screen, so a phone can open a link the 3DS cannot. Uses Wolfram's wf_qr_encode; URLs too long for the encoder remain readable without a code. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Delete your own post from the thread screen, with explicit confirmation and a worker-side check that the AT-URI belongs to the signed-in account. ([#22](https://github.com/ewanc26/indigo/issues/22))

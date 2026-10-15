@@ -420,6 +420,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
     case INDIGO_SCREEN_DMS:
         indigo_app_update_dms(app, input);
         break;
+    case INDIGO_SCREEN_QUEUE:
+        indigo_app_update_queue(app, input);
+        break;
     }
 }
 

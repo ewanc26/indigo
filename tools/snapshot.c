@@ -635,6 +635,13 @@ fill_social(indigo_app *app, const scenario *s)
             indigo_copy_utf8(app->dms.active_id, sizeof app->dms.active_id, "msg:1234");
             indigo_app_messages_loaded(app, m, 2, NULL);
         }
+    } else if (s->screen == INDIGO_SCREEN_QUEUE) {
+        /* Queued posts: empty, then two saved posts with the first selected. */
+        if (s->timeline == 1) {
+            indigo_queue_add(&app->queue, "Saved for later: a draft I wrote on the bus.", 1700000000);
+            indigo_queue_add(&app->queue, "Second post, waiting until I am online.", 1700000600);
+        }
+        app->queue_selected = 0;
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -894,6 +901,8 @@ main(int argc, char **argv)
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
         {"dms-loading", INDIGO_SCREEN_DMS, false, 0, 0, 0, 0, false},
+        {"queue-empty", INDIGO_SCREEN_QUEUE, false, 0, 0, 0, 0, false},
+        {"queue", INDIGO_SCREEN_QUEUE, false, 0, 0, 1, 0, false},
         {"dms", INDIGO_SCREEN_DMS, false, 0, 0, 1, 0, false},
         {"dms-convo", INDIGO_SCREEN_DMS, false, 0, 0, 2, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
