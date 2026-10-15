@@ -264,3 +264,17 @@ indigo_chat_thread_fill_from_wolfram(indigo_chat_thread *out,
     }
     return (int) n;
 }
+
+bool
+indigo_chat_reply_valid(const char *text)
+{
+    if (!text || text[0] == '\0' || strlen(text) >= INDIGO_CHAT_REPLY_MAX) {
+        return false;
+    }
+    for (const char *p = text; *p; p++) {
+        if (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+            return true;
+        }
+    }
+    return false;
+}

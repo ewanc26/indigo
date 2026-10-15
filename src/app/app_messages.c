@@ -91,6 +91,16 @@ indigo_app_update_chat_thread(indigo_app *app, const indigo_input *input)
         indigo_app_go_back(app);
         return;
     }
+    /* A opens the keyboard on the reply; Y sends it. A send that fails keeps the reply. */
+    if (input->confirm && !t->sending && app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_EDIT_REPLY;
+    }
+    if (input->like && !t->sending && !t->loading && app->request == INDIGO_REQUEST_NONE &&
+        indigo_chat_reply_valid(t->reply)) {
+        t->sending = true;
+        t->status[0] = '\0';
+        app->request = INDIGO_REQUEST_CHAT_SEND;
+    }
     if (input->refresh && !t->loading && app->request == INDIGO_REQUEST_NONE) {
         t->loading = true;
         app->request = INDIGO_REQUEST_CHAT_THREAD;

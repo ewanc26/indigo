@@ -617,6 +617,8 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(page.items[2].text, sizeof page.items[2].text,
                          "See you Saturday. Bring the good scissors.");
         indigo_app_chat_thread_loaded(app, &page);
+        /* A draft reply, so the top screen shows the line it is drawn on. */
+        indigo_copy_utf8(app->chat_thread.reply, sizeof app->chat_thread.reply, "On my way");
     } else if (s->screen == INDIGO_SCREEN_MESSAGES) {
         indigo_chat_inbox page;
 
