@@ -35,6 +35,14 @@ serve(void *cls, struct MHD_Connection *conn, const char *url, const char *metho
     if (*upload_size != 0) { *upload_size = 0; return MHD_YES; }
     requests_seen++;
     last_query[0] = '\0';
+    if (strstr(url, "getMessages") != NULL) {
+        static const char msgs[] = "{\"messages\":[]}";
+        resp = MHD_create_response_from_buffer(strlen(msgs), (void *) msgs, MHD_RESPMEM_PERSISTENT);
+        MHD_add_response_header(resp, "content-type", "application/json");
+        ok = MHD_queue_response(conn, MHD_HTTP_OK, resp);
+        MHD_destroy_response(resp);
+        return ok;
+    }
     q = strstr(url, "listConvoRequests");
     (void) q;
     {
@@ -86,6 +94,31 @@ main(void)
     CHECK(strcmp(g_session.requests.items[0].name, "Alice") == 0);
     CHECK(strcmp(g_session.requests.items[1].name, "Bob") == 0);
     CHECK(!g_session.requests.has_more);
+
+    /* A conversation id that fits loads the thread and records its id. */
+    {
+        indigo_job j;
+        memset(&j, 0, sizeof j);
+        snprintf(j.post_uri, sizeof j.post_uri, "%s", "convo-ok");
+        memset(g_session.chat_thread.convo_id, 0, sizeof g_session.chat_thread.convo_id);
+        indigo_session_do_chat_messages(&j);
+        CHECK(g_session.event.kind == INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE);
+        CHECK(strcmp(g_session.chat_thread.convo_id, "convo-ok") == 0);
+    }
+
+    /* An id longer than the bridge accepts is refused: no thread, and the id is not cut. */
+    {
+        indigo_job j;
+        char longid[300];
+        memset(&j, 0, sizeof j);
+        memset(longid, 'y', 199);
+        longid[199] = '\0';
+        snprintf(j.post_uri, sizeof j.post_uri, "%s", longid);
+        memset(g_session.chat_thread.convo_id, 0, sizeof g_session.chat_thread.convo_id);
+        indigo_session_do_chat_messages(&j);
+        CHECK(g_session.event.kind == INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED);
+        CHECK(g_session.chat_thread.convo_id[0] == '\0');
+    }
 
     /* A failing server: the failure event is published and the list is kept. */
     MHD_stop_daemon(d);
