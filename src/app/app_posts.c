@@ -401,3 +401,108 @@ indigo_app_update_notifications(indigo_app *app, const indigo_input *input)
         }
     }
 }
+
+void
+indigo_app_update_dms(indigo_app *app, const indigo_input *input)
+{
+    indigo_dms *d = &app->dms;
+    int drag = indigo_app_drag_rows(app, input);
+
+    if (d->active_id[0]) {
+        /* Message view: send on A/confirm, reload on Y. */
+        if (input->back) {
+            indigo_app_go_back(app);
+            indigo_dms_clear_messages(&app->dms);
+            app->dms.active_id[0] = '\0';
+            return;
+        }
+        if (input->confirm) {
+            indigo_app_send_message(app);
+        }
+        if (input->refresh && !d->loading_messages && app->request == INDIGO_REQUEST_NONE) {
+            d->loading_messages = true;
+            app->request = INDIGO_REQUEST_DMS_MESSAGES;
+        }
+        if (input->touch_pressed) {
+            indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+            switch (a) {
+            case INDIGO_ACTION_SEND:
+                indigo_app_send_message(app);
+                break;
+            case INDIGO_ACTION_REFRESH:
+                if (!d->loading_messages && app->request == INDIGO_REQUEST_NONE) {
+                    d->loading_messages = true;
+                    app->request = INDIGO_REQUEST_DMS_MESSAGES;
+                }
+                break;
+            case INDIGO_ACTION_BACK:
+                indigo_app_go_back(app);
+                indigo_dms_clear_messages(&app->dms);
+                app->dms.active_id[0] = '\0';
+                break;
+            default:
+                break;
+            }
+        }
+        return;
+    }
+
+    /* Convo list view: mirrors notifications navigation. */
+    if (input->up) {
+        indigo_dms_move_convo(d, -1, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->down) {
+        indigo_dms_move_convo(d, 1, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->page_up) {
+        indigo_dms_move_convo(d, -INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->page_down) {
+        indigo_dms_move_convo(d, INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (drag != 0) {
+        indigo_dms_move_convo(d, drag, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->back) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (input->confirm) {
+        const indigo_convo *c = indigo_dms_selected(d);
+        if (c) {
+            indigo_app_open_convo(app, c->id);
+        }
+    }
+    if (input->refresh && !d->loading && app->request == INDIGO_REQUEST_NONE) {
+        d->loading = true;
+        app->request = INDIGO_REQUEST_DMS;
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        switch (a) {
+        case INDIGO_ACTION_ROW0:
+        case INDIGO_ACTION_ROW1:
+        case INDIGO_ACTION_ROW2:
+            indigo_dms_select_convo(d, d->scroll + (unsigned) (a - INDIGO_ACTION_ROW0));
+            break;
+        case INDIGO_ACTION_OPEN:
+            if (d->selected < d->count) {
+                indigo_app_open_convo(app, d->convos[d->selected].id);
+            }
+            break;
+        case INDIGO_ACTION_REFRESH:
+            if (!d->loading && app->request == INDIGO_REQUEST_NONE) {
+                d->loading = true;
+                app->request = INDIGO_REQUEST_DMS;
+            }
+            break;
+        case INDIGO_ACTION_BACK:
+            indigo_app_go_back(app);
+            break;
+        default:
+            break;
+        }
+    }
+}

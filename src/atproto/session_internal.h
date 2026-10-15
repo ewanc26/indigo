@@ -79,6 +79,9 @@ typedef enum {
     JOB_FEED,
     JOB_MUTES,
     JOB_BLOCKS,
+    JOB_DMS,
+    JOB_DMS_MESSAGES,
+    JOB_SEND_MESSAGE,
 } indigo_job_kind;
 
 typedef struct {
@@ -114,6 +117,11 @@ typedef struct {
     /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
+    /* JOB_SEND_MESSAGE's conversation and text. */
+    char convo_id[INDIGO_POST_URI_MAX];
+    char message_text[INDIGO_DM_TEXT_MAX];
+    /* JOB_DMS_MESSAGES' conversation and paging cursor. */
+    char convo_messages_id[INDIGO_POST_URI_MAX];
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;
@@ -167,6 +175,11 @@ typedef struct {
     indigo_list feeds[INDIGO_SEARCH_MAX];
     unsigned list_count;
     unsigned feed_count;
+    /* DM results. */
+    indigo_convo convos[INDIGO_CONVO_MAX];
+    unsigned convo_count;
+    indigo_message messages[INDIGO_MESSAGE_MAX];
+    unsigned message_count;
 } indigo_session_state;
 
 extern indigo_session_state g_session;
@@ -241,6 +254,11 @@ void indigo_session_do_moderation_list(const indigo_job *j);
 /* session_write.c */
 void indigo_session_do_publish(const indigo_job *j);
 void indigo_session_do_delete_post(const indigo_job *j);
+
+/* session_dms.c */
+void indigo_session_do_convos(const indigo_job *j);
+void indigo_session_do_messages(const indigo_job *j);
+void indigo_session_do_send_message(const indigo_job *j);
 
 #endif /* 3DS with Wolfram */
 

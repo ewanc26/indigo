@@ -465,4 +465,58 @@ indigo_session_notifications(unsigned *count)
     return g_session.notes;
 }
 
+bool
+indigo_session_submit_convos(const char *cursor, bool paging)
+{
+    indigo_job j = {.kind = JOB_DMS, .paging = paging};
+
+    if (cursor) {
+        indigo_copy_utf8(j.cursor, sizeof j.cursor, cursor);
+    }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_messages(const char *convo_id, const char *cursor, bool paging)
+{
+    indigo_job j = {.kind = JOB_DMS_MESSAGES, .paging = paging};
+
+    if (!convo_id || !convo_id[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.convo_id, sizeof j.convo_id, convo_id);
+    indigo_copy_utf8(j.convo_messages_id, sizeof j.convo_messages_id, convo_id);
+    if (cursor) {
+        indigo_copy_utf8(j.cursor, sizeof j.cursor, cursor);
+    }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_send_message(const char *convo_id, const char *text)
+{
+    indigo_job j = {.kind = JOB_SEND_MESSAGE};
+
+    if (!convo_id || !convo_id[0] || !text || !text[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.convo_id, sizeof j.convo_id, convo_id);
+    indigo_copy_utf8(j.message_text, sizeof j.message_text, text);
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_convo *
+indigo_session_convos(unsigned *count)
+{
+    *count = g_session.convo_count;
+    return g_session.convos;
+}
+
+const indigo_message *
+indigo_session_messages(unsigned *count)
+{
+    *count = g_session.message_count;
+    return g_session.messages;
+}
+
 #endif /* 3DS with Wolfram */

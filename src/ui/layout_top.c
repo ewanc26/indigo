@@ -92,6 +92,61 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_dms(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_dms *d = &app->dms;
+
+    if (!d->active_id[0]) {
+        const indigo_convo *sel = indigo_dms_selected(d);
+
+        indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
+        if (!sel) {
+            indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                               d->loading ? "Loading messages..." : "No conversations.");
+            if (d->status[0]) {
+                indigo_canvas_text(c, 18, 120, 0.6f, d->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                                   "%s", d->status);
+            }
+            return;
+        }
+        indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", (unsigned)(sel - d->convos + 1), d->count);
+        indigo_layout_draw_avatar(c, sel->avatar, 12, 46, HEAD_AVATAR);
+        indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s",
+                           sel->name[0] ? sel->name : sel->handle);
+        indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "@%s", sel->handle);
+        if (sel->has_unread) {
+            indigo_canvas_text(c, 18, 96, 0.65f, COL_LINK, "%u unread", sel->unread);
+        } else if (sel->last_text[0]) {
+            indigo_layout_top_paragraph(c, 18, 96, 0.65f, COL_TEXT_SOFT, 4, sel->last_text);
+        }
+        return;
+    }
+
+    /* Message view: show the last message of the active conversation. */
+    if (d->message_count == 0) {
+        indigo_layout_top_title(c, "Messages", "B  Back   Y  Reload");
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           d->loading_messages ? "Loading messages..." : "No messages here yet.");
+        if (d->status_msg[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f,
+                               d->status_msg_is_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%s", d->status_msg);
+        }
+        return;
+    }
+    indigo_layout_top_title(c, "Messages", "B  Back   Y  Reload");
+    /* Draw the last message. */
+    const indigo_message *last = &d->messages[d->message_count - 1];
+    if (last->id[0]) {
+        indigo_layout_draw_avatar(c, last->avatar, 12, 46, HEAD_AVATAR);
+        indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", last->sender);
+        if (last->text[0]) {
+            indigo_layout_top_paragraph(c, 18, 80, 0.65f, COL_TEXT, 8, last->text);
+        }
+    }
+}
+
+static void
 build_top_search(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_search *s = &app->search;
@@ -429,6 +484,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_UPDATE:
         build_top_update(app, c);
+        return;
+    case INDIGO_SCREEN_DMS:
+        build_top_dms(app, c);
         return;
     default:
         break;

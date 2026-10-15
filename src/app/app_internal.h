@@ -29,6 +29,9 @@ void indigo_app_refresh_timeline(indigo_app *app);
 void indigo_app_open_thread(indigo_app *app, const char *uri);
 void indigo_app_open_profile(indigo_app *app, const char *actor);
 void indigo_app_open_notifications(indigo_app *app);
+void indigo_app_open_dms(indigo_app *app);
+void indigo_app_open_convo(indigo_app *app, const char *convo_id);
+void indigo_app_send_message(indigo_app *app);
 void indigo_app_open_menu(indigo_app *app);
 void indigo_app_toggle_like(indigo_app *app);
 void indigo_app_toggle_repost(indigo_app *app);
@@ -39,6 +42,7 @@ void indigo_app_update_home(indigo_app *app, const indigo_input *input);
 void indigo_app_update_notifications(indigo_app *app, const indigo_input *input);
 void indigo_app_update_profile(indigo_app *app, const indigo_input *input);
 void indigo_app_update_thread(indigo_app *app, const indigo_input *input);
+void indigo_app_update_dms(indigo_app *app, const indigo_input *input);
 
 /* app_screens.c */
 void indigo_app_begin_compose(indigo_app *app, indigo_compose_mode mode, const indigo_post *target);

@@ -1,7 +1,10 @@
 #include "app/app.h"
 #include "atproto/atproto.h"
 #include "app/signin.h"
+#include "app/timeline_cache.h"
 #include "atproto/session.h"
+#include "store/cache_store.h"
+#include "store/file.h"
 #include "input/input.h"
 #include "input/textinput.h"
 #include "store/draft_store.h"
@@ -22,6 +25,7 @@
 #define SESSION_PATH DATA_DIR "/session.dat"
 #define SETTINGS_PATH DATA_DIR "/settings.dat"
 #define DRAFT_PATH DATA_DIR "/draft.dat"
+#define CACHE_PATH DATA_DIR "/timeline.dat"
 #define UPDATE_STATE_PATH DATA_DIR "/update.state"
 #define AUTOFILL_PATH DATA_DIR "/autofill.txt"
 #define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
@@ -311,7 +315,28 @@ handle_requests(indigo_app *app)
             indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
         }
         break;
-    case INDIGO_REQUEST_SAVE_SETTINGS:
+    case INDIGO_REQUEST_DMS:
+        if (!indigo_session_submit_convos(app->dms.cursor, false)) {
+            indigo_app_convos_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_DMS_MORE:
+        if (!indigo_session_submit_convos(app->dms.cursor, true)) {
+            indigo_app_convos_failed(app, "Could not load more.");
+        }
+        break;
+    case INDIGO_REQUEST_DMS_MESSAGES:
+        if (!indigo_session_submit_messages(app->dms.active_id, app->dms.cursor,
+                                            false)) {
+            indigo_app_messages_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_SEND_MESSAGE:
+        if (!indigo_session_submit_send_message(app->request_convo_id,
+                                                app->request_message)) {
+            indigo_app_message_failed(app, "Could not start the request.");
+        }
+        break;
         indigo_settings_store_save(SETTINGS_PATH, &app->settings);
         break;
     case INDIGO_REQUEST_UPDATE_CHECK:
@@ -373,6 +398,20 @@ handle_update(indigo_app *app)
     }
 }
 
+/* Keep the home timeline's rows for the next start. Called once per fresh
+ * first page, so a scroll through the rest of the timeline writes nothing. A
+ * failed write is logged and otherwise ignored: the cache is a convenience. */
+static void
+save_timeline_cache(const indigo_app *app)
+{
+    static indigo_cache_timeline snapshot;
+
+    indigo_timeline_cache_capture(&app->timeline, &snapshot);
+    if (indigo_cache_store_save(CACHE_PATH, &snapshot) == INDIGO_STORE_IO) {
+        indigo_log_warn("could not save the timeline cache");
+    }
+}
+
 static void
 handle_events(indigo_app *app)
 {
@@ -391,19 +430,29 @@ handle_events(indigo_app *app)
             indigo_app_signed_out(app, "Signed out.");
             /* The decoded images and their GPU textures are not the
              * signed-out account's to keep, and on a shared device they are
-             * a record of who was signed in before. */
+             * a record of who was signed in before. The timeline cache is the
+             * same kind of record, so it goes too. */
             indigo_ui_clear_images();
+            if (indigo_file_remove(CACHE_PATH) == INDIGO_STORE_IO) {
+                indigo_log_warn("could not remove the timeline cache");
+            }
             break;
         case INDIGO_SESSION_EVENT_TIMELINE_PAGE: {
             unsigned n;
             const indigo_post *page = indigo_session_page(&n);
+            bool first;
 
             for (unsigned i = 0; page && i < n; i++) {
                 if (!indigo_timeline_append(&app->timeline, &page[i])) {
                     break;
                 }
             }
-            indigo_timeline_finish_fetch(&app->timeline, ev.cursor);
+            first = indigo_timeline_finish_fetch(&app->timeline, ev.cursor);
+            /* Only the home timeline's first page is cached: a feed or a
+             * search is not what the app opens on. */
+            if (first && app->feed_uri[0] == '\0') {
+                save_timeline_cache(app);
+            }
             break;
         }
         case INDIGO_SESSION_EVENT_TIMELINE_FAILED:
@@ -520,6 +569,32 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_GRAPH_FAILED:
             indigo_app_graph_failed(app, ev.graph, indigo_failure_message(ev.failure));
             break;
+        case INDIGO_SESSION_EVENT_CONVOS_PAGE: {
+            unsigned n;
+            const indigo_convo *convos = indigo_session_convos(&n);
+
+            indigo_app_convos_loaded(app, convos, n, ev.cursor);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_CONVOS_FAILED:
+            indigo_app_convos_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_MESSAGES_PAGE: {
+            unsigned n;
+            const indigo_message *msgs = indigo_session_messages(&n);
+
+            indigo_app_messages_loaded(app, msgs, n, ev.cursor);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_MESSAGES_FAILED:
+            indigo_app_messages_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_MESSAGE_SENT:
+            indigo_app_message_sent(app);
+            break;
+        case INDIGO_SESSION_EVENT_MESSAGE_FAILED:
+            indigo_app_message_failed(app, indigo_failure_message(ev.failure));
+            break;
         case INDIGO_SESSION_EVENT_NONE:
             break;
         }
@@ -619,6 +694,19 @@ main(int argc, char **argv)
         indigo_log_warn("draft file was unreadable; it was kept as draft.dat.bad");
     }
     indigo_app_set_draft(&app, saved_draft);
+
+    /* The last home timeline, shown while the saved session is resumed. Only
+     * with a saved session: the cache belongs to the account that was signed
+     * in, and a signed-out device has no account to show it for. A damaged
+     * file is set aside by the store and simply restores nothing. */
+    if (indigo_session_has_saved()) {
+        static indigo_cache_timeline cached;
+
+        if (indigo_cache_store_load(CACHE_PATH, &cached) == INDIGO_STORE_UNREADABLE) {
+            indigo_log_warn("timeline cache was unreadable; it was kept as timeline.dat.bad");
+        }
+        indigo_timeline_cache_restore(&app.timeline, &cached);
+    }
 
     if (indigo_session_has_saved() && indigo_session_submit_resume()) {
         indigo_app_begin_sign_in(&app, "Resuming your session...");

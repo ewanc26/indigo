@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "app/dms.h"
 #include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
@@ -30,6 +31,7 @@ typedef enum {
     INDIGO_SCREEN_SETTINGS,
     INDIGO_SCREEN_IMAGE,
     INDIGO_SCREEN_UPDATE,
+    INDIGO_SCREEN_DMS,
 } indigo_screen;
 
 typedef enum {
@@ -79,6 +81,10 @@ typedef enum {
     INDIGO_REQUEST_SAVE_SETTINGS,
     INDIGO_REQUEST_UPDATE_CHECK,
     INDIGO_REQUEST_UPDATE_INSTALL,
+    INDIGO_REQUEST_DMS,
+    INDIGO_REQUEST_DMS_MORE,
+    INDIGO_REQUEST_DMS_MESSAGES,
+    INDIGO_REQUEST_SEND_MESSAGE,
 } indigo_request_kind;
 
 typedef struct {
@@ -114,6 +120,10 @@ typedef struct {
     /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
     indigo_search_kind request_people;
     char request_subject[INDIGO_POST_URI_MAX];
+    /* The convo INDIGO_REQUEST_SEND_MESSAGE is asking to send in. */
+    char request_convo_id[INDIGO_POST_URI_MAX];
+    /* The text INDIGO_REQUEST_SEND_MESSAGE is asking to send. */
+    char request_message[INDIGO_DM_TEXT_MAX];
     /* Who INDIGO_REQUEST_AUTHOR_FEED is asking about. */
     char request_actor[INDIGO_POST_NAME_MAX];
     /* Which list INDIGO_REQUEST_LIST_MEMBERS is asking for. */
@@ -141,6 +151,7 @@ typedef struct {
     indigo_menu menu;
     indigo_profile profile;
     indigo_notifications notifications;
+    indigo_dms dms;
     indigo_compose compose;
     /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
      * unless a test points them elsewhere. */
@@ -231,6 +242,20 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
  * from that person's profile, which is where it was made. */
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
+/* Direct messages: open the convo list, or open a single conversation. */
+void indigo_app_open_dms(indigo_app *app);
+void indigo_app_open_convo(indigo_app *app, const char *convo_id);
+/* Send a message in the open conversation. */
+void indigo_app_send_message(indigo_app *app);
+/* Results fed back by the platform glue. */
+void indigo_app_convos_loaded(indigo_app *app, const indigo_convo *convos, unsigned count,
+                              const char *next_cursor);
+void indigo_app_convos_failed(indigo_app *app, const char *message);
+void indigo_app_messages_loaded(indigo_app *app, const indigo_message *messages,
+                                unsigned count, const char *next_cursor);
+void indigo_app_messages_failed(indigo_app *app, const char *message);
+void indigo_app_message_sent(indigo_app *app);
+void indigo_app_message_failed(indigo_app *app, const char *message);
 void indigo_app_open_settings(indigo_app *app);
 /* The update screen. `describe` is the build's git-describe stamp and
  * `can_swap` whether it was launched from a .3dsx on the SD card; call once,

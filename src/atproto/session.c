@@ -130,6 +130,15 @@ worker(void *arg)
         case JOB_PUBLISH:
             indigo_session_do_publish(&j);
             break;
+        case JOB_DMS:
+            indigo_session_do_convos(&j);
+            break;
+        case JOB_DMS_MESSAGES:
+            indigo_session_do_messages(&j);
+            break;
+        case JOB_SEND_MESSAGE:
+            indigo_session_do_send_message(&j);
+            break;
         case JOB_NONE:
             break;
         }

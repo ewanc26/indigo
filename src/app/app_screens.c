@@ -189,6 +189,10 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_blocks(app);
         break;
+    case INDIGO_MENU_DMS:
+        indigo_app_go_back(app);
+        indigo_app_open_dms(app);
+        break;
     case INDIGO_MENU_MY_PROFILE:
         indigo_app_go_back(app);
         indigo_app_open_profile(app, app->signin.account);
