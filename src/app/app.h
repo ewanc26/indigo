@@ -5,6 +5,7 @@
 #include "atproto/chat.h"
 #include <stddef.h>
 
+#include "app/post_queue.h"
 #include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
@@ -34,6 +35,7 @@ typedef enum {
     INDIGO_SCREEN_MESSAGES,
     INDIGO_SCREEN_CHAT_THREAD,
     INDIGO_SCREEN_CHAT_REQUESTS,
+    INDIGO_SCREEN_QUEUE,
 } indigo_screen;
 
 typedef enum {
@@ -157,6 +159,16 @@ typedef struct {
     indigo_chat_thread chat_thread;
     /* Pending message requests on the signed-in account; 0 hides the line. */
     int requests_count;
+    /* Offline posts saved with Save for later, mirrored to the SD card. A post
+     * being sent is held in queue_inflight until its result says whether it
+     * went; the armed flag makes a discard take two presses. */
+    indigo_post_queue queue;
+    unsigned queue_selected;
+    bool queue_discard_armed;
+    bool queue_send_pending;
+    indigo_queued_post queue_inflight;
+    char queue_status[INDIGO_POST_NOTE_MAX];
+    bool queue_status_is_error;
     indigo_compose compose;
     /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
      * unless a test points them elsewhere. */
@@ -258,6 +270,16 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
 void indigo_app_open_settings(indigo_app *app);
+
+/* Queued posts (app_queue.c). Nothing in this set sends without the person. */
+void indigo_app_open_queue(indigo_app *app);
+void indigo_app_persist_queue(indigo_app *app);
+void indigo_app_save_compose_later(indigo_app *app);
+void indigo_app_queue_send(indigo_app *app, unsigned index);
+void indigo_app_update_queue(indigo_app *app, const indigo_input *input);
+bool indigo_app_queue_publish_done(indigo_app *app);
+bool indigo_app_queue_publish_failed(indigo_app *app, const char *message);
+
 /* The update screen. `describe` is the build's git-describe stamp and
  * `can_swap` whether it was launched from a .3dsx on the SD card; call once,
  * after init. Opening the screen never touches the network: the button asks. */

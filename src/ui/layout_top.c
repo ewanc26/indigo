@@ -92,6 +92,27 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_queue(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_post_queue *q = &app->queue;
+
+    indigo_layout_top_title(c, "Queued posts", "B  Back   A  Send   Y  Discard");
+    if (q->count == 0) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Nothing is queued.");
+    } else {
+        const indigo_queued_post *p = &q->items[app->queue_selected < q->count ? app->queue_selected : 0];
+
+        indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u",
+                           app->queue_selected + 1, q->count);
+        indigo_layout_top_paragraph(c, 18, 60, 0.75f, COL_TEXT, 6, p->text);
+    }
+    if (app->queue_status[0]) {
+        indigo_canvas_text(c, 18, 200, 0.6f, app->queue_status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%s", app->queue_status);
+    }
+}
+
+static void
 build_top_requests(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_chat_inbox *r = &app->requests;
@@ -507,6 +528,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_CHAT_REQUESTS:
         build_top_requests(app, c);
+        return;
+    case INDIGO_SCREEN_QUEUE:
+        build_top_queue(app, c);
         return;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_top_chat_thread(app, c);
