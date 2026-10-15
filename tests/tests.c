@@ -2,6 +2,8 @@
 #include "app/signin.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
+#include "atproto/chat.h"
+#include <wolfram/chat_typed.h>
 #include "atproto/prefs.h"
 #include "media/media.h"
 #include "store/session_codec.h"
@@ -40,6 +42,95 @@ static int s_failures;
             fprintf(stderr, "%s:%d: check failed: %s\n", __FILE__, __LINE__, #cond); \
         }                                                                        \
     } while (0)
+
+static void
+test_chat_inbox_counterpart(void)
+{
+    const char *one_to_one[] = { "did:plc:them", "did:plc:me" };
+    const char *reversed[] = { "did:plc:me", "did:plc:them" };
+    const char *alone[] = { "did:plc:me" };
+    const char *group[] = { "did:plc:me", "did:plc:a", "did:plc:b" };
+    const char *blank[] = { "", "did:plc:them", "did:plc:me" };
+
+    CHECK(indigo_chat_pick_counterpart(one_to_one, 2, "did:plc:me") == 0);
+    CHECK(indigo_chat_pick_counterpart(reversed, 2, "did:plc:me") == 1);
+    CHECK(indigo_chat_pick_counterpart(alone, 1, "did:plc:me") == -1);
+    CHECK(indigo_chat_pick_counterpart(NULL, 0, "did:plc:me") == -1);
+    CHECK(indigo_chat_pick_counterpart(blank, 3, "did:plc:me") == 1);
+    CHECK(indigo_chat_pick_counterpart(one_to_one, 2, NULL) == 0);
+
+    CHECK(indigo_chat_other_member_count(one_to_one, 2, "did:plc:me") == 1);
+    CHECK(indigo_chat_other_member_count(group, 3, "did:plc:me") == 2);
+    CHECK(indigo_chat_other_member_count(alone, 1, "did:plc:me") == 0);
+
+    indigo_chat_inbox inbox;
+    memset(&inbox, 0, sizeof inbox);
+    inbox.count = 4;
+    inbox.unread = 9;
+    inbox.has_more = true;
+    indigo_chat_inbox_reset(&inbox);
+    CHECK(inbox.count == 0);
+    CHECK(inbox.unread == 0);
+    CHECK(!inbox.has_more);
+
+    /* A page: a one-to-one convo with unread messages, a convo with only the
+     * viewer (dropped), and a group of three. */
+    wf_agent_profile_view them = { (char *)"did:plc:them", (char *)"ann.test",
+                                   (char *)"Ann", NULL, NULL, false };
+    wf_agent_profile_view me = { (char *)"did:plc:me", (char *)"me.test",
+                                 (char *)"Me", NULL, NULL, false };
+    wf_agent_profile_view a = { (char *)"did:plc:a", (char *)"a.test", NULL, NULL, NULL, false };
+    wf_agent_profile_view b = { (char *)"did:plc:b", (char *)"b.test", NULL, NULL, NULL, false };
+
+    wf_agent_profile_view pair[2] = { them, me };
+    wf_agent_profile_view solo[1] = { me };
+    wf_agent_profile_view trio[3] = { me, a, b };
+
+    wf_chat_convo convos[3];
+    memset(convos, 0, sizeof convos);
+    convos[0].id = (char *)"convo-1";
+    convos[0].members = pair;
+    convos[0].member_count = 2;
+    convos[0].last_message_text = (char *)"see you then";
+    convos[0].unread_count = 3;
+    convos[0].has_unread_count = 1;
+    convos[1].id = (char *)"convo-solo";
+    convos[1].members = solo;
+    convos[1].member_count = 1;
+    convos[2].id = (char *)"convo-group";
+    convos[2].members = trio;
+    convos[2].member_count = 3;
+
+    wf_chat_convo_list page;
+    memset(&page, 0, sizeof page);
+    page.convos = convos;
+    page.convo_count = 3;
+    page.cursor = (char *)"next";
+
+    indigo_chat_inbox got;
+    memset(&got, 0, sizeof got);
+    CHECK(indigo_chat_inbox_append_from_wolfram(&got, &page, "did:plc:me") == 2);
+    CHECK(got.count == 2);
+    CHECK(got.unread == 3);
+    CHECK(strcmp(got.items[0].id, "convo-1") == 0);
+    CHECK(strcmp(got.items[0].name, "Ann") == 0);
+    CHECK(strcmp(got.items[0].handle, "@ann.test") == 0);
+    CHECK(strcmp(got.items[0].preview, "see you then") == 0);
+    CHECK(got.items[0].unread == 3);
+    CHECK(!got.items[0].group);
+    CHECK(strcmp(got.items[1].id, "convo-group") == 0);
+    CHECK(strcmp(got.items[1].name, "Group") == 0);
+    CHECK(got.items[1].group);
+    CHECK(strcmp(got.cursor, "next") == 0);
+    CHECK(got.has_more);
+
+    /* A page with no cursor ends the inbox. */
+    page.cursor = NULL;
+    memset(&got, 0, sizeof got);
+    indigo_chat_inbox_append_from_wolfram(&got, &page, "did:plc:me");
+    CHECK(!got.has_more);
+    CHECK(got.cursor[0] == '\0');
+}
 
 static void
 test_canvas_basics(void)
@@ -5696,6 +5787,7 @@ int
 main(void)
 {
     test_canvas_basics();
+    test_chat_inbox_counterpart();
     test_canvas_overflow_is_bounded();
     test_app_navigation();
     test_touch_navigation();
