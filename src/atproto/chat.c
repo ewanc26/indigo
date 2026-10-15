@@ -173,6 +173,11 @@ indigo_chat_inbox_append_from_wolfram(indigo_chat_inbox *out,
             continue; /* only the viewer: nothing to show */
         }
 
+        /* An id too long to open by is left out rather than shown with a cut id. */
+        if (!src->id || strlen(src->id) >= INDIGO_CHAT_ID_MAX) {
+            continue;
+        }
+
         indigo_chat_convo *item = &out->items[out->count];
         memset(item, 0, sizeof *item);
         snprintf(item->id, sizeof item->id, "%s", src->id ? src->id : "");

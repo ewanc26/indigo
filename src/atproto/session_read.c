@@ -360,8 +360,14 @@ indigo_session_do_chat_messages(const indigo_job *j)
         return;
     }
 
-    snprintf(g_session.chat_thread.convo_id, sizeof g_session.chat_thread.convo_id, "%s",
-             j->post_uri);
+    /* An id that does not fit is refused, not cut: a cut id would open another conversation. */
+    if (strlen(j->post_uri) >= sizeof g_session.chat_thread.convo_id) {
+        ev.failure = WF_FAIL_OTHER;
+        wf_chat_message_list_free(&list);
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    memcpy(g_session.chat_thread.convo_id, j->post_uri, strlen(j->post_uri) + 1);
     indigo_chat_thread_fill_from_wolfram(&g_session.chat_thread, &list,
                                          wf_agent_get_did(g_session.agent));
     wf_chat_message_list_free(&list);
