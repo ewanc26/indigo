@@ -9,7 +9,7 @@ as the release notes.
 ## [Unreleased]
 
 ### Added
-- Messages on the More menu opens a read-only direct message inbox: each conversation names its counterpart (or "Group"), shows the last message and the unread count, and the list pages. A is a conversation: its newest messages show on the top screen, selectable from the list below, with the account's own marked "You". Replying comes next ([#22](https://github.com/ewanc26/indigo/issues/22)).
+- Messages on the More menu opens a read-only direct message inbox: each conversation names its counterpart (or "Group"), shows the last message and the unread count, and the list pages. A is a conversation: its newest messages show on the top screen, selectable from the list below, with the account's own marked "You". A writes a reply on the software keyboard and Y sends it; a reply that fails to send stays as the draft ([#22](https://github.com/ewanc26/indigo/issues/22)).
 - Compose a text-only thread of up to eight top-level posts with Add to thread. Wolfram publishes the chain in order; if a later post fails, Indigo reports how many are already public and clears the draft so they cannot be duplicated. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Show web links from the More menu as QR codes on the top screen, with the full address on the bottom screen, so a phone can open a link the 3DS cannot. Uses Wolfram's wf_qr_encode; URLs too long for the encoder remain readable without a code. ([#22](https://github.com/ewanc26/indigo/issues/22))
 - Delete your own post from the thread screen, with explicit confirmation and a worker-side check that the AT-URI belongs to the signed-in account. ([#22](https://github.com/ewanc26/indigo/issues/22))

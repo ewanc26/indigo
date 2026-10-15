@@ -1215,6 +1215,55 @@ test_chat_thread_and_open(void)
 }
 
 static void
+test_chat_reply(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+
+    /* A reply must hold something other than spaces, and fit the buffer. */
+    CHECK(!indigo_chat_reply_valid(NULL));
+    CHECK(!indigo_chat_reply_valid(""));
+    CHECK(!indigo_chat_reply_valid(" \t\n "));
+    CHECK(indigo_chat_reply_valid(" on my way "));
+
+    /* A is the keyboard; Y sends a reply that is there and nothing else in flight. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_CHAT_THREAD;
+    snprintf(app.request_post_uri, sizeof app.request_post_uri, "%s", "convo-bob");
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_REPLY);
+
+    in = (indigo_input) {0};
+    in.like = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_peek_request(&app) == INDIGO_REQUEST_NONE);
+    CHECK(!app.chat_thread.sending);
+
+    snprintf(app.chat_thread.reply, sizeof app.chat_thread.reply, "%s", "on my way");
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_SEND);
+    CHECK(app.chat_thread.sending);
+
+    /* A failed send keeps the reply and says why. */
+    indigo_app_chat_send_failed(&app, "Offline.");
+    CHECK(!app.chat_thread.sending);
+    CHECK(strcmp(app.chat_thread.reply, "on my way") == 0);
+    CHECK(app.chat_thread.status_is_error);
+    CHECK(strcmp(app.chat_thread.status, "Offline.") == 0);
+
+    /* A sent reply clears the draft and asks for the thread again. */
+    app.chat_thread.sending = true;
+    indigo_app_chat_send_done(&app);
+    CHECK(!app.chat_thread.sending);
+    CHECK(app.chat_thread.reply[0] == '\0');
+    CHECK(!app.chat_thread.status_is_error);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_THREAD);
+    CHECK(app.chat_thread.loading);
+}
+
+static void
 test_messages_list(void)
 {
     indigo_chat_inbox m;
@@ -5950,6 +5999,7 @@ main(void)
     test_partial_thread_publish_clears_draft();
     test_messages_list();
     test_chat_thread_and_open();
+    test_chat_reply();
     test_messages_loaded_and_failed();
     test_notifications();
     test_normalise_service();
