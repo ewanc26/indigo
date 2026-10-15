@@ -317,21 +317,21 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     }
 
     if (thread) {
-        indigo_canvas_text(c, 18, 36, 0.55f, COL_TEXT_DIM, "%s",
+        indigo_canvas_text(c, 18, 34, 0.55f, COL_TEXT_DIM, "%s",
                            t->selected < app->thread_focus    ? "Earlier in the thread"
                            : t->selected == app->thread_focus ? "The post"
                                                                : "A reply");
     } else if (p->reposted_by[0]) {
-        indigo_canvas_text(c, 18, 36, 0.55f, COL_REPOSTED, "Reposted by %s", p->reposted_by);
+        indigo_canvas_text(c, 18, 34, 0.55f, COL_REPOSTED, "Reposted by %s", p->reposted_by);
     } else if (p->is_reply) {
-        indigo_canvas_text(c, 18, 36, 0.55f, COL_TEXT_DIM, "Reply");
+        indigo_canvas_text(c, 18, 34, 0.55f, COL_TEXT_DIM, "Reply");
     }
-    indigo_layout_draw_avatar(c, p->avatar, 12, 50, HEAD_AVATAR);
+    indigo_layout_draw_avatar(c, p->avatar, 12, 54, HEAD_AVATAR);
     /* The name and handle sit beside the avatar rather than above the text:
      * the text block is a fixed five lines starting at POST_TEXT_Y, and there
      * is no room to give the header a third line. */
-    indigo_canvas_text(c, 44, 52, 0.75f, COL_TEXT, "%s", indigo_layout_author_name(p));
-    indigo_canvas_text(c, 44, 76, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
+    indigo_canvas_text(c, 44, 56, 0.75f, COL_TEXT, "%s", indigo_layout_author_name(p));
+    indigo_canvas_text(c, 44, 80, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
     indigo_layout_draw_post_body(c, p, app->settings.alt_text, app->settings.text_scale);
 
     indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
