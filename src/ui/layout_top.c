@@ -125,7 +125,7 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_thread *t = &app->chat_thread;
     const indigo_chat_message *sel = t->selected < t->count ? &t->items[t->selected] : NULL;
 
-    indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
+    indigo_layout_top_title(c, "Messages", "B Back  A Reply  Y Send");
     if (!sel) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
                            t->loading ? "Loading messages..." : "Nothing to show.");
@@ -138,7 +138,15 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", t->selected + 1, t->count);
     indigo_canvas_text(c, 18, 52, 0.7f, sel->mine ? COL_LINK : COL_TEXT_SOFT, "%s",
                        sel->mine ? "You" : (t->title[0] ? t->title : "Them"));
-    indigo_layout_top_paragraph(c, 18, 84, 0.6f, COL_TEXT, 6, sel->text);
+    indigo_layout_top_paragraph(c, 18, 84, 0.6f, COL_TEXT, 4, sel->text);
+    /* The reply being written, or the last send's result. */
+    if (t->reply[0]) {
+        indigo_canvas_text(c, 18, 200, 0.6f, COL_LINK, "Reply: %.60s", t->reply);
+    }
+    if (t->status[0]) {
+        indigo_canvas_text(c, 18, 222, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%s", t->status);
+    }
 }
 
 static void

@@ -41,6 +41,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_CHAT_FAILED,
     INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE,
     INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_SEND_DONE,
+    INDIGO_SESSION_EVENT_CHAT_SEND_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -140,6 +142,10 @@ const indigo_chat_inbox *indigo_session_chat_inbox(void);
  * indigo_session_chat_thread once CHAT_THREAD_PAGE arrives. */
 bool indigo_session_submit_chat_messages(const char *convo_id);
 const indigo_chat_thread *indigo_session_chat_thread(void);
+
+/* Send `text` to a conversation. Refused without a job when the text is not a reply
+ * the service will take (indigo_chat_reply_valid). */
+bool indigo_session_submit_chat_send(const char *convo_id, const char *text);
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
  * and `target_*` the post being answered; for a quote, `target_*` is quoted.
  *

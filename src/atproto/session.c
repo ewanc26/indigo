@@ -99,6 +99,9 @@ worker(void *arg)
         case JOB_CHAT_MESSAGES:
             indigo_session_do_chat_messages(&j);
             break;
+        case JOB_CHAT_SEND:
+            indigo_session_do_chat_send(&j);
+            break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);
             break;

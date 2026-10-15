@@ -346,6 +346,30 @@ indigo_session_do_chat_messages(const indigo_job *j)
 }
 
 void
+indigo_session_do_chat_send(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_SEND_FAILED};
+    wf_chat_message sent;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    memset(&sent, 0, sizeof sent);
+    st = wf_agent_chat_send_message(g_session.agent, j->post_uri, j->text, NULL, &sent);
+    wf_chat_message_reset(&sent);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "send", st);
+        return;
+    }
+
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_SEND_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+void
 indigo_session_do_notifications(void)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
@@ -496,6 +520,19 @@ const indigo_chat_thread *
 indigo_session_chat_thread(void)
 {
     return &g_session.chat_thread;
+}
+
+bool
+indigo_session_submit_chat_send(const char *convo_id, const char *text)
+{
+    indigo_job j = {.kind = JOB_CHAT_SEND};
+
+    if (!convo_id || !convo_id[0] || !indigo_chat_reply_valid(text)) {
+        return false;
+    }
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", convo_id);
+    snprintf(j.text, sizeof j.text, "%s", text);
+    return indigo_session_enqueue(&j);
 }
 
 bool

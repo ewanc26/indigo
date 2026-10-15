@@ -179,6 +179,31 @@ indigo_app_chat_thread_failed(indigo_app *app, const char *message)
 }
 
 void
+indigo_app_chat_send_done(indigo_app *app)
+{
+    indigo_chat_thread *t = &app->chat_thread;
+
+    t->sending = false;
+    t->reply[0] = '\0';
+    indigo_copy_utf8(t->status, sizeof t->status, "Sent.");
+    t->status_is_error = false;
+    /* Reload so the reply shows; if another request holds the slot, the reload is
+     * left to the person pressing SEL. */
+    if (app->request == INDIGO_REQUEST_NONE) {
+        t->loading = true;
+        app->request = INDIGO_REQUEST_CHAT_THREAD;
+    }
+}
+
+void
+indigo_app_chat_send_failed(indigo_app *app, const char *message)
+{
+    app->chat_thread.sending = false;
+    indigo_copy_utf8(app->chat_thread.status, sizeof app->chat_thread.status, message);
+    app->chat_thread.status_is_error = true;
+}
+
+void
 indigo_app_notifications_failed(indigo_app *app, const char *message)
 {
     app->notifications.loading = false;

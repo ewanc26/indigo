@@ -68,6 +68,7 @@ typedef enum {
     JOB_NOTIFICATIONS,
     JOB_CHAT_INBOX,
     JOB_CHAT_MESSAGES,
+    JOB_CHAT_SEND,
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
@@ -225,6 +226,7 @@ void indigo_session_do_feed(const indigo_job *j);
 void indigo_session_do_notifications(void);
 void indigo_session_do_chat_inbox(void);
 void indigo_session_do_chat_messages(const indigo_job *j);
+void indigo_session_do_chat_send(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);
 void indigo_session_do_post_search(const indigo_job *j);
 void indigo_session_do_thread(const indigo_job *j);
