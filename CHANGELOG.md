@@ -12,6 +12,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-16
+
 ### Changed
 
 - The self-updater accepts the stable `indigo.3dsx` name in an update manifest, at that release's own URL, as well as `indigo-<version>.3dsx`. A later release can stop publishing the versioned copy without stranding installed builds. ([#96](https://github.com/ewanc26/indigo/pull/96))
