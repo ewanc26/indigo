@@ -16,6 +16,10 @@ as the release notes.
 
 - The self-updater accepts the stable `indigo.3dsx` name in an update manifest, at that release's own URL, as well as `indigo-<version>.3dsx`. A later release can stop publishing the versioned copy without stranding installed builds. ([#96](https://github.com/ewanc26/indigo/pull/96))
 
+### Fixed
+
+- Reply gates are written under the post's own record key, so the AppView links them to the post and the reply controls apply. Uses Wolfram v0.40.0's `wf_agent_set_reply_gate`. ([#203](https://github.com/ewanc26/wolfram/issues/203))
+
 ## [0.13.0] - 2026-10-15
 
 ### Added
