@@ -21,6 +21,7 @@
 #include "gfx/canvas.h"
 #include "input/input.h"
 #include "ui/layout.h"
+#include "ui/layout_internal.h"
 #include "ui/wrap.h"
 #include "util/buildinfo.h"
 #include "util/clock.h"
@@ -2431,6 +2432,31 @@ test_settings_store(void)
 
     snprintf(cmd, sizeof cmd, "rm -rf %s", dir);
     CHECK(system(cmd) == 0);
+}
+
+/* The palette the screens draw with comes from the settings: high contrast
+ * wins over the theme, and the theme picks light or dark. The screens read it
+ * through indigo_layout_palette, so this is the check that the setting has an
+ * effect on what is drawn. */
+static void
+test_palette_follows_settings(void)
+{
+    indigo_settings s;
+    indigo_palette dark, light, contrast;
+
+    indigo_settings_defaults(&s);
+    s.theme = INDIGO_THEME_DARK;
+    dark = indigo_layout_palette(&s);
+    s.theme = INDIGO_THEME_LIGHT;
+    light = indigo_layout_palette(&s);
+    CHECK(dark.bg_top != light.bg_top);
+    CHECK(dark.text != light.text);
+
+    s.high_contrast = true;
+    contrast = indigo_layout_palette(&s);
+    CHECK(contrast.bg_top == INDIGO_RGBA(0, 0, 0, 255));
+    CHECK(contrast.text == INDIGO_RGBA(255, 255, 255, 255));
+    CHECK(contrast.bg_top != light.bg_top);
 }
 
 static void
@@ -6603,6 +6629,7 @@ main(void)
     test_layout_draws_avatars();
     test_shapes_stay_on_screen();
     test_settings_screen_shows_the_build();
+    test_palette_follows_settings();
     test_layout_draws_post_images();
     test_layout_draws_video_poster();
     test_layout_draws_link_cards();
