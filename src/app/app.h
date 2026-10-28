@@ -35,6 +35,7 @@ typedef enum {
     INDIGO_SCREEN_MESSAGES,
     INDIGO_SCREEN_CHAT_THREAD,
     INDIGO_SCREEN_CHAT_REQUESTS,
+    INDIGO_SCREEN_CHAT_JOIN_REQUESTS,
     INDIGO_SCREEN_QUEUE,
 } indigo_screen;
 
@@ -78,6 +79,14 @@ typedef enum {
     INDIGO_REQUEST_CHAT_THREAD,
     INDIGO_REQUEST_EDIT_REPLY,
     INDIGO_REQUEST_CHAT_SEND,
+    INDIGO_REQUEST_EDIT_CHAT_TARGET,
+    INDIGO_REQUEST_CHAT_START,
+    INDIGO_REQUEST_CHAT_ACCEPT,
+    INDIGO_REQUEST_CHAT_DECLINE,
+    INDIGO_REQUEST_CHAT_JOIN_REQUESTS,
+    INDIGO_REQUEST_CHAT_JOIN_REQUESTS_MORE,
+    INDIGO_REQUEST_CHAT_JOIN_APPROVE,
+    INDIGO_REQUEST_CHAT_JOIN_REJECT,
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
@@ -157,6 +166,21 @@ typedef struct {
     /* The request list as the app shows it, copied from the session on each page. */
     indigo_chat_inbox requests;
     indigo_chat_thread chat_thread;
+    /* Whether the open conversation is a group, so X can offer its join
+     * requests; a one-to-one conversation has none. */
+    bool chat_is_group;
+    /* A request or join request being settled. The row is copied, because the
+     * session list may drop it while the job runs. */
+    char chat_decision_id[INDIGO_CHAT_ID_MAX];
+    char chat_decision_name[INDIGO_POST_NAME_MAX];
+    bool chat_decision_accept;
+    bool chat_decision_pending;
+    /* The handle or DID typed for a conversation being started. It survives a
+     * failed start so the person can correct it. */
+    char chat_target[INDIGO_CHAT_TARGET_MAX];
+    bool chat_start_pending;
+    /* A group's pending join requests, copied from the session on each page. */
+    indigo_chat_join_requests join_requests;
     /* Pending message requests on the signed-in account; 0 hides the line. */
     int requests_count;
     /* Offline posts saved with Save for later, mirrored to the SD card. A post
@@ -240,6 +264,24 @@ void indigo_app_chat_thread_loaded(indigo_app *app, const indigo_chat_thread *sr
 void indigo_app_chat_thread_failed(indigo_app *app, const char *message);
 void indigo_app_chat_send_done(indigo_app *app);
 void indigo_app_chat_send_failed(indigo_app *app, const char *message);
+/* Starting a conversation, and settling message requests and join requests.
+ * The failure paths take the event's own message when it has one, because the
+ * server's refusal (an unknown handle, your own account) is more useful than
+ * a generic wording. */
+void indigo_app_set_chat_target(indigo_app *app, const char *text);
+/* The convo id the session created, passed in so this stays testable without a
+ * live worker. */
+void indigo_app_chat_start_done(indigo_app *app, const char *convo_id);
+void indigo_app_chat_start_failed(indigo_app *app, const char *message);
+void indigo_app_chat_request_done(indigo_app *app, bool accepted);
+void indigo_app_chat_request_failed(indigo_app *app, const char *message);
+void indigo_app_open_join_requests(indigo_app *app);
+void indigo_app_join_requests_loaded(indigo_app *app,
+                                     const indigo_chat_join_requests *src);
+void indigo_app_join_requests_failed(indigo_app *app, const char *message);
+void indigo_app_update_chat_join_requests(indigo_app *app, const indigo_input *input);
+void indigo_app_chat_join_decision_done(indigo_app *app, bool approved);
+void indigo_app_chat_join_decision_failed(indigo_app *app, const char *message);
 /* The search query came back from the keyboard. */
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,

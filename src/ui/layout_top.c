@@ -118,7 +118,7 @@ build_top_requests(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_inbox *r = &app->requests;
     const indigo_chat_convo *sel = r->selected < r->count ? &r->items[r->selected] : NULL;
 
-    indigo_layout_top_title(c, "Requests", "B  Back   SEL  Reload");
+    indigo_layout_top_title(c, "Requests", "A Accept  X Decline  B Back");
     if (!sel) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
                            r->loading ? "Loading requests..." : "No requests.");
@@ -137,6 +137,10 @@ build_top_requests(const indigo_app *app, indigo_canvas *c)
     if (sel->preview[0]) {
         indigo_layout_top_paragraph(c, 18, 100, 0.6f, COL_TEXT, 4, sel->preview);
     }
+    if (r->status[0]) {
+        indigo_canvas_text(c, 18, 200, 0.55f, r->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%s", r->status);
+    }
 }
 
 static void
@@ -146,7 +150,7 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_convo *sel = m->selected < m->count ? &m->items[m->selected] : NULL;
     char requests[32];
 
-    indigo_layout_top_title(c, "Messages", "B  Back   SEL  Reload");
+    indigo_layout_top_title(c, "Messages", "A Open  X New  Y Pending  B Back");
     if (app->requests_count > 0 && indigo_chat_requests_label(app->requests_count, requests, sizeof requests)) {
         /* Right of the name, left of the N / M counter at x 330. */
         indigo_canvas_text(c, 200, 36, 0.55f, COL_LINK, "%s", requests);
@@ -170,6 +174,10 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
     if (sel->preview[0]) {
         indigo_layout_top_paragraph(c, 18, 124, 0.6f, COL_TEXT, 4, sel->preview);
     }
+    if (m->status[0]) {
+        indigo_canvas_text(c, 18, 208, 0.55f, m->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%s", m->status);
+    }
 }
 
 static void
@@ -178,7 +186,9 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_thread *t = &app->chat_thread;
     const indigo_chat_message *sel = t->selected < t->count ? &t->items[t->selected] : NULL;
 
-    indigo_layout_top_title(c, "Messages", "B Back  A Reply  Y Send");
+    indigo_layout_top_title(c, "Messages", app->chat_is_group
+                                              ? "B Back  A Reply  Y Send  X Requests"
+                                              : "B Back  A Reply  Y Send");
     if (!sel) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
                            t->loading ? "Loading messages..." : "Nothing to show.");
@@ -199,6 +209,35 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     if (t->status[0]) {
         indigo_canvas_text(c, 18, 222, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
                            "%s", t->status);
+    }
+}
+
+static void
+build_top_chat_join_requests(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_join_requests *l = &app->join_requests;
+    const indigo_chat_join_request *sel = l->selected < l->count ? &l->items[l->selected] : NULL;
+
+    indigo_layout_top_title(c, "Join requests", "A Approve  X Reject  B Back");
+    if (!sel) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           l->loading ? "Loading join requests..." : "No join requests.");
+        if (l->status[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f, l->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%s", l->status);
+        }
+        return;
+    }
+    indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u%s", l->selected + 1, l->count,
+                       l->has_more ? "+" : "");
+    indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s", sel->name[0] ? sel->name : sel->handle);
+    if (sel->handle[0]) {
+        indigo_canvas_text(c, 18, 78, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
+    }
+    indigo_canvas_text(c, 18, 108, 0.6f, COL_TEXT_SOFT, "Asked to join this group.");
+    if (l->status[0]) {
+        indigo_canvas_text(c, 18, 208, 0.55f, l->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%s", l->status);
     }
 }
 
@@ -536,6 +575,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_top_chat_thread(app, c);
+        return;
+    case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
+        build_top_chat_join_requests(app, c);
         return;
     case INDIGO_SCREEN_MENU:
         build_top_menu(app, c);

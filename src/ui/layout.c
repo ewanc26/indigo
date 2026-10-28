@@ -87,6 +87,14 @@ indigo_layout_button_rect(indigo_action action)
         return s_pill[2];
     case INDIGO_ACTION_REQUESTS:
         return s_pill[2];
+    case INDIGO_ACTION_NEW_MESSAGE:
+    case INDIGO_ACTION_ACCEPT:
+    case INDIGO_ACTION_JOIN_REQUESTS:
+    case INDIGO_ACTION_APPROVE:
+        return s_pill[1];
+    case INDIGO_ACTION_DECLINE:
+    case INDIGO_ACTION_REJECT:
+        return s_pill[2];
     case INDIGO_ACTION_REFRESH:
     case INDIGO_ACTION_AUTHOR:
     case INDIGO_ACTION_DELETE:
@@ -223,13 +231,19 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action chat_thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_JOIN_REQUESTS, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+    static const indigo_action join_requests_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
+        INDIGO_ACTION_APPROVE, INDIGO_ACTION_REJECT, INDIGO_ACTION_REFRESH,
+        INDIGO_ACTION_BACK};
     static const indigo_action messages_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_REQUESTS, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_NEW_MESSAGE, INDIGO_ACTION_REQUESTS, INDIGO_ACTION_REFRESH,
+        INDIGO_ACTION_BACK};
     static const indigo_action requests_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_ACCEPT, INDIGO_ACTION_DECLINE, INDIGO_ACTION_REFRESH,
+        INDIGO_ACTION_BACK};
     static const indigo_action menu_actions[] = {
         INDIGO_ACTION_MENU0, INDIGO_ACTION_MENU1, INDIGO_ACTION_MENU2, INDIGO_ACTION_MENU3,
         INDIGO_ACTION_MENU4, INDIGO_ACTION_BACK};
@@ -281,6 +295,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         USE(chat_thread_actions);
+        break;
+    case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
+        USE(join_requests_actions);
         break;
     case INDIGO_SCREEN_QUEUE:
         USE(queue_actions);

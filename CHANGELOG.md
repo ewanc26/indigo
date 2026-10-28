@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Direct messages now cover the whole surface Cobalt has: X on Messages starts a conversation from a handle or DID, A and X on Requests accept or decline a message request, and X on a group conversation lists its pending join requests, where A approves and X rejects. The top screen reads the selected conversation, message or request, and the bottom screen lists them and carries the actions; a snapshot scenario fails if either display is blank. Uses Wolfram's `getConvoForMembers`, `acceptConvo`/`leaveConvo`, `listJoinRequests` and `approveJoinRequest`/`rejectJoinRequest`. Host-tested and 3DS-built; not run on an emulator or hardware. ([#22](https://github.com/ewanc26/indigo/issues/22))
+
 ## [0.14.0] - 2026-10-28
 
 ### Added

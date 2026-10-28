@@ -287,13 +287,15 @@ indigo_app_open_messages(indigo_app *app)
 }
 
 void
-indigo_app_open_chat_thread(indigo_app *app, const char *convo_id, const char *title)
+indigo_app_open_chat_thread(indigo_app *app, const char *convo_id, const char *title,
+                             bool group)
 {
     if (app->request != INDIGO_REQUEST_NONE || !convo_id || !convo_id[0]) {
         return;
     }
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_CHAT_THREAD;
+    app->chat_is_group = group;
     indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri, convo_id);
     indigo_copy_utf8(app->chat_thread.title, sizeof app->chat_thread.title, title ? title : "");
     app->chat_thread.loading = true;
@@ -393,6 +395,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         indigo_app_update_chat_thread(app, input);
+        break;
+    case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
+        indigo_app_update_chat_join_requests(app, input);
         break;
     case INDIGO_SCREEN_MENU:
         indigo_app_update_menu(app, input);

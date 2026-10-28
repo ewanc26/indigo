@@ -49,6 +49,8 @@ static int s_failures;
         }                                                                        \
     } while (0)
 
+static unsigned text_commands(const indigo_canvas *c);
+
 static void
 test_chat_inbox_counterpart(void)
 {
@@ -136,6 +138,129 @@ test_chat_inbox_counterpart(void)
     indigo_chat_inbox_append_from_wolfram(&got, &page, "did:plc:me");
     CHECK(!got.has_more);
     CHECK(got.cursor[0] == '\0');
+}
+
+static void
+test_chat_target(void)
+{
+    char out[32];
+    char id[16];
+
+    CHECK(indigo_chat_target_normalise("  @ann.test \n", out, sizeof out));
+    CHECK(strcmp(out, "ann.test") == 0);
+    CHECK(indigo_chat_target_normalise("did:plc:ann", out, sizeof out));
+    CHECK(strcmp(out, "did:plc:ann") == 0);
+    CHECK(!indigo_chat_target_normalise("   ", out, sizeof out));
+    CHECK(out[0] == '\0');
+    CHECK(!indigo_chat_target_normalise("@", out, sizeof out));
+    CHECK(!indigo_chat_target_normalise("ann.test", out, 8));
+    CHECK(indigo_chat_target_normalise("ann.test", out, 9));
+
+    CHECK(indigo_chat_target_kind_of("did:plc:ann123") == INDIGO_CHAT_TARGET_DID);
+    CHECK(indigo_chat_target_kind_of("ann.test") == INDIGO_CHAT_TARGET_HANDLE);
+    CHECK(indigo_chat_target_kind_of("ann") == INDIGO_CHAT_TARGET_INVALID);
+    CHECK(indigo_chat_target_kind_of("ann_test.test") == INDIGO_CHAT_TARGET_INVALID);
+    CHECK(indigo_chat_target_kind_of("did:plc:") == INDIGO_CHAT_TARGET_INVALID);
+    CHECK(indigo_chat_target_kind_of("@ann.test") == INDIGO_CHAT_TARGET_INVALID);
+    CHECK(indigo_chat_target_kind_of(NULL) == INDIGO_CHAT_TARGET_INVALID);
+
+    CHECK(indigo_chat_is_self("did:plc:me", "did:plc:me"));
+    CHECK(!indigo_chat_is_self("did:plc:me", "did:plc:you"));
+    CHECK(!indigo_chat_is_self("", ""));
+
+    CHECK(indigo_chat_convo_id_copy(id, sizeof id, "abc-123"));
+    CHECK(strcmp(id, "abc-123") == 0);
+    CHECK(!indigo_chat_convo_id_copy(id, sizeof id, "bad id"));
+    CHECK(id[0] == '\0');
+    CHECK(!indigo_chat_convo_id_copy(id, sizeof id, ""));
+    CHECK(!indigo_chat_convo_id_copy(id, 4, "abcd"));
+}
+
+static void
+test_chat_inbox_edits(void)
+{
+    indigo_chat_inbox box;
+    indigo_chat_convo row;
+
+    memset(&box, 0, sizeof box);
+    box.count = 2;
+    indigo_copy_utf8(box.items[0].id, sizeof box.items[0].id, "a");
+    indigo_copy_utf8(box.items[1].id, sizeof box.items[1].id, "b");
+    box.items[0].unread = 2;
+    box.items[1].unread = 1;
+    box.unread = 3;
+    box.has_more = true;
+
+    CHECK(indigo_chat_inbox_can_page(&box));
+    CHECK(strcmp(indigo_chat_inbox_find(&box, "b")->id, "b") == 0);
+    CHECK(indigo_chat_inbox_find(&box, "missing") == NULL);
+
+    CHECK(indigo_chat_inbox_remove(&box, "a"));
+    CHECK(box.count == 1);
+    CHECK(box.unread == 1);
+    CHECK(strcmp(box.items[0].id, "b") == 0);
+    CHECK(!indigo_chat_inbox_remove(&box, "a"));
+
+    memset(&row, 0, sizeof row);
+    indigo_copy_utf8(row.id, sizeof row.id, "b");
+    CHECK(!indigo_chat_inbox_add_front(&box, &row));
+    indigo_copy_utf8(row.id, sizeof row.id, "c");
+    row.unread = 4;
+    CHECK(indigo_chat_inbox_add_front(&box, &row));
+    CHECK(box.count == 2);
+    CHECK(strcmp(box.items[0].id, "c") == 0);
+    CHECK(strcmp(box.items[1].id, "b") == 0);
+    CHECK(box.unread == 5);
+}
+
+static void
+test_chat_join_requests(void)
+{
+    wf_agent_profile_view ann = { (char *)"did:plc:ann", (char *)"ann.test",
+                                  (char *)"Ann", NULL, NULL, false };
+    wf_agent_profile_view bob = { (char *)"did:plc:bob", (char *)"bob.test",
+                                  NULL, NULL, NULL, false };
+    wf_chat_join_request items[3];
+    wf_chat_join_requests page;
+    indigo_chat_join_requests list;
+
+    memset(items, 0, sizeof items);
+    items[0].convo_id = (char *)"convo-g";
+    items[0].requested_by = ann;
+    items[1].convo_id = (char *)"convo-g";
+    items[1].requested_by = ann; /* duplicate DID: skipped */
+    items[2].convo_id = (char *)"convo-g";
+    items[2].requested_by = bob;
+    memset(&page, 0, sizeof page);
+    page.items = items;
+    page.item_count = 3;
+    page.cursor = (char *)"next";
+
+    memset(&list, 0, sizeof list);
+    CHECK(indigo_chat_join_requests_append_from_wolfram(&list, &page) == 2);
+    CHECK(list.count == 2);
+    CHECK(strcmp(list.items[0].did, "did:plc:ann") == 0);
+    CHECK(strcmp(list.items[0].name, "Ann") == 0);
+    CHECK(strcmp(list.items[0].handle, "@ann.test") == 0);
+    CHECK(strcmp(list.items[1].name, "bob.test") == 0);
+    CHECK(strcmp(list.cursor, "next") == 0);
+    CHECK(list.has_more);
+    CHECK(indigo_chat_join_requests_can_page(&list));
+
+    CHECK(indigo_chat_join_requests_find(&list, "did:plc:bob") != NULL);
+    CHECK(indigo_chat_join_requests_find(&list, "did:plc:none") == NULL);
+    CHECK(indigo_chat_join_requests_move(&list, 9, 2));
+    CHECK(list.selected == 1 && list.scroll == 0);
+    CHECK(indigo_chat_join_requests_remove(&list, "did:plc:ann"));
+    CHECK(list.count == 1);
+    CHECK(strcmp(list.items[0].did, "did:plc:bob") == 0);
+    CHECK(list.selected == 0);
+
+    page.cursor = NULL;
+    memset(&list, 0, sizeof list);
+    indigo_chat_join_requests_append_from_wolfram(&list, &page);
+    CHECK(!list.has_more);
+    CHECK(list.cursor[0] == '\0');
 }
 
 static void
@@ -1277,6 +1402,174 @@ test_chat_thread_and_open(void)
     CHECK(strcmp(app.request_post_uri, "convo-bob") == 0);
     CHECK(strcmp(app.chat_thread.title, "Bob") == 0);
     CHECK(app.chat_thread.loading);
+}
+
+static void
+test_chat_start_and_decisions(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_chat_join_requests page;
+
+    /* X on the inbox opens the target keyboard; a valid target starts a job. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MESSAGES;
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_CHAT_TARGET);
+    CHECK(f == INDIGO_FIELD_SERVICE); /* unused by this request */
+
+    indigo_app_set_chat_target(&app, "  @bob.example ");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_START);
+    CHECK(strcmp(app.chat_target, "bob.example") == 0);
+    CHECK(app.chat_start_pending);
+    CHECK(app.screen == INDIGO_SCREEN_MESSAGES);
+
+    indigo_app_chat_start_done(&app, "convo-bob");
+    CHECK(app.screen == INDIGO_SCREEN_CHAT_THREAD);
+    CHECK(strcmp(app.request_post_uri, "convo-bob") == 0);
+    CHECK(strcmp(app.chat_thread.title, "bob.example") == 0);
+    CHECK(!app.chat_is_group);
+    CHECK(app.chat_target[0] == '\0');
+
+    /* An invalid target never starts a job and says what it wants. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MESSAGES;
+    indigo_app_set_chat_target(&app, "not a handle");
+    CHECK(!app.chat_start_pending);
+    CHECK(app.messages.status_is_error);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+
+    /* A request is accepted into a loaded inbox and leaves the request list. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    app.requests.count = 2;
+    app.requests.unread = 5;
+    indigo_copy_utf8(app.requests.items[0].id, sizeof app.requests.items[0].id, "req-a");
+    indigo_copy_utf8(app.requests.items[0].name, sizeof app.requests.items[0].name, "Ann");
+    app.requests.items[0].unread = 3;
+    indigo_copy_utf8(app.requests.items[1].id, sizeof app.requests.items[1].id, "req-b");
+    indigo_copy_utf8(app.requests.items[1].name, sizeof app.requests.items[1].name, "Bob");
+    app.requests.items[1].unread = 2;
+    app.messages.count = 1;
+    indigo_copy_utf8(app.messages.items[0].id, sizeof app.messages.items[0].id, "old");
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_ACCEPT);
+    CHECK(app.chat_decision_pending);
+    CHECK(strcmp(app.chat_decision_id, "req-a") == 0);
+    indigo_app_chat_request_done(&app, true);
+    CHECK(!app.chat_decision_pending);
+    CHECK(app.requests.count == 1);
+    CHECK(strcmp(app.requests.items[0].id, "req-b") == 0);
+    CHECK(app.requests_count == 1);
+    CHECK(app.messages.count == 2);
+    CHECK(strcmp(app.messages.items[0].id, "req-a") == 0);
+    CHECK(strcmp(app.requests.status, "Request accepted.") == 0);
+
+    /* X declines the highlighted request without touching the inbox. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    app.requests.count = 1;
+    indigo_copy_utf8(app.requests.items[0].id, sizeof app.requests.items[0].id, "req-c");
+    app.messages.count = 1;
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_DECLINE);
+    indigo_app_chat_request_done(&app, false);
+    CHECK(app.requests.count == 0);
+    CHECK(app.messages.count == 1);
+    CHECK(strcmp(app.requests.status, "Request declined.") == 0);
+
+    /* X on a group conversation opens its pending join requests. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_CHAT_THREAD;
+    app.chat_is_group = true;
+    indigo_copy_utf8(app.request_post_uri, sizeof app.request_post_uri, "convo-g");
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_JOIN_REQUESTS);
+    CHECK(app.screen == INDIGO_SCREEN_CHAT_JOIN_REQUESTS);
+    CHECK(strcmp(app.join_requests.convo_id, "convo-g") == 0);
+
+    memset(&page, 0, sizeof page);
+    page.count = 2;
+    indigo_copy_utf8(page.items[0].did, sizeof page.items[0].did, "did:plc:ann");
+    indigo_copy_utf8(page.items[0].name, sizeof page.items[0].name, "Ann");
+    indigo_copy_utf8(page.items[1].did, sizeof page.items[1].did, "did:plc:bob");
+    indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Bob");
+    indigo_app_join_requests_loaded(&app, &page);
+    CHECK(app.join_requests.count == 2);
+
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_JOIN_APPROVE);
+    CHECK(strcmp(app.chat_decision_id, "did:plc:ann") == 0);
+    indigo_app_chat_join_decision_done(&app, true);
+    CHECK(app.join_requests.count == 1);
+    CHECK(strcmp(app.join_requests.items[0].did, "did:plc:bob") == 0);
+    CHECK(strcmp(app.join_requests.status, "Request approved.") == 0);
+
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_JOIN_REJECT);
+    indigo_app_chat_join_decision_done(&app, false);
+    CHECK(app.join_requests.count == 0);
+    CHECK(strcmp(app.join_requests.status, "Request rejected.") == 0);
+}
+
+static void
+test_chat_screens_use_both(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+
+    /* Every direct message screen reads on the top display and offers the list
+     * and its actions on the bottom one; neither is left blank. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MESSAGES;
+    app.messages.count = 1;
+    indigo_copy_utf8(app.messages.items[0].name, sizeof app.messages.items[0].name, "Ann");
+    indigo_copy_utf8(app.messages.items[0].preview, sizeof app.messages.items[0].preview,
+                     "see you");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(top.width == INDIGO_TOP_WIDTH && bottom.width == INDIGO_BOTTOM_WIDTH);
+    CHECK(text_commands(&top) >= 2);
+    CHECK(text_commands(&bottom) >= 2);
+
+    app.screen = INDIGO_SCREEN_CHAT_REQUESTS;
+    app.requests.count = 1;
+    indigo_copy_utf8(app.requests.items[0].name, sizeof app.requests.items[0].name, "Bob");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_commands(&top) >= 2);
+    CHECK(text_commands(&bottom) >= 2);
+
+    app.screen = INDIGO_SCREEN_CHAT_THREAD;
+    app.chat_thread.count = 1;
+    indigo_copy_utf8(app.chat_thread.items[0].text, sizeof app.chat_thread.items[0].text,
+                     "hello");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_commands(&top) >= 2);
+    CHECK(text_commands(&bottom) >= 2);
+
+    app.screen = INDIGO_SCREEN_CHAT_JOIN_REQUESTS;
+    app.join_requests.count = 1;
+    indigo_copy_utf8(app.join_requests.items[0].name,
+                     sizeof app.join_requests.items[0].name, "Rhiannon");
+    indigo_copy_utf8(app.join_requests.items[0].handle,
+                     sizeof app.join_requests.items[0].handle, "@rhi.example.social");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_commands(&top) >= 2);
+    CHECK(text_commands(&bottom) >= 2);
 }
 
 static void
@@ -3245,6 +3538,21 @@ text_has(const indigo_canvas *c, const char *needle)
         }
     }
     return false;
+}
+
+/* How many text commands a screen drew. Every screen is expected to use both
+ * displays: the top to read, the bottom to choose and act. */
+static unsigned
+text_commands(const indigo_canvas *c)
+{
+    unsigned n = 0;
+
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind == INDIGO_CMD_TEXT) {
+            n++;
+        }
+    }
+    return n;
 }
 
 /* How many lines of text the layout gave the post. The block is identified by
@@ -6584,6 +6892,9 @@ main(void)
     test_canvas_basics();
     test_chat_inbox_counterpart();
     test_chat_requests_label();
+    test_chat_target();
+    test_chat_inbox_edits();
+    test_chat_join_requests();
     test_chat_long_id();
     test_signed_out_clears_messages();
     test_requests_paging();
@@ -6608,6 +6919,8 @@ main(void)
     test_partial_thread_publish_clears_draft();
     test_messages_list();
     test_chat_thread_and_open();
+    test_chat_start_and_decisions();
+    test_chat_screens_use_both();
     test_chat_reply();
     test_messages_loaded_and_failed();
     test_notifications();

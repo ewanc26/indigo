@@ -45,6 +45,18 @@ typedef enum {
     INDIGO_SESSION_EVENT_CHAT_SEND_FAILED,
     INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE,
     INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_ACCEPT_DONE,
+    INDIGO_SESSION_EVENT_CHAT_ACCEPT_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_DECLINE_DONE,
+    INDIGO_SESSION_EVENT_CHAT_DECLINE_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_START_DONE,
+    INDIGO_SESSION_EVENT_CHAT_START_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_DONE,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -144,8 +156,7 @@ const indigo_chat_inbox *indigo_session_chat_inbox(void);
 
 /* Fetch the direct message request inbox: conversations someone else started
  * that the account has not accepted. Read the rows with
- * indigo_session_chat_requests once CHAT_REQUESTS_PAGE arrives. Nothing here
- * accepts a request. */
+ * indigo_session_chat_requests once CHAT_REQUESTS_PAGE arrives. */
 bool indigo_session_submit_chat_requests(void);
 /* The next page of requests, from the cursor the last page reported. False when
  * there is no cursor to continue from. */
@@ -160,6 +171,43 @@ const indigo_chat_thread *indigo_session_chat_thread(void);
 /* Send `text` to a conversation. Refused without a job when the text is not a reply
  * the service will take (indigo_chat_reply_valid). */
 bool indigo_session_submit_chat_send(const char *convo_id, const char *text);
+
+/*
+ * Accept or decline the message request for `convo_id`. On success the
+ * conversation leaves the request list and, when accepted, joins the inbox.
+ * Never retried: a failure leaves the request where it is.
+ */
+bool indigo_session_submit_chat_accept(const char *convo_id);
+bool indigo_session_submit_chat_decline(const char *convo_id);
+
+/*
+ * Find or create the direct conversation with `handle_or_did` (a handle, with
+ * or without a leading '@', or a DID). Refused, without a job, when the text is
+ * empty or is neither a handle nor a DID. On success the convo id is held for
+ * indigo_session_chat_started_convo(), so the caller can open it.
+ */
+bool indigo_session_submit_chat_start(const char *handle_or_did);
+/* The convo id of the last conversation started, or "" while none is. */
+const char *indigo_session_chat_started_convo(void);
+
+/*
+ * Fetch the pending join requests of the group `convo_id` (a group's owner can
+ * list these; anyone else is refused by the server). `paging` appends the next
+ * page; false replaces the list. Read-only; nothing is approved or rejected
+ * until a button is pressed on a row.
+ */
+bool indigo_session_submit_chat_join_requests(const char *convo_id, bool paging);
+/* The group join requests as last fetched; never NULL. */
+const indigo_chat_join_requests *indigo_session_chat_join_requests(void);
+
+/*
+ * Approve or reject `did`'s request to join the group `convo_id`. On success
+ * the request leaves the loaded list, so no refetch is needed. Refused, without
+ * a job, for an invalid convo id or DID, or while another request is in flight.
+ */
+bool indigo_session_submit_chat_join_approve(const char *convo_id, const char *did);
+bool indigo_session_submit_chat_join_reject(const char *convo_id, const char *did);
+
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
  * and `target_*` the post being answered; for a quote, `target_*` is quoted.
  *

@@ -610,7 +610,8 @@ fill_social(indigo_app *app, const scenario *s)
 
         memset(&page, 0, sizeof page);
         page.count = 3;
-        indigo_copy_utf8(app->chat_thread.title, sizeof app->chat_thread.title, "Bob");
+        indigo_copy_utf8(app->chat_thread.title, sizeof app->chat_thread.title,
+                         app->chat_is_group ? "Group" : "Bob");
         indigo_copy_utf8(page.items[0].text, sizeof page.items[0].text,
                          "Hello! Did you get my note about the hedge?");
         page.items[1].mine = true;
@@ -652,6 +653,22 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Bob");
         indigo_copy_utf8(page.items[1].handle, sizeof page.items[1].handle, "@bob.example");
         indigo_app_requests_loaded(app, &page);
+    } else if (s->screen == INDIGO_SCREEN_CHAT_JOIN_REQUESTS) {
+        indigo_chat_join_requests page;
+
+        memset(&page, 0, sizeof page);
+        page.count = 2;
+        page.has_more = true;
+        indigo_copy_utf8(page.convo_id, sizeof page.convo_id, "3kqz9d2f7xw4");
+        indigo_copy_utf8(page.items[0].did, sizeof page.items[0].did,
+                         "did:plc:rhiannon7wvx2m4qz6kbyt");
+        indigo_copy_utf8(page.items[0].name, sizeof page.items[0].name, "Rhiannon");
+        indigo_copy_utf8(page.items[0].handle, sizeof page.items[0].handle,
+                         "@rhi.example.social");
+        indigo_copy_utf8(page.items[1].did, sizeof page.items[1].did, "did:plc:bobexample");
+        indigo_copy_utf8(page.items[1].name, sizeof page.items[1].name, "Bob");
+        indigo_copy_utf8(page.items[1].handle, sizeof page.items[1].handle, "@bob.example");
+        indigo_app_join_requests_loaded(app, &page);
     } else if (s->screen == INDIGO_SCREEN_QUEUE) {
         /* Queued posts: empty, then two saved posts with the first selected. */
         if (s->timeline == 1) {
@@ -900,6 +917,20 @@ fill_social(indigo_app *app, const scenario *s)
     }
 }
 
+/* Both displays carry something to read or act on. A screen that filled only
+ * one of them would still render, and would still look like a working
+ * snapshot; this is what makes that failure visible. */
+static bool
+has_content(const indigo_canvas *c)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind != INDIGO_CMD_RECT) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -919,7 +950,9 @@ main(int argc, char **argv)
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
         {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
         {"requests", INDIGO_SCREEN_CHAT_REQUESTS, false, 0, 0, 0, 0, false},
+        {"join-requests", INDIGO_SCREEN_CHAT_JOIN_REQUESTS, false, 0, 0, 0, 0, false},
         {"chat-thread", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
+        {"chat-thread-group", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
         {"queue-empty", INDIGO_SCREEN_QUEUE, false, 0, 0, 0, 0, false},
         {"queue", INDIGO_SCREEN_QUEUE, false, 0, 0, 1, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
@@ -995,6 +1028,10 @@ main(int argc, char **argv)
         } else if (strstr(s->name, "text-small")) {
             app.settings.text_scale = INDIGO_TEXT_SCALE_SMALL;
         }
+        /* A group conversation is the only one that offers join requests. */
+        if (strstr(s->name, "group")) {
+            app.chat_is_group = true;
+        }
         if (s->screen != INDIGO_SCREEN_SIGNIN) {
             strcpy(app.signin.account, "ewancroft.uk");
         }
@@ -1005,6 +1042,11 @@ main(int argc, char **argv)
         input.touch_y = s->touch_y;
 
         indigo_layout_build(&app, &input, &top_canvas, &bottom_canvas);
+
+        if (!has_content(&top_canvas) || !has_content(&bottom_canvas)) {
+            fprintf(stderr, "scenario %s: a display is blank\n", s->name);
+            return 1;
+        }
 
         /* A viewer scenario that drew no picture would save a picture of the
          * empty state, which looks like a working snapshot and is not one. */

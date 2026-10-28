@@ -185,8 +185,10 @@ build_bottom_messages(const indigo_app *app, indigo_canvas *c)
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == m->selected,
                                title, it->preview[0] ? it->preview : "No messages yet", "");
     }
+    indigo_layout_action_pill(c, INDIGO_ACTION_NEW_MESSAGE, false, false, COL_PILL_ACTIVE,
+                              "X New");
     indigo_layout_action_pill(c, INDIGO_ACTION_REQUESTS, false, false,
-                              app->requests_count > 0 ? COL_PILL_ACTIVE : COL_PILL, "Pending");
+                              app->requests_count > 0 ? COL_PILL_ACTIVE : COL_PILL, "Y Pending");
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, m->loading, false, COL_PILL_ACTIVE, "Reload");
 }
 
@@ -209,6 +211,10 @@ build_bottom_requests(const indigo_app *app, indigo_canvas *c)
                                it->name[0] ? it->name : it->handle,
                                it->preview[0] ? it->preview : "No message yet", "");
     }
+    indigo_layout_action_pill(c, INDIGO_ACTION_ACCEPT, false, false, COL_PILL_ACTIVE,
+                              "A Accept");
+    indigo_layout_action_pill(c, INDIGO_ACTION_DECLINE, false, false, COL_PILL_ACTIVE,
+                              "X Decline");
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, r->loading, false, COL_PILL_ACTIVE, "Reload");
 }
 
@@ -232,7 +238,39 @@ build_bottom_chat_thread(const indigo_app *app, indigo_canvas *c)
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == t->selected,
                                title, it->text, "");
     }
+    if (app->chat_is_group) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_JOIN_REQUESTS, false, false, COL_PILL_ACTIVE,
+                                  "X Requests");
+    }
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
+build_bottom_join_requests(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_join_requests *l = &app->join_requests;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Join requests");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = l->scroll + row;
+        const indigo_chat_join_request *it;
+
+        if (idx >= l->count) {
+            break;
+        }
+        it = &l->items[idx];
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                               idx == l->selected,
+                               it->name[0] ? it->name : it->handle,
+                               it->handle[0] ? it->handle : "Wants to join", "");
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_APPROVE, false, false, COL_PILL_ACTIVE,
+                              "A Approve");
+    indigo_layout_action_pill(c, INDIGO_ACTION_REJECT, false, false, COL_PILL_ACTIVE,
+                              "X Reject");
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, l->loading, false, COL_PILL_ACTIVE,
+                              "Reload");
 }
 
 static void
@@ -651,6 +689,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_bottom_chat_thread(app, c);
+        break;
+    case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
+        build_bottom_join_requests(app, c);
         break;
     case INDIGO_SCREEN_QUEUE:
         build_bottom_queue(app, c);

@@ -178,6 +178,19 @@ handle_edit_reply(indigo_app *app)
 }
 
 static void
+handle_edit_chat_target(indigo_app *app)
+{
+    char text[INDIGO_CHAT_TARGET_MAX];
+    indigo_text_result r = indigo_text_edit("Handle or DID", app->chat_target, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_chat_target(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
 handle_requests(indigo_app *app)
 {
     indigo_field f;
@@ -274,6 +287,46 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_CHAT_THREAD:
         if (!indigo_session_submit_chat_messages(app->request_post_uri)) {
             indigo_app_chat_thread_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_CHAT_TARGET:
+        handle_edit_chat_target(app);
+        break;
+    case INDIGO_REQUEST_CHAT_START:
+        if (!indigo_session_submit_chat_start(app->chat_target)) {
+            indigo_app_chat_start_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_ACCEPT:
+        if (!indigo_session_submit_chat_accept(app->chat_decision_id)) {
+            indigo_app_chat_request_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_DECLINE:
+        if (!indigo_session_submit_chat_decline(app->chat_decision_id)) {
+            indigo_app_chat_request_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REQUESTS:
+        if (!indigo_session_submit_chat_join_requests(app->join_requests.convo_id, false)) {
+            indigo_app_join_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REQUESTS_MORE:
+        if (!indigo_session_submit_chat_join_requests(app->join_requests.convo_id, true)) {
+            indigo_app_join_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_APPROVE:
+        if (!indigo_session_submit_chat_join_approve(app->join_requests.convo_id,
+                                                     app->chat_decision_id)) {
+            indigo_app_chat_join_decision_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REJECT:
+        if (!indigo_session_submit_chat_join_reject(app->join_requests.convo_id,
+                                                    app->chat_decision_id)) {
+            indigo_app_chat_join_decision_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_EDIT_DRAFT:
@@ -556,6 +609,40 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED:
             indigo_app_requests_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_ACCEPT_DONE:
+            indigo_app_chat_request_done(app, true);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_DECLINE_DONE:
+            indigo_app_chat_request_done(app, false);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_ACCEPT_FAILED:
+        case INDIGO_SESSION_EVENT_CHAT_DECLINE_FAILED:
+            indigo_app_chat_request_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_START_DONE:
+            indigo_app_chat_start_done(app, indigo_session_chat_started_convo());
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_START_FAILED:
+            indigo_app_chat_start_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE:
+            indigo_app_join_requests_loaded(app, indigo_session_chat_join_requests());
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_FAILED:
+            indigo_app_join_requests_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_DONE:
+            indigo_app_chat_join_decision_done(app, true);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE:
+            indigo_app_chat_join_decision_done(app, false);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED:
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED:
+            indigo_app_chat_join_decision_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {
