@@ -3417,10 +3417,63 @@ test_layout_draws_video_poster(void)
         }
     }
 
+    /* The playlist's length joins the label, and the label stays above the
+     * poster the same way. */
+    indigo_copy_utf8(p->embed_thumb, sizeof p->embed_thumb, poster);
+    indigo_copy_utf8(p->embed_duration, sizeof p->embed_duration, "1:23");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow);
+    CHECK(text_has(&top, "Video 1:23: it can't play on the 3DS"));
+    img = find_image(&top, poster);
+    CHECK(img != NULL);
+    for (unsigned i = 0; i < top.count && img; i++) {
+        if (top.cmds[i].kind == INDIGO_CMD_TEXT &&
+            strstr(top.text + top.cmds[i].text_offset, "1:23")) {
+            CHECK(top.cmds[i].y >= img->y + img->h);
+        }
+    }
+
     /* No poster URL, nothing to draw: the one-line note stands in for it. */
     p->embed_thumb[0] = '\0';
     indigo_layout_build(&app, &in, &top, &bottom);
     CHECK(text_has(&top, "[video]"));
+}
+
+/* The playlist body is the only place a video's length is available. The
+ * parser is Wolfram's and tested there; this covers Indigo's formatter and the
+ * master-playlist rule, without a network. */
+static void
+test_video_duration(void)
+{
+    static const char *const master =
+        "#EXTM3U\n"
+        "#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\nhigh/index.m3u8\n"
+        "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nlow/index.m3u8\n";
+    static const char *const master_url = "https://video.test/pl/master.m3u8";
+    char out[INDIGO_VIDEO_DURATION_TEXT_MAX];
+    char variant[INDIGO_VIDEO_PLAYLIST_MAX];
+
+    CHECK(indigo_video_duration_format(0.0, out, sizeof out));
+    CHECK(strcmp(out, "0:00") == 0);
+    CHECK(indigo_video_duration_format(83.4, out, sizeof out));
+    CHECK(strcmp(out, "1:23") == 0);
+    CHECK(indigo_video_duration_format(3723.0, out, sizeof out));
+    CHECK(strcmp(out, "1:02:03") == 0);
+    CHECK(!indigo_video_duration_format(-1.0, out, sizeof out));
+    CHECK(out[0] == '\0');
+    CHECK(!indigo_video_duration_format(NAN, out, sizeof out));
+    CHECK(!indigo_video_duration_format(83.0, out, 3));
+    CHECK(out[0] == '\0');
+
+    CHECK(indigo_video_master_variant(master, strlen(master), master_url,
+                                      variant, sizeof variant));
+    CHECK(strcmp(variant, "https://video.test/pl/low/index.m3u8") == 0);
+    CHECK(indigo_video_master_variant("#EXT-X-STREAM-INF:BANDWIDTH=1\n/root/a.m3u8\n",
+                                      42, "https://video.test/pl/master.m3u8",
+                                      variant, sizeof variant));
+    CHECK(strcmp(variant, "https://video.test/root/a.m3u8") == 0);
+    CHECK(!indigo_video_master_variant("#EXTM3U\n#EXTINF:1,\na.ts\n", 22,
+                                       master_url, variant, sizeof variant));
 }
 
 static void
@@ -6632,6 +6685,7 @@ main(void)
     test_palette_follows_settings();
     test_layout_draws_post_images();
     test_layout_draws_video_poster();
+    test_video_duration();
     test_layout_draws_link_cards();
     test_layout_draws_alt_text();
     test_layout_text_scale();

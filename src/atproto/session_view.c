@@ -121,6 +121,10 @@ fill_embed(const wf_post_display *d, const cJSON *raw_embed, indigo_post *out)
         indigo_media_cdn_url(out->embed_thumb, sizeof out->embed_thumb, embed.video_thumb,
                              INDIGO_CDN_THUMBNAIL);
         set_embed_shape(out, embed.video_width, embed.video_height);
+        if (embed.video_playlist && embed.video_playlist[0]) {
+            snprintf(out->embed_playlist, sizeof out->embed_playlist, "%s",
+                     embed.video_playlist);
+        }
     }
 
     wf_post_embed_free(&embed);
