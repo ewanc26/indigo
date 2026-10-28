@@ -480,6 +480,267 @@ indigo_session_do_chat_send(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
+/* Accept or decline one message request. Both come through here: the call
+ * differs, and the list change is the same. */
+static void
+chat_request_decision(const indigo_job *j, bool accept)
+{
+    indigo_session_event ev = {.kind = accept ? INDIGO_SESSION_EVENT_CHAT_ACCEPT_FAILED
+                                              : INDIGO_SESSION_EVENT_CHAT_DECLINE_FAILED};
+    char id[INDIGO_CHAT_ID_MAX];
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(id, sizeof id, j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    /* Accepting answers with a rev or nothing, and declining with the convo
+     * ref. Neither body is needed, so the status-only calls are used: the
+     * typed wrapper for accept parses a convoView, which the server does not
+     * send. */
+    st = accept ? wf_agent_chat_accept_convo(g_session.agent, id)
+                : wf_agent_chat_leave_convo(g_session.agent, id);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, accept ? "accept request" : "decline request", st);
+        return;
+    }
+
+    /* Accepted, the conversation joins the inbox, copied from the request list
+     * so no fetch is needed. Only when the inbox is already loaded: an empty
+     * one is fetched when Messages is opened, and one row would hide the rest. */
+    const indigo_chat_convo *row = indigo_chat_inbox_find(&g_session.requests, id);
+    if (row) {
+        indigo_chat_convo moved = *row;
+
+        indigo_chat_inbox_remove(&g_session.requests, id);
+        if (accept && g_session.chat.count > 0) {
+            indigo_chat_inbox_add_front(&g_session.chat, &moved);
+        }
+    }
+
+    ev.kind = accept ? INDIGO_SESSION_EVENT_CHAT_ACCEPT_DONE
+                     : INDIGO_SESSION_EVENT_CHAT_DECLINE_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_accept(const indigo_job *j)
+{
+    chat_request_decision(j, true);
+}
+
+void
+indigo_session_do_chat_decline(const indigo_job *j)
+{
+    chat_request_decision(j, false);
+}
+
+void
+indigo_session_do_chat_start(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_START_FAILED};
+    char target[INDIGO_CHAT_TARGET_MAX];
+    char did[INDIGO_CHAT_TARGET_MAX];
+    indigo_chat_target_kind kind;
+
+    g_session.chat_started[0] = '\0';
+    if (!g_session.agent || !wf_agent_get_did(g_session.agent)) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    kind = indigo_chat_target_normalise(j->post_uri, target, sizeof target)
+               ? indigo_chat_target_kind_of(target)
+               : INDIGO_CHAT_TARGET_INVALID;
+    if (kind == INDIGO_CHAT_TARGET_INVALID) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_copy_utf8(ev.message, sizeof ev.message, "Enter a handle or DID to message.");
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    if (kind == INDIGO_CHAT_TARGET_HANDLE) {
+        char *resolved = NULL;
+        wf_status st = wf_agent_resolve_handle(g_session.agent, target, &resolved);
+        const bool fits = resolved && strlen(resolved) < sizeof did;
+
+        if (st == WF_OK && fits) {
+            indigo_copy_utf8(did, sizeof did, resolved);
+        }
+        free(resolved);
+        if (st != WF_OK || !fits) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             st == WF_OK || st == WF_ERR_HTTP
+                                 ? "No account has that handle."
+                                 : "Could not look up that handle.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+    } else {
+        indigo_copy_utf8(did, sizeof did, target);
+    }
+
+    if (indigo_chat_is_self(wf_agent_get_did(g_session.agent), did)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_copy_utf8(ev.message, sizeof ev.message, "That is your own account.");
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    /* getConvoForMembers takes every member, the viewer included. */
+    const char *members[2] = {wf_agent_get_did(g_session.agent), did};
+    wf_chat_convo convo;
+    wf_status st;
+
+    memset(&convo, 0, sizeof convo);
+    st = wf_agent_chat_get_convo_for_members_typed(g_session.agent, members, 2, &convo);
+    if (st != WF_OK || !indigo_chat_convo_id_copy(g_session.chat_started,
+                                                  sizeof g_session.chat_started, convo.id)) {
+        wf_chat_convo_free(&convo);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "start conversation", st);
+        } else {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             "The server did not return a conversation.");
+            indigo_session_publish_event(&ev);
+        }
+        return;
+    }
+    wf_chat_convo_free(&convo);
+
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_START_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_join_requests(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_FAILED};
+    char id[INDIGO_CHAT_ID_MAX];
+    char cursor_buf[INDIGO_CURSOR_MAX];
+    const char *cursor = NULL;
+    wf_chat_join_requests list;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(id, sizeof id, j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (j->paging) {
+        if (!g_session.join_requests.cursor[0]) {
+            ev.kind = INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE;
+            ev.page_count = g_session.join_requests.count;
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        indigo_copy_utf8(cursor_buf, sizeof cursor_buf, g_session.join_requests.cursor);
+        cursor = cursor_buf;
+    }
+
+    memset(&list, 0, sizeof list);
+    st = wf_agent_chat_list_join_requests_typed(g_session.agent, id,
+                                                INDIGO_CHAT_JOIN_REQUESTS_MAX, cursor, &list);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "join requests", st);
+        return;
+    }
+
+    if (!j->paging) {
+        indigo_chat_join_requests_reset(&g_session.join_requests);
+        indigo_copy_utf8(g_session.join_requests.convo_id,
+                         sizeof g_session.join_requests.convo_id, id);
+    }
+    const int added = indigo_chat_join_requests_append_from_wolfram(&g_session.join_requests,
+                                                                    &list);
+    if (j->paging && added == 0) {
+        g_session.join_requests.has_more = false;
+        g_session.join_requests.cursor[0] = '\0';
+    }
+    wf_chat_join_requests_free(&list);
+
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE;
+    ev.page_count = g_session.join_requests.count;
+    indigo_session_publish_event(&ev);
+}
+
+/* Approve or reject one join request. Both come through here: the call differs,
+ * and the list change is the same. */
+static void
+chat_join_decision(const indigo_job *j, bool approve)
+{
+    indigo_session_event ev = {.kind = approve ? INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED
+                                               : INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED};
+    char id[INDIGO_CHAT_ID_MAX];
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(id, sizeof id, j->post_uri) ||
+        indigo_chat_target_kind_of(j->member_did) != INDIGO_CHAT_TARGET_DID) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    if (approve) {
+        wf_chat_convo convo;
+
+        memset(&convo, 0, sizeof convo);
+        st = wf_agent_chat_approve_join_request_typed(g_session.agent, id, j->member_did,
+                                                      &convo);
+        wf_chat_convo_free(&convo);
+    } else {
+        wf_chat_ok ok;
+
+        memset(&ok, 0, sizeof ok);
+        st = wf_agent_chat_reject_join_request_typed(g_session.agent, id, j->member_did, &ok);
+        wf_chat_ok_free(&ok);
+    }
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, approve ? "approve join request" : "reject join request",
+                                       st);
+        return;
+    }
+
+    /* Settled, so the row leaves the loaded list without a refetch. */
+    indigo_chat_join_requests_remove(&g_session.join_requests, j->member_did);
+
+    ev.kind = approve ? INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_DONE
+                      : INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_join_approve(const indigo_job *j)
+{
+    chat_join_decision(j, true);
+}
+
+void
+indigo_session_do_chat_join_reject(const indigo_job *j)
+{
+    chat_join_decision(j, false);
+}
+
 void
 indigo_session_do_notifications(void)
 {
@@ -670,6 +931,92 @@ indigo_session_submit_chat_send(const char *convo_id, const char *text)
     snprintf(j.post_uri, sizeof j.post_uri, "%s", convo_id);
     snprintf(j.text, sizeof j.text, "%s", text);
     return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_accept(const char *convo_id)
+{
+    indigo_job j = {.kind = JOB_CHAT_ACCEPT};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_decline(const char *convo_id)
+{
+    indigo_job j = {.kind = JOB_CHAT_DECLINE};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_start(const char *handle_or_did)
+{
+    indigo_job j = {.kind = JOB_CHAT_START};
+    char target[INDIGO_CHAT_TARGET_MAX];
+
+    if (!indigo_chat_target_normalise(handle_or_did, target, sizeof target) ||
+        indigo_chat_target_kind_of(target) == INDIGO_CHAT_TARGET_INVALID) {
+        return false;
+    }
+    indigo_copy_utf8(j.post_uri, sizeof j.post_uri, target);
+    return indigo_session_enqueue(&j);
+}
+
+const char *
+indigo_session_chat_started_convo(void)
+{
+    return g_session.chat_started;
+}
+
+bool
+indigo_session_submit_chat_join_requests(const char *convo_id, bool paging)
+{
+    indigo_job j = {.kind = JOB_CHAT_JOIN_REQUESTS};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    j.paging = paging;
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_chat_join_requests *
+indigo_session_chat_join_requests(void)
+{
+    return &g_session.join_requests;
+}
+
+/* Both decisions name the group and the requester, so they share the guard. */
+static bool
+submit_join_decision(const char *convo_id, const char *did, bool approve)
+{
+    indigo_job j = {.kind = approve ? JOB_CHAT_JOIN_APPROVE : JOB_CHAT_JOIN_REJECT};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id) ||
+        indigo_chat_target_kind_of(did) != INDIGO_CHAT_TARGET_DID) {
+        return false;
+    }
+    indigo_copy_utf8(j.member_did, sizeof j.member_did, did);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_join_approve(const char *convo_id, const char *did)
+{
+    return submit_join_decision(convo_id, did, true);
+}
+
+bool
+indigo_session_submit_chat_join_reject(const char *convo_id, const char *did)
+{
+    return submit_join_decision(convo_id, did, false);
 }
 
 bool
