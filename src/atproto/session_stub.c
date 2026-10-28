@@ -190,6 +190,65 @@ indigo_session_submit_chat_send(const char *convo_id, const char *text)
 }
 
 bool
+indigo_session_submit_chat_accept(const char *convo_id)
+{
+    (void) convo_id;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_decline(const char *convo_id)
+{
+    (void) convo_id;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_start(const char *handle_or_did)
+{
+    (void) handle_or_did;
+    return false;
+}
+
+const char *
+indigo_session_chat_started_convo(void)
+{
+    return "";
+}
+
+bool
+indigo_session_submit_chat_join_requests(const char *convo_id, bool paging)
+{
+    (void) convo_id;
+    (void) paging;
+    return false;
+}
+
+const indigo_chat_join_requests *
+indigo_session_chat_join_requests(void)
+{
+    static const indigo_chat_join_requests empty;
+
+    return &empty;
+}
+
+bool
+indigo_session_submit_chat_join_approve(const char *convo_id, const char *did)
+{
+    (void) convo_id;
+    (void) did;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_join_reject(const char *convo_id, const char *did)
+{
+    (void) convo_id;
+    (void) did;
+    return false;
+}
+
+bool
 indigo_session_submit_publish_thread(const char *const *texts, unsigned count, int reply_gate)
 {
     (void) texts;

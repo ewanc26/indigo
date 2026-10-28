@@ -105,6 +105,24 @@ worker(void *arg)
         case JOB_CHAT_REQUESTS:
             indigo_session_do_chat_requests(j.cursor);
             break;
+        case JOB_CHAT_ACCEPT:
+            indigo_session_do_chat_accept(&j);
+            break;
+        case JOB_CHAT_DECLINE:
+            indigo_session_do_chat_decline(&j);
+            break;
+        case JOB_CHAT_START:
+            indigo_session_do_chat_start(&j);
+            break;
+        case JOB_CHAT_JOIN_REQUESTS:
+            indigo_session_do_chat_join_requests(&j);
+            break;
+        case JOB_CHAT_JOIN_APPROVE:
+            indigo_session_do_chat_join_approve(&j);
+            break;
+        case JOB_CHAT_JOIN_REJECT:
+            indigo_session_do_chat_join_reject(&j);
+            break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);
             break;

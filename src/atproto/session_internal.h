@@ -70,6 +70,12 @@ typedef enum {
     JOB_CHAT_MESSAGES,
     JOB_CHAT_SEND,
     JOB_CHAT_REQUESTS,
+    JOB_CHAT_ACCEPT,
+    JOB_CHAT_DECLINE,
+    JOB_CHAT_START,
+    JOB_CHAT_JOIN_REQUESTS,
+    JOB_CHAT_JOIN_APPROVE,
+    JOB_CHAT_JOIN_REJECT,
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
@@ -119,6 +125,8 @@ typedef struct {
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
     char convo_messages_id[INDIGO_POST_URI_MAX];
+    /* JOB_CHAT_JOIN_APPROVE/REJECT: the requester to settle. */
+    char member_did[INDIGO_CHAT_TARGET_MAX];
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;
@@ -161,6 +169,9 @@ typedef struct {
      * the inbox so loading one never disturbs the other. */
     indigo_chat_inbox requests;
     indigo_chat_thread chat_thread;
+    indigo_chat_join_requests join_requests;
+    /* The convo id of the last conversation started, for the caller to open. */
+    char chat_started[INDIGO_CHAT_ID_MAX];
     indigo_actor actors[INDIGO_SEARCH_MAX];
     unsigned actor_count;
 /* Post search keeps its own results: indigo_post is a different type from
@@ -233,6 +244,12 @@ void indigo_session_do_chat_inbox(void);
 void indigo_session_do_chat_requests(const char *cursor);
 void indigo_session_do_chat_messages(const indigo_job *j);
 void indigo_session_do_chat_send(const indigo_job *j);
+void indigo_session_do_chat_accept(const indigo_job *j);
+void indigo_session_do_chat_decline(const indigo_job *j);
+void indigo_session_do_chat_start(const indigo_job *j);
+void indigo_session_do_chat_join_requests(const indigo_job *j);
+void indigo_session_do_chat_join_approve(const indigo_job *j);
+void indigo_session_do_chat_join_reject(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);
 void indigo_session_do_post_search(const indigo_job *j);
 void indigo_session_do_thread(const indigo_job *j);
