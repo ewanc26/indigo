@@ -236,8 +236,17 @@ indigo_layout_draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_a
         }
         if (p->embed_kind == INDIGO_EMBED_VIDEO) {
             /* The label takes its line off the band before the poster is
-             * fitted into what is left, so the two never overlap. */
-            band_h = EMBED_H - draw_post_alt(c, "Video: it can't play on the 3DS") - 4.0f;
+             * fitted into what is left, so the two never overlap. The length
+             * is omitted while the playlist is unknown. */
+            char label[96];
+
+            if (p->embed_duration[0]) {
+                snprintf(label, sizeof label, "Video %s: it can't play on the 3DS",
+                         p->embed_duration);
+            } else {
+                snprintf(label, sizeof label, "Video: it can't play on the 3DS");
+            }
+            band_h = EMBED_H - draw_post_alt(c, label) - 4.0f;
             draw_post_image(c, p, band_h < EMBED_H_MIN ? EMBED_H_MIN : band_h);
             return;
         }
