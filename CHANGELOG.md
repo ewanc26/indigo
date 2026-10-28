@@ -6,7 +6,7 @@ adds its entry under `## [Unreleased]`, linking itself. A release PR renames
 that section to the version, and the Release workflow publishes that section
 as the release notes.
 
-## [Unreleased]
+## [0.15.0] - 2026-10-28
 
 ### Added
 
