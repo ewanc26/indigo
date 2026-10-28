@@ -399,6 +399,31 @@ build_top_compose(const indigo_app *app, indigo_canvas *c)
     }
 }
 
+/* Credits is a reference page rather than a list to act on: each project and
+ * its full repository address share a line, so the address can be read and
+ * typed elsewhere. The 3DS cannot open a browser. */
+static void
+build_top_credits(const indigo_app *app, indigo_canvas *c)
+{
+    (void) app;
+    indigo_layout_top_title(c, "Credits", "B  Back");
+    indigo_canvas_text(c, 16, 42, 0.55f, COL_TEXT_DIM,
+                       "The repositories behind the stack.");
+    indigo_canvas_text(c, 16, 56, 0.55f, COL_TEXT_DIM,
+                       "Full addresses, for typing elsewhere.");
+
+    for (unsigned i = 0; i < indigo_credit_repo_count(); i++) {
+        const indigo_credit_repo *repo = indigo_credit_repo_at(i);
+        float y = 78.0f + 26.0f * (float) i;
+
+        indigo_canvas_text(c, 16, y, 0.55f, COL_TEXT, "%s", repo->name);
+        indigo_canvas_text(c, 124, y, 0.43f, COL_TEXT_SOFT, "%s", repo->url);
+    }
+
+    indigo_canvas_text(c, 16, 214, 0.5f, COL_TEXT_DIM,
+                       "All five repositories are public.");
+}
+
 static void
 build_top_settings(const indigo_app *app, indigo_canvas *c)
 {
@@ -590,6 +615,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_SETTINGS:
         build_top_settings(app, c);
+        return;
+    case INDIGO_SCREEN_CREDITS:
+        build_top_credits(app, c);
         return;
     case INDIGO_SCREEN_IMAGE:
         build_top_image(app, c);

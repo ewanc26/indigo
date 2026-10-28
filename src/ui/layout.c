@@ -267,6 +267,7 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_SETTINGS_ROW6, INDIGO_ACTION_SETTINGS_ROW7,
         INDIGO_ACTION_BACK};
     static const indigo_action update_actions[] = {INDIGO_ACTION_UPDATE, INDIGO_ACTION_BACK};
+    static const indigo_action credits_actions[] = {INDIGO_ACTION_BACK};
     const indigo_action *list = signin_actions;
     unsigned count = 0;
 
@@ -319,6 +320,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_UPDATE:
         USE(update_actions);
+        break;
+    case INDIGO_SCREEN_CREDITS:
+        USE(credits_actions);
         break;
     }
 #undef USE

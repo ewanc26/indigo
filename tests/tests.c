@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "app/credits.h"
 #include "app/signin.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
@@ -1908,7 +1909,7 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 15);
+    CHECK(app.menu.count == 16);
     CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
@@ -1917,13 +1918,14 @@ test_signin_flow(void)
     CHECK(app.menu.items[8].kind == INDIGO_MENU_BLOCKED);
     CHECK(app.menu.items[9].kind == INDIGO_MENU_QUEUE);
     CHECK(app.menu.items[11].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[12].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[13].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(app.menu.items[12].kind == INDIGO_MENU_CREDITS);
+    CHECK(app.menu.items[13].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[14].kind == INDIGO_MENU_SIGN_OUT);
     CHECK(strcmp(app.menu.items[10].label, "My profile") == 0);
 
-    /* Sign out is the fourteenth item, so it sits below the window until the
+    /* Sign out is the fifteenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 13; i++) {
+    for (unsigned i = 0; i < 14; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -3134,7 +3136,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the two entries about the post, then the thirteen app
      * actions. */
-    CHECK(menu.count == 20);
+    CHECK(menu.count == 21);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -3146,7 +3148,7 @@ test_facet_menu(void)
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[19].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[20].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -3172,8 +3174,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 20);
-    CHECK(app.menu.items[19].kind == INDIGO_MENU_CLOSE);
+    CHECK(app.menu.count == 21);
+    CHECK(app.menu.items[20].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -3252,7 +3254,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 17);
+    CHECK(menu.count == 18);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
 
@@ -3261,11 +3263,11 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 17);
+    CHECK(menu.count == 18);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 15);
+    CHECK(menu.count == 16);
     CHECK(strcmp(menu.items[10].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
@@ -5232,6 +5234,46 @@ test_settings_screen(void)
     CHECK(app.screen == INDIGO_SCREEN_SIGNIN);
 }
 
+/* Credits is the stack's repository list. Both displays are checked: the top
+ * carries every full address, and the bottom names the projects and has the
+ * only control the screen offers. */
+static void
+test_credits_screen(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+
+    CHECK(indigo_credit_repo_count() == 5);
+    CHECK(strcmp(indigo_credit_repo_at(0)->url,
+                 "https://github.com/ewanc26/cobalt") == 0);
+    CHECK(strcmp(indigo_credit_repo_at(4)->url,
+                 "https://github.com/ewanc26/channel-blue") == 0);
+    CHECK(indigo_credit_repo_at(5) == NULL);
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_app_open_credits(&app);
+    CHECK(app.screen == INDIGO_SCREEN_CREDITS);
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    for (unsigned i = 0; i < indigo_credit_repo_count(); i++) {
+        CHECK(text_has(&top, indigo_credit_repo_at(i)->name));
+        CHECK(text_has(&top, indigo_credit_repo_at(i)->url));
+    }
+    CHECK(text_has(&bottom, "Every repository address is printed"));
+    CHECK(text_has(&bottom, "https://github.com/ewanc26"));
+
+    /* The Back button is the one target, and B returns to the screen that
+     * opened Credits. */
+    CHECK(indigo_layout_hit_settings(INDIGO_SCREEN_CREDITS, false, 250, 20) ==
+          INDIGO_ACTION_BACK);
+    in.back = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_HOME);
+}
+
 /* --- images ------------------------------------------------------------- */
 
 /* A fake decode result: the cache never looks inside the pixels, so a block of
@@ -6981,6 +7023,7 @@ main(void)
     test_prefs();
     test_text_stays_on_screen();
     test_settings_screen();
+    test_credits_screen();
     test_canvas_image_dedupes_by_url();
     test_canvas_image_refuses_unusable_urls();
     test_canvas_image_entry_cap();

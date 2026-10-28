@@ -37,6 +37,7 @@ typedef enum {
     INDIGO_SCREEN_CHAT_REQUESTS,
     INDIGO_SCREEN_CHAT_JOIN_REQUESTS,
     INDIGO_SCREEN_QUEUE,
+    INDIGO_SCREEN_CREDITS,
 } indigo_screen;
 
 typedef enum {
@@ -312,6 +313,7 @@ void indigo_app_open_feed(indigo_app *app, const char *feed_uri, const char *nam
 void indigo_app_open_mutes(indigo_app *app);
 void indigo_app_open_blocks(indigo_app *app);
 void indigo_app_open_settings(indigo_app *app);
+void indigo_app_open_credits(indigo_app *app);
 
 /* Queued posts (app_queue.c). Nothing in this set sends without the person. */
 void indigo_app_open_queue(indigo_app *app);

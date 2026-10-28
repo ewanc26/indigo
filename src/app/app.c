@@ -361,6 +361,21 @@ indigo_app_close_image(indigo_app *app)
     }
 }
 
+/* Credits is a reading screen: B and the Back button leave it, and there is
+ * nothing else to press. */
+static void
+update_credits(indigo_app *app, const indigo_input *input)
+{
+    if (input->back) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (input->touch_pressed &&
+        indigo_layout_hit_app(app, input->touch_x, input->touch_y) == INDIGO_ACTION_BACK) {
+        indigo_app_go_back(app);
+    }
+}
+
 void
 indigo_app_update(indigo_app *app, const indigo_input *input)
 {
@@ -416,6 +431,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_UPDATE:
         indigo_app_update_update(app, input);
+        break;
+    case INDIGO_SCREEN_CREDITS:
+        update_credits(app, input);
         break;
     }
 }

@@ -13,6 +13,7 @@
 
 #include "ui/layout.h"
 
+#include "app/credits.h"
 #include "app/signin.h"
 #include "atproto/session.h"
 #include "media/media.h"

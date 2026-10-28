@@ -150,6 +150,10 @@ Indigo starts on the sign-in screen; [Status](#status) covers the two ways in. A
 | ZR (New 3DS) | open the selected post's picture |
 | Touch | the buttons on the bottom screen |
 
+Credits, at the bottom of the More menu, lists the repositories behind the stack — Cobalt, Indigo, Wolfram, Platinum and Channel Blue — with every address printed in full on the top screen. Nothing on it is a button: the 3DS cannot open a browser, so an address is there to read and type elsewhere. B returns to where More was opened.
+
+![Credits](docs/screenshots/credits.png)
+
 ## Building
 
 ### Requirements
