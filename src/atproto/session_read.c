@@ -4,6 +4,80 @@
 
 #if defined(__3DS__) && defined(WOLFRAM_3DS)
 
+/* A playlist for a short clip is a few kilobytes; a feature-length one with
+ * ten-second segments is about 900 lines. The cap stops a hostile URL
+ * streaming forever. */
+#define PLAYLIST_MAX_BYTES (256u * 1024u)
+/* A screen of posts is a few videos; past this a new playlist is not fetched,
+ * so its poster simply shows no duration. */
+#define PLAYLIST_FETCH_PER_PAGE 4
+
+/* The duration of the playlist at `uri`, following a master playlist to one
+ * variant and no further. False when the fetch or the parse fails. */
+static bool
+playlist_seconds(wf_xrpc_client *client, const char *uri, double *seconds)
+{
+    wf_response response = {0};
+    bool found = false;
+
+    if (wf_http_get_public(client, uri, PLAYLIST_MAX_BYTES, &response) == WF_OK &&
+        response.body && response.body_len > 0) {
+        if (indigo_video_duration_parse(response.body, response.body_len, seconds)) {
+            found = true;
+        } else {
+            char variant[INDIGO_VIDEO_PLAYLIST_MAX];
+
+            if (indigo_video_master_variant(response.body, response.body_len, uri,
+                                            variant, sizeof variant)) {
+                wf_response variant_response = {0};
+
+                if (wf_http_get_public(client, variant, PLAYLIST_MAX_BYTES,
+                                       &variant_response) == WF_OK &&
+                    variant_response.body && variant_response.body_len > 0) {
+                    found = indigo_video_duration_parse(variant_response.body,
+                                                        variant_response.body_len,
+                                                        seconds);
+                }
+                wf_response_free(&variant_response);
+            }
+        }
+    }
+    wf_response_free(&response);
+    return found;
+}
+
+/* Fill the duration text on the video posts of a page before it is published.
+ * The fetch runs on the session worker, never on the frame loop; at most
+ * PLAYLIST_FETCH_PER_PAGE playlists are tried, so a page of videos cannot turn
+ * into a burst of requests. */
+static void
+fill_video_durations(indigo_post *posts, unsigned count)
+{
+    wf_xrpc_client *client;
+    unsigned fetched = 0;
+
+    if (!g_session.agent || !posts) {
+        return;
+    }
+    client = wf_agent_get_xrpc_client(g_session.agent);
+    if (!client) {
+        return;
+    }
+    for (unsigned i = 0; i < count && fetched < PLAYLIST_FETCH_PER_PAGE; i++) {
+        double seconds = 0.0;
+
+        if (posts[i].embed_kind != INDIGO_EMBED_VIDEO ||
+            !posts[i].embed_playlist[0] || posts[i].embed_duration[0]) {
+            continue;
+        }
+        fetched++;
+        if (playlist_seconds(client, posts[i].embed_playlist, &seconds)) {
+            indigo_video_duration_format(seconds, posts[i].embed_duration,
+                                         sizeof posts[i].embed_duration);
+        }
+    }
+}
+
 /* Fetch the saved preferences once per sign-in. Failure is not fatal: the
  * feed is simply shown unfiltered, and the next page tries again. */
 static void
@@ -55,6 +129,7 @@ indigo_session_do_timeline(const indigo_job *j)
         }
     }
     g_session.page_count -= indigo_prefs_filter_page(&g_session.prefs, g_session.page, g_session.page_count, 0, true);
+    fill_video_durations(g_session.page, g_session.page_count);
     ev.kind = INDIGO_SESSION_EVENT_TIMELINE_PAGE;
     ev.page_count = g_session.page_count;
     if (list.cursor && strlen(list.cursor) < sizeof ev.cursor) {
@@ -155,6 +230,7 @@ indigo_session_do_thread(const indigo_job *j)
     }
     indigo_session_add_replies(&thread.root, parents + 1);
     wf_agent_thread_free(&thread);
+    fill_video_durations(g_session.page, g_session.page_count);
 
     ev.kind = INDIGO_SESSION_EVENT_THREAD_PAGE;
     ev.page_count = g_session.page_count;
@@ -192,6 +268,7 @@ indigo_session_do_post_search(const indigo_job *j)
             g_session.post_count++;
         }
     }
+    fill_video_durations(g_session.posts, g_session.post_count);
     ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
     ev.page_count = g_session.post_count;
     indigo_copy_utf8(ev.cursor, sizeof ev.cursor, next ? next : "");
@@ -233,6 +310,7 @@ indigo_session_do_author_feed(const indigo_job *j)
             g_session.post_count++;
         }
     }
+    fill_video_durations(g_session.posts, g_session.post_count);
     ev.kind = INDIGO_SESSION_EVENT_POST_SEARCH_PAGE;
     ev.page_count = g_session.post_count;
     indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
@@ -273,6 +351,7 @@ indigo_session_do_feed(const indigo_job *j)
     /* A custom feed is not the home timeline, so hide_reposts does not apply;
      * the muted words do, because they are about the content, not the feed. */
     g_session.page_count -= indigo_prefs_filter_page(&g_session.prefs, g_session.page, g_session.page_count, 0, false);
+    fill_video_durations(g_session.page, g_session.page_count);
     ev.kind = INDIGO_SESSION_EVENT_TIMELINE_PAGE;
     ev.page_count = g_session.page_count;
     if (list.cursor && strlen(list.cursor) < sizeof ev.cursor) {

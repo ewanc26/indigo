@@ -3,6 +3,7 @@
 
 /* The avatar URL is stored at the width the image cache keys on, so the two
  * cannot disagree about a truncated URL and miss a lookup forever. */
+#include "atproto/video.h"
 #include "media/media.h"
 
 #include <stdbool.h>
@@ -91,6 +92,11 @@ typedef struct {
     char embed_alt[INDIGO_EMBED_ALT_MAX];
     char embed_title[INDIGO_EMBED_TITLE_MAX];
     char embed_uri[INDIGO_POST_NAME_MAX];
+    /* A video's HLS playlist, empty when absent. The session worker fetches it
+     * and fills the duration before the page is published, so the screen only
+     * reads the result. */
+    char embed_playlist[INDIGO_VIDEO_PLAYLIST_MAX];
+    char embed_duration[INDIGO_VIDEO_DURATION_TEXT_MAX];
     bool is_reply;
     /* Nesting in a thread view: 0 for ancestors, the post itself and the
      * timeline; replies are deeper. */
