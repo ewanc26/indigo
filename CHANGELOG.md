@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- A Credits entry at the bottom of the More menu lists the repositories behind the stack — Cobalt, Indigo, Wolfram, Platinum and Channel Blue — with every `https://github.com/ewanc26/...` address printed in full on the top screen. Nothing is a button, because the 3DS cannot open a browser; the bottom screen names the projects and B or the Back button leaves. The menu's app-wide entries grew by one, and host tests check both displays and the return path.
+
 ## [0.15.0] - 2026-10-28
 
 ### Added

@@ -205,6 +205,10 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_settings(app);
         break;
+    case INDIGO_MENU_CREDITS:
+        indigo_app_go_back(app);
+        indigo_app_open_credits(app);
+        break;
     case INDIGO_MENU_UPDATE:
         indigo_app_go_back(app);
         indigo_app_open_update(app);

@@ -540,6 +540,33 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
                 posts ? "Thread" : opens ? "Open" : "Profile");
 }
 
+/* The top screen carries the addresses; the bottom screen says what the page
+ * is and gives the one control it has. */
+static void
+build_bottom_credits(const indigo_app *app, indigo_canvas *c)
+{
+    (void) app;
+    indigo_canvas_text(c, 14, 10, 0.9f, COL_TEXT, "Credits");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+
+    indigo_canvas_text(c, 16, 54, 0.65f, COL_TEXT,
+                       "Every repository address is printed");
+    indigo_canvas_text(c, 16, 72, 0.65f, COL_TEXT,
+                       "in full on the top screen.");
+    indigo_canvas_text(c, 16, 100, 0.55f, COL_TEXT_SOFT,
+                       "Cobalt and Indigo are console clients.");
+    indigo_canvas_text(c, 16, 116, 0.55f, COL_TEXT_SOFT,
+                       "Wolfram is the C SDK they share.");
+    indigo_canvas_text(c, 16, 132, 0.55f, COL_TEXT_SOFT,
+                       "Platinum is the Mac OS 9 client and");
+    indigo_canvas_text(c, 16, 148, 0.55f, COL_TEXT_SOFT,
+                       "Channel Blue the earlier Wii client.");
+    indigo_canvas_text(c, 16, 178, 0.55f, COL_TEXT_DIM,
+                       "https://github.com/ewanc26");
+    indigo_canvas_text(c, 16, 202, 0.55f, COL_TEXT_DIM,
+                       "Read an address and type it elsewhere.");
+}
+
 static void
 build_bottom_settings(const indigo_app *app, indigo_canvas *c)
 {
@@ -707,6 +734,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_SETTINGS:
         build_bottom_settings(app, c);
+        break;
+    case INDIGO_SCREEN_CREDITS:
+        build_bottom_credits(app, c);
         break;
     case INDIGO_SCREEN_IMAGE:
         build_bottom_image(app, c);
