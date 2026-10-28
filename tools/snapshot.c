@@ -976,6 +976,7 @@ main(int argc, char **argv)
         {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0, false},
         {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0, false},
         {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0, false},
+        {"credits", INDIGO_SCREEN_CREDITS, false, 0, 0, 0, 0, false},
         /* The update screen; `select` is the state, see fill_social. */
         {"update-idle", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 0, false},
         {"update-checking", INDIGO_SCREEN_UPDATE, false, 0, 0, 0, 1, false},

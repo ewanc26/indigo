@@ -754,6 +754,13 @@ indigo_app_open_settings(indigo_app *app)
 }
 
 void
+indigo_app_open_credits(indigo_app *app)
+{
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_CREDITS;
+}
+
+void
 indigo_app_requests_loaded(indigo_app *app, const indigo_chat_inbox *src)
 {
     app->requests = *src;
