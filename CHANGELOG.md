@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A message request you accept now joins the inbox even when the inbox was empty, so the conversation can be opened and is not left in neither list. A group that fails to create says so on the group screen, where you are, instead of writing the error to the inbox's hidden status line. ([#22](https://github.com/ewanc26/indigo/issues/22))
+
 ### Added
 
 - `make e2e` runs the real session worker on the host against a mock PDS: sign-in, the timeline, a conversation, chat start, actor and post search, a person's posts, feeds and notifications. The worker's Wolfram calls sit behind the console guard, so no host target compiled them before and only the 3DS build caught a wrong signature. Host coverage only; not run on an emulator or hardware. ([#119](https://github.com/ewanc26/indigo/pull/119))
