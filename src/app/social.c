@@ -32,9 +32,76 @@ indigo_notifications_clear(indigo_notifications *n)
     n->count = 0;
     n->selected = 0;
     n->scroll = 0;
+    n->cursor[0] = '\0';
+    n->has_more = false;
     n->loading = false;
+    n->awaiting_first_page = false;
     n->status[0] = '\0';
     n->status_is_error = false;
+}
+
+void
+indigo_notifications_begin_fetch(indigo_notifications *n, bool reset)
+{
+    if (reset) {
+        indigo_notifications_clear(n);
+    }
+    n->loading = true;
+    n->awaiting_first_page = reset;
+    n->status[0] = '\0';
+    n->status_is_error = false;
+}
+
+void
+indigo_notifications_finish_fetch(indigo_notifications *n, const indigo_notification *items,
+                                  unsigned count, const char *next_cursor)
+{
+    const bool first = n->awaiting_first_page;
+
+    n->loading = false;
+    n->awaiting_first_page = false;
+    if (first) {
+        n->count = 0;
+        n->selected = 0;
+        n->scroll = 0;
+    }
+    for (unsigned i = 0; items && i < count && n->count < INDIGO_NOTIFICATION_MAX; i++) {
+        n->items[n->count++] = items[i];
+    }
+    indigo_copy_utf8(n->cursor, sizeof n->cursor, next_cursor ? next_cursor : "");
+    n->has_more = n->cursor[0] != '\0' && n->count < INDIGO_NOTIFICATION_MAX;
+    if (n->count == 0) {
+        indigo_copy_utf8(n->status, sizeof n->status, "No notifications yet.");
+    } else {
+        n->status[0] = '\0';
+        n->status_is_error = false;
+    }
+}
+
+void
+indigo_notifications_fail_fetch(indigo_notifications *n, const char *message)
+{
+    n->loading = false;
+    n->awaiting_first_page = false;
+    /* Paging stops until the person reloads. Leaving the cursor in place would
+     * make the screen ask again on the next frame, so a service that is down
+     * would be retried without end rather than once. */
+    n->has_more = false;
+    n->cursor[0] = '\0';
+    indigo_copy_utf8(n->status, sizeof n->status, message);
+    n->status_is_error = true;
+}
+
+bool
+indigo_notifications_wants_page(const indigo_notifications *n)
+{
+    if (n->loading || !n->has_more || n->cursor[0] == '\0' || n->count == 0) {
+        return false;
+    }
+    if (n->count >= INDIGO_NOTIFICATION_MAX) {
+        return false;
+    }
+    return n->selected + 1 >= n->count;
 }
 
 bool

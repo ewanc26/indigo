@@ -36,8 +36,9 @@ jobs:
         with:
           path: indigo
       # The host build links Wolfram's muted-word matcher, time parser, CDN URL
-      # rewrite and update-signature check, so it needs the Wolfram release named
-      # in wolfram.ref beside this checkout, and cJSON's headers.
+      # rewrite and update-signature check; the end-to-end build links the whole
+      # host library. Both need the Wolfram release named in wolfram.ref beside
+      # this checkout, and cJSON's headers.
       - name: Wolfram pin
         id: wolfram
         run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
@@ -46,13 +47,26 @@ jobs:
           repository: ewanc26/wolfram
           ref: ${{ steps.wolfram.outputs.ref }}
           path: wolfram
-      - name: cJSON headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcjson-dev
+      - name: Host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config libcjson-dev libcurl4-openssl-dev \
+            libmbedtls-dev
+      - name: Build Wolfram for the host
+        working-directory: wolfram
+        run: |
+          cmake -S . -B build-host -DWOLFRAM_BUILD_TESTS=OFF \
+            -DWOLFRAM_BUILD_EXAMPLES=OFF
+          cmake --build build-host -j4 --target wolfram
       - run: make test
         working-directory: indigo
       - run: make warnings
         working-directory: indigo
       - run: make snapshots
+        working-directory: indigo
+      - name: End-to-end against the mock PDS
+        run: make e2e
         working-directory: indigo
       - name: Universal-DB submission builds
         run: scripts/udb-submit.sh --dry-run

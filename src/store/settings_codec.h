@@ -10,9 +10,9 @@
 #define INDIGO_SETTINGS_FEED_MAX 128
 #define INDIGO_SETTINGS_FILE_MAX 512
 
-/* "Auto" is not a placeholder: the top screen is a backlight LCD on some
- * models and an OLED on others, so following the hardware has to be something
- * the app decides at runtime rather than a fixed palette choice. */
+/* The settings screen offers Light and Dark. AUTO is kept in the file format
+ * for files written by older builds; it has no system theme to follow on a
+ * 3DS, so loading it normalises to Dark, which is what those builds drew. */
 typedef enum {
     INDIGO_THEME_AUTO = 0,
     INDIGO_THEME_LIGHT = 1,

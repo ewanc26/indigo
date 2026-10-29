@@ -4,7 +4,7 @@
 
 #include "app/app.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 void
 indigo_session_drop_agent(void)
@@ -397,4 +397,4 @@ indigo_session_submit_logout(void)
     return indigo_session_enqueue(&j);
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */

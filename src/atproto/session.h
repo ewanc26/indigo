@@ -57,6 +57,18 @@ typedef enum {
     INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED,
     INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE,
     INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_PAGE,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_DONE,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_DONE,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE,
+    INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE,
+    INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -86,7 +98,9 @@ typedef struct {
     wf_failure_kind failure;
     char account[256];
     /* TIMELINE_PAGE: how many posts indigo_session_page() holds, and the
-     * cursor for the next page (empty when there are no more). */
+     * cursor for the next page (empty when there are no more).
+     * NOTIFICATIONS_PAGE: page_count counts notifications, and cursor is the
+     * one to pass to indigo_session_submit_notifications_more(). */
     unsigned page_count;
     char cursor[INDIGO_CURSOR_MAX];
     /* POST_ACTION_*: what was attempted, on which post. For LIKE/REPOST,
@@ -148,6 +162,10 @@ bool indigo_session_submit_thread(const char *uri);
 /* `actor` is a handle or DID. */
 bool indigo_session_submit_profile(const char *actor);
 bool indigo_session_submit_notifications(void);
+/* The next page of notifications, from the cursor the last page reported. The
+ * worker appends rather than replacing, and does not mark anything seen: those
+ * rows are older than what the account has already been shown. */
+bool indigo_session_submit_notifications_more(const char *cursor);
 
 /* Fetch the direct message inbox. Read the rows with indigo_session_chat_inbox
  * once CHAT_PAGE arrives. */
@@ -208,6 +226,24 @@ const indigo_chat_join_requests *indigo_session_chat_join_requests(void);
 bool indigo_session_submit_chat_join_approve(const char *convo_id, const char *did);
 bool indigo_session_submit_chat_join_reject(const char *convo_id, const char *did);
 
+/*
+ * A group's details, and the edits to them. Creating needs a name and at least
+ * one member, the latter as a comma or newline separated list of handles and
+ * DIDs; the caller opens the new conversation from
+ * indigo_session_chat_group_started(). Rename, add and remove update the held
+ * group on success. The join link is created for anyone to join, then toggled
+ * disabled or enabled.
+ */
+bool indigo_session_submit_chat_group_info(const char *convo_id);
+const indigo_chat_group *indigo_session_chat_group(void);
+bool indigo_session_submit_chat_group_create(const char *name, const char *members);
+const char *indigo_session_chat_group_started(void);
+bool indigo_session_submit_chat_group_rename(const char *convo_id, const char *name);
+bool indigo_session_submit_chat_group_add(const char *convo_id, const char *members);
+bool indigo_session_submit_chat_group_remove(const char *convo_id, const char *did);
+bool indigo_session_submit_chat_join_link_create(const char *convo_id);
+bool indigo_session_submit_chat_join_link_toggle(const char *convo_id, bool disable);
+
 /* Publish a post, reply or quote. For a reply, `root_*` is the thread root
  * and `target_*` the post being answered; for a quote, `target_*` is quoted.
  *
@@ -228,21 +264,23 @@ bool indigo_session_submit_publish(indigo_compose_mode mode, const char *text,
                                    const char *root_uri, const char *root_cid,
                                    int reply_gate, const char *image_path,
                                    const char *image_alt);
-/* Find people by name or handle. One page at a time; `paging` asks for the
- * next page of the last search rather than a fresh one, and the event's
- * cursor carries the one after that (empty when there is no more). */
-bool indigo_session_submit_search(const char *query, bool paging);
+/* Find people by name or handle. A NULL or empty `cursor` fetches the first
+ * page and replaces what is held; a cursor the last page reported appends the
+ * next page. The event's cursor carries the one after that (empty when there
+ * is no more). */
+bool indigo_session_submit_search(const char *query, const char *cursor);
 /* Post search. Results are indigo_post, so this has its own result array and
- * its own event rather than sharing the actor search's. */
-bool indigo_session_submit_post_search(const char *query, bool paging);
+ * its own event rather than sharing the actor search's. Same cursor rule. */
+bool indigo_session_submit_post_search(const char *query, const char *cursor);
 /* One person's posts. Shares post search's result array and event, the way the
- * people lists share the actor search's. */
-bool indigo_session_submit_author_feed(const char *actor, int tab, bool paging);
+ * people lists share the actor search's. Same cursor rule. */
+bool indigo_session_submit_author_feed(const char *actor, int tab, const char *cursor);
 /* The signed-in account's curated lists, then one list's members. The members
  * reuse the actor search's result array and events, the way the people lists
- * do; the lists themselves have their own. */
-bool indigo_session_submit_lists(bool paging);
-bool indigo_session_submit_list_members(const char *list_uri, bool paging);
+ * do; the lists themselves have their own. Both take a page cursor the same
+ * way. */
+bool indigo_session_submit_lists(const char *cursor);
+bool indigo_session_submit_list_members(const char *list_uri, const char *cursor);
 void indigo_session_post_search_results(const indigo_post **posts, unsigned *count);
 /* The account's curated lists. A list is a third result type, so it has its
  * own array and its own event rather than sharing the actor search's. */
@@ -255,13 +293,15 @@ bool indigo_session_submit_feeds(void);
 /* The accounts this one has muted or blocked. Both land in the actor results
  * the people lists already use, so they are read-only: undoing a mute or block
  * is done from that person's profile, which is where it was done. */
-bool indigo_session_submit_mutes(bool paging);
-bool indigo_session_submit_blocks(bool paging);
+bool indigo_session_submit_mutes(const char *cursor);
+bool indigo_session_submit_blocks(const char *cursor);
 bool indigo_session_submit_feed(const char *feed_uri, const char *cursor);
 void indigo_session_feeds_results(const indigo_list **feeds, unsigned *count);
 /* Fetch one person's followers or following. Reuses the actor search's result
- * array and its events, because the result type is the same. */
-bool indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging);
+ * array and its events, because the result type is the same. Same cursor rule
+ * as search. */
+bool indigo_session_submit_people(indigo_search_kind kind, const char *subject,
+                                  const char *cursor);
 /* Follow or unfollow `did`. `follow_uri` is required for an unfollow and
  * ignored for a follow, which creates the record and reports its URI back. */
 bool indigo_session_submit_follow(indigo_follow_action action, const char *did,

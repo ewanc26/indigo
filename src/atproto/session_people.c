@@ -2,7 +2,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 void
 indigo_session_do_profile(const indigo_job *j)
@@ -253,14 +253,17 @@ indigo_session_profile(void)
 }
 
 bool
-indigo_session_submit_search(const char *query, bool paging)
+indigo_session_submit_search(const char *query, const char *cursor)
 {
     indigo_job j = {.kind = JOB_SEARCH};
 
     if (!query) {
         return false;
     }
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     indigo_copy_utf8(j.query, sizeof j.query, query);
     return indigo_session_enqueue(&j);
 }
@@ -300,14 +303,18 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
 }
 
 bool
-indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging)
+indigo_session_submit_people(indigo_search_kind kind, const char *subject,
+                              const char *cursor)
 {
     indigo_job j = {.kind = JOB_PEOPLE, .people_kind = kind};
 
     if (kind == INDIGO_SEARCH_PEOPLE || !subject || !subject[0]) {
         return false;
     }
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     /* A post's URI is longer than a handle, so the two kinds that take one
      * keep it in the URI-sized field rather than truncating it into actor. */
     if (kind == INDIGO_SEARCH_LIKED_BY || kind == INDIGO_SEARCH_REPOSTED_BY) {
@@ -325,4 +332,4 @@ indigo_session_search_results(unsigned *count)
     return g_session.actors;
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */
