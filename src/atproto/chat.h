@@ -140,6 +140,48 @@ bool indigo_chat_is_self(const char *viewer_did, const char *target_did);
  */
 bool indigo_chat_convo_id_copy(char *out, size_t cap, const char *id);
 
+/* --- a group's name, members and join link --- */
+
+#define INDIGO_CHAT_GROUP_MEMBERS_MAX 30
+#define INDIGO_CHAT_GROUP_NAME_MAX 96
+#define INDIGO_CHAT_GROUP_MEMBERS_TEXT_MAX 1024
+#define INDIGO_CHAT_JOIN_LINK_CODE_MAX 128
+#define INDIGO_CHAT_JOIN_LINK_URL_MAX 256
+
+typedef struct {
+   char did[INDIGO_CHAT_TARGET_MAX];
+   char name[INDIGO_POST_NAME_MAX];
+   char handle[INDIGO_POST_NAME_MAX];
+} indigo_chat_member;
+
+typedef struct {
+   bool loaded;
+   char convo_id[INDIGO_CHAT_ID_MAX];
+   char name[INDIGO_CHAT_GROUP_NAME_MAX];
+   indigo_chat_member members[INDIGO_CHAT_GROUP_MEMBERS_MAX];
+   unsigned count;
+   int total;
+   unsigned selected;
+   unsigned scroll;
+   bool join_link_enabled;
+   char join_link_code[INDIGO_CHAT_JOIN_LINK_CODE_MAX];
+   char join_link_url[INDIGO_CHAT_JOIN_LINK_URL_MAX];
+} indigo_chat_group;
+
+void indigo_chat_group_reset(indigo_chat_group *group);
+int indigo_chat_group_member_index(const indigo_chat_group *group, const char *did);
+bool indigo_chat_group_select(indigo_chat_group *group, unsigned index, unsigned rows);
+bool indigo_chat_group_move(indigo_chat_group *group, int delta, unsigned rows);
+void indigo_chat_group_set_name(indigo_chat_group *group, const char *name);
+
+struct wf_chat_convo;
+struct wf_chat_convo_members;
+void indigo_chat_group_from_convo(indigo_chat_group *group,
+                                  const struct wf_chat_convo *convo,
+                                  const char *convo_id);
+void indigo_chat_group_from_members(indigo_chat_group *group,
+                                    const struct wf_chat_convo_members *members);
+
 /* --- a group's pending join requests --- */
 
 /*
