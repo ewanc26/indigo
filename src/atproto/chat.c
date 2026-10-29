@@ -1,6 +1,7 @@
 #include "atproto/chat.h"
 #include "app/timeline.h"
 
+#include <wolfram/chat_group.h>
 #include <wolfram/chat_typed.h>
 
 #include <stdio.h>
@@ -411,7 +412,9 @@ indigo_chat_inbox_append_from_wolfram(indigo_chat_inbox *out,
         memset(item, 0, sizeof *item);
         snprintf(item->id, sizeof item->id, "%s", src->id ? src->id : "");
 
-        if (others > 1) {
+        /* A group is what its `kind` says it is; more than one other member is
+         * only a fallback for a server that did not send the kind. */
+        if (wf_chat_convo_is_group(src) || others > 1) {
             item->group = true;
             snprintf(item->name, sizeof item->name, "Group");
         } else {
@@ -446,6 +449,137 @@ indigo_chat_inbox_append_from_wolfram(indigo_chat_inbox *out,
         out->has_more = true;
     }
     return added;
+}
+
+/* --- a group's name, members and join link --- */
+
+void
+indigo_chat_group_reset(indigo_chat_group *group)
+{
+    if (group) {
+        memset(group, 0, sizeof *group);
+    }
+}
+
+int
+indigo_chat_group_member_index(const indigo_chat_group *group, const char *did)
+{
+    if (!group || !did) {
+        return -1;
+    }
+    for (unsigned i = 0; i < group->count; i++) {
+        if (strcmp(group->members[i].did, did) == 0) {
+            return (int) i;
+        }
+    }
+    return -1;
+}
+
+bool
+indigo_chat_group_select(indigo_chat_group *group, unsigned index, unsigned rows)
+{
+    if (!group || index >= group->count || index == group->selected) {
+        return false;
+    }
+    group->selected = index;
+    keep_visible(&group->scroll, index, rows);
+    return true;
+}
+
+bool
+indigo_chat_group_move(indigo_chat_group *group, int delta, unsigned rows)
+{
+    long target;
+
+    if (!group || group->count == 0) {
+        return false;
+    }
+    target = (long) group->selected + delta;
+    if (target < 0) {
+        target = 0;
+    }
+    if (target >= (long) group->count) {
+        target = (long) group->count - 1;
+    }
+    return indigo_chat_group_select(group, (unsigned) target, rows);
+}
+
+void
+indigo_chat_group_set_name(indigo_chat_group *group, const char *name)
+{
+    if (group) {
+        indigo_copy_utf8(group->name, sizeof group->name, name ? name : "");
+    }
+}
+
+static void
+group_add_member(indigo_chat_group *group, const wf_agent_profile_view *who)
+{
+    indigo_chat_member *member;
+
+    if (!group || !who || !who->did || !who->did[0] ||
+        group->count >= INDIGO_CHAT_GROUP_MEMBERS_MAX ||
+        indigo_chat_group_member_index(group, who->did) >= 0) {
+        return;
+    }
+    member = &group->members[group->count];
+    memset(member, 0, sizeof *member);
+    indigo_copy_utf8(member->did, sizeof member->did, who->did);
+    if (who->handle && who->handle[0]) {
+        snprintf(member->handle, sizeof member->handle, "@%s", who->handle);
+    }
+    indigo_copy_utf8(member->name, sizeof member->name,
+                     who->display_name && who->display_name[0]
+                         ? who->display_name
+                         : who->handle && who->handle[0] ? who->handle : who->did);
+    group->count++;
+}
+
+void
+indigo_chat_group_from_convo(indigo_chat_group *group,
+                              const struct wf_chat_convo *convo,
+                              const char *convo_id)
+{
+    if (!group || !convo) {
+        return;
+    }
+    indigo_chat_group_reset(group);
+    if (!indigo_chat_convo_id_copy(group->convo_id, sizeof group->convo_id, convo_id)) {
+        return;
+    }
+    if (convo->group_name) {
+        indigo_copy_utf8(group->name, sizeof group->name, convo->group_name);
+    }
+    for (size_t i = 0; i < convo->member_count; i++) {
+        group_add_member(group, &convo->members[i]);
+    }
+    group->total = convo->has_group_member_count ? convo->group_member_count : (int) group->count;
+    if (convo->has_join_link && convo->join_link_code) {
+        indigo_copy_utf8(group->join_link_code, sizeof group->join_link_code,
+                         convo->join_link_code);
+        group->join_link_enabled =
+            wf_chat_join_link_is_enabled(convo->join_link_status);
+        wf_chat_join_link_url(group->join_link_code, group->join_link_url,
+                              sizeof group->join_link_url);
+    }
+    group->loaded = true;
+}
+
+void
+indigo_chat_group_from_members(indigo_chat_group *group,
+                               const struct wf_chat_convo_members *members)
+{
+    if (!group || !members) {
+        return;
+    }
+    group->count = 0;
+    for (size_t i = 0; i < members->member_count; i++) {
+        group_add_member(group, &members->members[i]);
+    }
+    if (group->total < (int) group->count) {
+        group->total = (int) group->count;
+    }
+    group->loaded = true;
 }
 
 /* --- a group's pending join requests --- */

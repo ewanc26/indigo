@@ -68,6 +68,12 @@ cp scripts/udb-listing.py "$tmp/udb-listing.py"
 sed_i 's|^DOWNLOAD_FILTER = .*|DOWNLOAD_FILTER = r"\\.3dsx$"|' scripts/udb-listing.py
 expect fail udb-filter-too-wide python3 scripts/udb-listing.py --check
 cp "$tmp/udb-listing.py" scripts/udb-listing.py
+# Universal-Updater splits a screenshot at height / 2, so only a 400x480 pair
+# of screens is acceptable. The 48x48 icon stands in for a render of the wrong
+# shape.
+mkdir -p "$tmp/shots"
+while read -r shot _; do cp assets/icon.png "$tmp/shots/$shot"; done < <(python3 scripts/udb-listing.py --screenshots)
+expect fail udb-screenshot-wrong-size python3 scripts/udb-listing.py --check-screenshots "$tmp/shots"
 
 expect fail release-no-changelog env RELEASE_SKIP_GATE=1 $c release 99.0.0
 top=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)

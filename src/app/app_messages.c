@@ -285,9 +285,18 @@ indigo_app_update_messages(indigo_app *app, const indigo_input *input)
                                     c->group);
         return;
     }
-    /* X starts a new conversation; Y opens the request list. */
+    /* X starts a new conversation; ZR a new group; Y opens the request list. */
     if (input->repost && app->request == INDIGO_REQUEST_NONE) {
         app->request = INDIGO_REQUEST_EDIT_CHAT_TARGET;
+    }
+    if (input->zr && app->request == INDIGO_REQUEST_NONE) {
+        indigo_chat_group_reset(&app->group);
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_CREATE_NAME;
+        app->group_name[0] = '\0';
+        app->group_members[0] = '\0';
+        app->messages.status[0] = '\0';
+        app->messages.status_is_error = false;
+        app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME;
     }
     if (input->like) {
         indigo_app_open_requests(app);
@@ -308,6 +317,15 @@ indigo_app_update_messages(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_NEW_MESSAGE:
             if (app->request == INDIGO_REQUEST_NONE) {
                 app->request = INDIGO_REQUEST_EDIT_CHAT_TARGET;
+            }
+            break;
+        case INDIGO_ACTION_NEW_GROUP:
+            if (app->request == INDIGO_REQUEST_NONE) {
+                indigo_chat_group_reset(&app->group);
+                app->group_edit = INDIGO_CHAT_GROUP_EDIT_CREATE_NAME;
+                app->group_name[0] = '\0';
+                app->group_members[0] = '\0';
+                app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME;
             }
             break;
         case INDIGO_ACTION_REFRESH:
@@ -359,6 +377,9 @@ indigo_app_update_chat_thread(indigo_app *app, const indigo_input *input)
     if (input->repost && app->chat_is_group) {
         indigo_app_open_join_requests(app);
     }
+    if (input->zr && app->chat_is_group) {
+        indigo_app_open_chat_group(app, t->convo_id);
+    }
     if (input->refresh && !t->loading && app->request == INDIGO_REQUEST_NONE) {
         t->loading = true;
         app->request = INDIGO_REQUEST_CHAT_THREAD;
@@ -376,6 +397,11 @@ indigo_app_update_chat_thread(indigo_app *app, const indigo_input *input)
         case INDIGO_ACTION_JOIN_REQUESTS:
             if (app->chat_is_group) {
                 indigo_app_open_join_requests(app);
+            }
+            break;
+        case INDIGO_ACTION_GROUP_INFO:
+            if (app->chat_is_group) {
+                indigo_app_open_chat_group(app, t->convo_id);
             }
             break;
         case INDIGO_ACTION_REFRESH:
@@ -543,4 +569,285 @@ indigo_app_chat_join_decision_failed(indigo_app *app, const char *message)
     app->chat_decision_pending = false;
     indigo_copy_utf8(app->join_requests.status, sizeof app->join_requests.status, message);
     app->join_requests.status_is_error = true;
+}
+
+/* --- a group's name, members and join link --- */
+
+static void
+set_group_status(indigo_app *app, const char *message, bool is_error)
+{
+    indigo_copy_utf8(app->group_status, sizeof app->group_status, message ? message : "");
+    app->group_status_is_error = is_error;
+}
+
+static bool
+group_text_present(const char *text)
+{
+    if (!text) {
+        return false;
+    }
+    for (; *text; text++) {
+        if (*text != ' ' && *text != '\t' && *text != '\n' && *text != '\r') {
+            return true;
+        }
+    }
+    return false;
+}
+
+void
+indigo_app_open_chat_group(indigo_app *app, const char *convo_id)
+{
+    if (!app || app->request != INDIGO_REQUEST_NONE || !convo_id || !convo_id[0]) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_CHAT_GROUP;
+    indigo_chat_group_reset(&app->group);
+    indigo_copy_utf8(app->group.convo_id, sizeof app->group.convo_id, convo_id);
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    app->group_pending = true;
+    set_group_status(app, "Loading group...", false);
+    app->request = INDIGO_REQUEST_CHAT_GROUP_INFO;
+}
+
+void
+indigo_app_set_chat_group_name(indigo_app *app, const char *text)
+{
+    if (!app || !group_text_present(text)) {
+        set_group_status(app, "Give the group a name.", true);
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+        return;
+    }
+    indigo_copy_utf8(app->group_name, sizeof app->group_name, text);
+    if (app->group_edit == INDIGO_CHAT_GROUP_EDIT_CREATE_NAME) {
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_CREATE_MEMBERS;
+        app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS;
+    } else if (app->group_edit == INDIGO_CHAT_GROUP_EDIT_RENAME) {
+        app->group_pending = true;
+        set_group_status(app, "Renaming...", false);
+        app->request = INDIGO_REQUEST_CHAT_GROUP_RENAME;
+    } else {
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    }
+}
+
+void
+indigo_app_set_chat_group_members(indigo_app *app, const char *text)
+{
+    if (!app || !group_text_present(text)) {
+        set_group_status(app, "Enter at least one handle or DID.", true);
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+        return;
+    }
+    indigo_copy_utf8(app->group_members, sizeof app->group_members, text);
+    if (app->group_edit == INDIGO_CHAT_GROUP_EDIT_CREATE_MEMBERS) {
+        app->group_pending = true;
+        set_group_status(app, "Creating group...", false);
+        app->request = INDIGO_REQUEST_CHAT_GROUP_CREATE;
+    } else if (app->group_edit == INDIGO_CHAT_GROUP_EDIT_ADD) {
+        app->group_pending = true;
+        set_group_status(app, "Adding members...", false);
+        app->request = INDIGO_REQUEST_CHAT_GROUP_ADD;
+    } else {
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    }
+}
+
+void
+indigo_app_group_loaded(indigo_app *app, const indigo_chat_group *src)
+{
+    if (!app) {
+        return;
+    }
+    if (src) {
+        char id[INDIGO_CHAT_ID_MAX];
+
+        indigo_copy_utf8(id, sizeof id, app->group.convo_id);
+        app->group = *src;
+        if (!app->group.convo_id[0]) {
+            indigo_copy_utf8(app->group.convo_id, sizeof app->group.convo_id, id);
+        }
+    }
+    app->group_pending = false;
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    set_group_status(app, "", false);
+    if (app->group.count == 0) {
+        app->group.selected = 0;
+        app->group.scroll = 0;
+        set_group_status(app, "No members to show.", false);
+    } else if (app->group.selected >= app->group.count) {
+        app->group.selected = app->group.count - 1;
+    }
+}
+
+void
+indigo_app_group_failed(indigo_app *app, const char *message)
+{
+    app->group_pending = false;
+    set_group_status(app, message, true);
+}
+
+void
+indigo_app_chat_group_create_done(indigo_app *app, const char *convo_id)
+{
+    char id[INDIGO_CHAT_ID_MAX];
+    char name[INDIGO_CHAT_GROUP_NAME_MAX];
+
+    if (!app || !app->group_pending) {
+        return;
+    }
+    app->group_pending = false;
+    if (!indigo_chat_convo_id_copy(id, sizeof id, convo_id)) {
+        indigo_app_chat_group_create_failed(app, "The server did not return the new group.");
+        return;
+    }
+    indigo_copy_utf8(name, sizeof name, app->group_name);
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    app->group_name[0] = '\0';
+    app->group_members[0] = '\0';
+    set_group_status(app, "", false);
+    if (app->screen != INDIGO_SCREEN_MESSAGES) {
+        indigo_copy_utf8(app->messages.status, sizeof app->messages.status,
+                         "The group was created; open Messages again.");
+        app->messages.status_is_error = false;
+        return;
+    }
+    indigo_app_open_chat_thread(app, id, name, true);
+}
+
+void
+indigo_app_chat_group_create_failed(indigo_app *app, const char *message)
+{
+    if (!app) {
+        return;
+    }
+    app->group_pending = false;
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    indigo_copy_utf8(app->messages.status, sizeof app->messages.status,
+                     message ? message : "Could not create that group.");
+    app->messages.status_is_error = true;
+}
+
+void
+indigo_app_chat_group_done(indigo_app *app)
+{
+    app->group_pending = false;
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    set_group_status(app, "Group updated.", false);
+}
+
+void
+indigo_app_chat_group_failed(indigo_app *app, const char *message)
+{
+    app->group_pending = false;
+    app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
+    set_group_status(app, message, true);
+}
+
+void
+indigo_app_update_chat_group(indigo_app *app, const indigo_input *input)
+{
+    indigo_chat_group *g;
+    bool working;
+    int drag;
+
+    if (!app || !input) {
+        return;
+    }
+    g = &app->group;
+    working = app->group_pending || app->request != INDIGO_REQUEST_NONE;
+    if (input->back) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (input->refresh && !working) {
+        app->group_pending = true;
+        set_group_status(app, "Loading group...", false);
+        app->request = INDIGO_REQUEST_CHAT_GROUP_INFO;
+        return;
+    }
+    if (working || !g->loaded) {
+        return;
+    }
+
+    drag = indigo_app_drag_rows(app, input);
+    if (input->up) {
+        indigo_chat_group_move(g, -1, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->down) {
+        indigo_chat_group_move(g, 1, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->page_up) {
+        indigo_chat_group_move(g, -INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (input->page_down) {
+        indigo_chat_group_move(g, INDIGO_TIMELINE_ROWS, INDIGO_TIMELINE_ROWS);
+    }
+    if (drag != 0) {
+        indigo_chat_group_move(g, drag, INDIGO_TIMELINE_ROWS);
+    }
+
+    if (input->confirm) {
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_RENAME;
+        indigo_copy_utf8(app->group_name, sizeof app->group_name, g->name);
+        app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME;
+        return;
+    }
+    if (input->like) {
+        app->group_edit = INDIGO_CHAT_GROUP_EDIT_ADD;
+        app->group_members[0] = '\0';
+        app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS;
+        return;
+    }
+    if (input->repost && g->selected < g->count) {
+        app->group_pending = true;
+        set_group_status(app, "Removing member...", false);
+        app->request = INDIGO_REQUEST_CHAT_GROUP_REMOVE;
+        return;
+    }
+    if (input->zr) {
+        app->group_pending = true;
+        set_group_status(app, g->join_link_code[0] ? "Updating join link..."
+                                                   : "Creating join link...", false);
+        app->request = INDIGO_REQUEST_CHAT_JOIN_LINK;
+        return;
+    }
+
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        switch (a) {
+        case INDIGO_ACTION_ROW0:
+        case INDIGO_ACTION_ROW1:
+        case INDIGO_ACTION_ROW2:
+            indigo_chat_group_select(g, g->scroll + (unsigned) (a - INDIGO_ACTION_ROW0),
+                                     INDIGO_TIMELINE_ROWS);
+            break;
+        case INDIGO_ACTION_GROUP_RENAME:
+            app->group_edit = INDIGO_CHAT_GROUP_EDIT_RENAME;
+            indigo_copy_utf8(app->group_name, sizeof app->group_name, g->name);
+            app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME;
+            break;
+        case INDIGO_ACTION_GROUP_ADD:
+            app->group_edit = INDIGO_CHAT_GROUP_EDIT_ADD;
+            app->group_members[0] = '\0';
+            app->request = INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS;
+            break;
+        case INDIGO_ACTION_GROUP_REMOVE:
+            if (g->selected < g->count) {
+                app->group_pending = true;
+                app->request = INDIGO_REQUEST_CHAT_GROUP_REMOVE;
+            }
+            break;
+        case INDIGO_ACTION_GROUP_LINK:
+            app->group_pending = true;
+            app->request = INDIGO_REQUEST_CHAT_JOIN_LINK;
+            break;
+        case INDIGO_ACTION_BACK:
+            indigo_app_go_back(app);
+            break;
+        default:
+            break;
+        }
+    }
 }

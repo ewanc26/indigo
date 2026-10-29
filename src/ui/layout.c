@@ -87,14 +87,21 @@ indigo_layout_button_rect(indigo_action action)
         return s_pill[2];
     case INDIGO_ACTION_REQUESTS:
         return s_pill[2];
+    case INDIGO_ACTION_NEW_GROUP:
+    case INDIGO_ACTION_GROUP_INFO:
+    case INDIGO_ACTION_GROUP_RENAME:
+        return s_pill[0];
     case INDIGO_ACTION_NEW_MESSAGE:
     case INDIGO_ACTION_ACCEPT:
     case INDIGO_ACTION_JOIN_REQUESTS:
     case INDIGO_ACTION_APPROVE:
+    case INDIGO_ACTION_GROUP_ADD:
         return s_pill[1];
     case INDIGO_ACTION_DECLINE:
     case INDIGO_ACTION_REJECT:
+    case INDIGO_ACTION_GROUP_REMOVE:
         return s_pill[2];
+    case INDIGO_ACTION_GROUP_LINK:
     case INDIGO_ACTION_REFRESH:
     case INDIGO_ACTION_AUTHOR:
     case INDIGO_ACTION_DELETE:
@@ -160,6 +167,22 @@ indigo_layout_button_rect(indigo_action action)
     return (indigo_rect) {0, 0, 0, 0};
 }
 
+indigo_palette indigo_layout_current = {
+    .bg_top = DARK_BG_TOP,
+    .bg_bottom = DARK_BG_BOTTOM,
+    .bar = DARK_BAR,
+    .text = DARK_TEXT,
+    .text_soft = DARK_TEXT_SOFT,
+    .text_dim = DARK_TEXT_DIM,
+    .pill = DARK_PILL,
+    .pill_active = DARK_PILL_ACTIVE,
+    .card = DARK_CARD,
+    .link = DARK_LINK,
+    .error = DARK_ERROR,
+    .liked = DARK_LIKED,
+    .reposted = DARK_REPOSTED,
+};
+
 indigo_palette
 indigo_layout_palette(const indigo_settings *s)
 {
@@ -173,6 +196,11 @@ indigo_layout_palette(const indigo_settings *s)
             .text_dim = INDIGO_RGBA(210, 215, 230, 255),
             .pill = INDIGO_RGBA(30, 35, 50, 255),
             .pill_active = INDIGO_RGBA(90, 120, 255, 255),
+            .card = INDIGO_RGBA(20, 24, 34, 255),
+            .link = INDIGO_RGBA(130, 185, 255, 255),
+            .error = INDIGO_RGBA(255, 170, 160, 255),
+            .liked = INDIGO_RGBA(255, 140, 170, 255),
+            .reposted = INDIGO_RGBA(140, 230, 175, 255),
         };
     }
     if (s && s->theme == INDIGO_THEME_LIGHT) {
@@ -184,19 +212,38 @@ indigo_layout_palette(const indigo_settings *s)
             .text_soft = INDIGO_RGBA(45, 55, 75, 255),
             .text_dim = INDIGO_RGBA(90, 100, 120, 255),
             .pill = INDIGO_RGBA(195, 205, 225, 255),
-            .pill_active = INDIGO_RGBA(60, 90, 210, 255),
+            /* Selected rows carry dark text now, so the light theme's active
+             * pill is a pale blue rather than the saturated blue it used to be
+             * when every theme drew white labels. */
+            .pill_active = INDIGO_RGBA(160, 190, 245, 255),
+            .card = INDIGO_RGBA(255, 255, 255, 255),
+            .link = INDIGO_RGBA(20, 78, 180, 255),
+            .error = INDIGO_RGBA(175, 30, 40, 255),
+            .liked = INDIGO_RGBA(185, 35, 75, 255),
+            .reposted = INDIGO_RGBA(25, 120, 75, 255),
         };
     }
     return (indigo_palette) {
-        .bg_top = COL_BG_TOP,
-        .bg_bottom = COL_BG_BOTTOM,
-        .bar = COL_BAR,
-        .text = COL_TEXT,
-        .text_soft = COL_TEXT_SOFT,
-        .text_dim = COL_TEXT_DIM,
-        .pill = COL_PILL,
-        .pill_active = COL_PILL_ACTIVE,
+        .bg_top = DARK_BG_TOP,
+        .bg_bottom = DARK_BG_BOTTOM,
+        .bar = DARK_BAR,
+        .text = DARK_TEXT,
+        .text_soft = DARK_TEXT_SOFT,
+        .text_dim = DARK_TEXT_DIM,
+        .pill = DARK_PILL,
+        .pill_active = DARK_PILL_ACTIVE,
+        .card = DARK_CARD,
+        .link = DARK_LINK,
+        .error = DARK_ERROR,
+        .liked = DARK_LIKED,
+        .reposted = DARK_REPOSTED,
     };
+}
+
+void
+indigo_layout_set_palette(const indigo_settings *s)
+{
+    indigo_layout_current = indigo_layout_palette(s);
 }
 static bool
 inside(indigo_rect r, int x, int y, bool large_targets)
@@ -231,15 +278,20 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action chat_thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_JOIN_REQUESTS, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
+        INDIGO_ACTION_JOIN_REQUESTS, INDIGO_ACTION_GROUP_INFO, INDIGO_ACTION_REFRESH,
+        INDIGO_ACTION_BACK};
+    static const indigo_action group_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
+        INDIGO_ACTION_GROUP_RENAME, INDIGO_ACTION_GROUP_ADD, INDIGO_ACTION_GROUP_REMOVE,
+        INDIGO_ACTION_GROUP_LINK, INDIGO_ACTION_BACK};
     static const indigo_action join_requests_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
         INDIGO_ACTION_APPROVE, INDIGO_ACTION_REJECT, INDIGO_ACTION_REFRESH,
         INDIGO_ACTION_BACK};
     static const indigo_action messages_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
-        INDIGO_ACTION_NEW_MESSAGE, INDIGO_ACTION_REQUESTS, INDIGO_ACTION_REFRESH,
-        INDIGO_ACTION_BACK};
+        INDIGO_ACTION_NEW_MESSAGE, INDIGO_ACTION_NEW_GROUP, INDIGO_ACTION_REQUESTS,
+        INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action requests_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2,
         INDIGO_ACTION_ACCEPT, INDIGO_ACTION_DECLINE, INDIGO_ACTION_REFRESH,
@@ -300,6 +352,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
     case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
         USE(join_requests_actions);
         break;
+    case INDIGO_SCREEN_CHAT_GROUP:
+        USE(group_actions);
+        break;
     case INDIGO_SCREEN_QUEUE:
         USE(queue_actions);
         break;
@@ -323,6 +378,8 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_CREDITS:
         USE(credits_actions);
+        break;
+    case INDIGO_SCREEN_COUNT:
         break;
     }
 #undef USE

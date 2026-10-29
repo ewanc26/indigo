@@ -19,7 +19,6 @@
 #include <sys/stat.h>
 
 #define TEXT_SCALE_BASE 1.25f
-#define COMPOSITE_GAP 8
 
 typedef struct {
     int w;
@@ -341,11 +340,16 @@ write_png(const char *path, const image *img)
     return fclose(f);
 }
 
-/* Both screens as stacked on the console: bottom centred under the top. */
+/* Both screens as stacked on the console: bottom centred under the top.
+ *
+ * No gap between them. The result is 400x480, the shape Universal-DB serves
+ * and Universal-Updater expects: its screenshot viewer treats anything taller
+ * than 240 as the two screens and splits it at height / 2, so a gap would put
+ * the split through the bottom screen instead of on the real boundary. */
 static image
 composite(const image *top, const image *bottom)
 {
-    image out = image_new(top->w, top->h + COMPOSITE_GAP + bottom->h);
+    image out = image_new(top->w, top->h + bottom->h);
     int bx = (top->w - bottom->w) / 2;
 
     for (int y = 0; y < top->h; y++) {
@@ -354,7 +358,7 @@ composite(const image *top, const image *bottom)
     }
 
     for (int y = 0; y < bottom->h; y++) {
-        memcpy(&out.px[((size_t) (top->h + COMPOSITE_GAP + y) * (size_t) out.w + (size_t) bx) * 4],
+        memcpy(&out.px[((size_t) (top->h + y) * (size_t) out.w + (size_t) bx) * 4],
                &bottom->px[(size_t) y * (size_t) bottom->w * 4], (size_t) bottom->w * 4);
     }
 
@@ -604,7 +608,7 @@ fill_social(indigo_app *app, const scenario *s)
         indigo_copy_utf8(n[1].handle, sizeof n[1].handle, "cobalt.example");
         n[2].kind = INDIGO_NOTE_FOLLOW;
         indigo_copy_utf8(n[2].handle, sizeof n[2].handle, "devlog.example");
-        indigo_app_notifications_loaded(app, n, 3);
+        indigo_app_notifications_loaded(app, n, 3, NULL);
     } else if (s->screen == INDIGO_SCREEN_CHAT_THREAD) {
         indigo_chat_thread page;
 

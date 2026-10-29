@@ -34,7 +34,11 @@ indigo_session_do_lists(const indigo_job *j)
         return;
     }
 
-    /* list count reset handled by caller (no generic macro for list_count) */
+    /* A fresh fetch replaces the held lists; only a further page appends. The
+     * generic page macro resets the actor array, so this one is explicit. */
+    if (!j->paging) {
+        g_session.list_count = 0;
+    }
     for (size_t i = 0; i < list.list_count && g_session.list_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_list_view *l = &list.lists[i];
         indigo_list *o = &g_session.lists[g_session.list_count];
@@ -164,23 +168,29 @@ indigo_session_do_feeds(const indigo_job *j)
 }
 
 bool
-indigo_session_submit_lists(bool paging)
+indigo_session_submit_lists(const char *cursor)
 {
     indigo_job j = {.kind = JOB_LISTS};
 
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     return indigo_session_enqueue(&j);
 }
 
 bool
-indigo_session_submit_list_members(const char *list_uri, bool paging)
+indigo_session_submit_list_members(const char *list_uri, const char *cursor)
 {
     indigo_job j = {.kind = JOB_LIST_MEMBERS};
 
     if (!list_uri || !list_uri[0]) {
         return false;
     }
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
     return indigo_session_enqueue(&j);
 }
@@ -194,20 +204,26 @@ indigo_session_submit_feeds(void)
 }
 
 bool
-indigo_session_submit_mutes(bool paging)
+indigo_session_submit_mutes(const char *cursor)
 {
     indigo_job j = {.kind = JOB_MUTES};
 
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     return indigo_session_enqueue(&j);
 }
 
 bool
-indigo_session_submit_blocks(bool paging)
+indigo_session_submit_blocks(const char *cursor)
 {
     indigo_job j = {.kind = JOB_BLOCKS};
 
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     return indigo_session_enqueue(&j);
 }
 
@@ -233,4 +249,4 @@ indigo_session_feeds_results(const indigo_list **feeds, unsigned *count)
     }
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */

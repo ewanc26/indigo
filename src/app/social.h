@@ -44,7 +44,13 @@ typedef struct {
     unsigned count;
     unsigned selected;
     unsigned scroll;
+    /* Cursor for the page after these rows, empty when there is none. */
+    char cursor[INDIGO_CURSOR_MAX];
+    bool has_more;
     bool loading;
+    /* Set by a reset fetch and cleared when its first page lands, so the
+     * loader knows whether to replace the list or append to it. */
+    bool awaiting_first_page;
     char status[INDIGO_POST_NOTE_MAX];
     bool status_is_error;
 } indigo_notifications;
@@ -176,6 +182,20 @@ typedef struct {
 bool indigo_post_has_image(const indigo_post *p);
 
 void indigo_notifications_clear(indigo_notifications *n);
+
+/* Start a fetch. `reset` replaces the list when the page lands; otherwise the
+ * rows are appended. */
+void indigo_notifications_begin_fetch(indigo_notifications *n, bool reset);
+/* Store a page and remember the cursor for the one after it: the rows replace
+ * the list after a reset fetch and are appended to it otherwise. */
+void indigo_notifications_finish_fetch(indigo_notifications *n,
+                                       const indigo_notification *items, unsigned count,
+                                       const char *next_cursor);
+void indigo_notifications_fail_fetch(indigo_notifications *n, const char *message);
+/* True when the last row is selected and more can be fetched. Paging is
+ * deliberate rather than prefetched: the screen is short, and a request made
+ * while someone is reading the first few rows would replace rows under them. */
+bool indigo_notifications_wants_page(const indigo_notifications *n);
 bool indigo_notifications_move(indigo_notifications *n, int delta, unsigned rows);
 bool indigo_notifications_select(indigo_notifications *n, unsigned index, unsigned rows);
 const indigo_notification *indigo_notifications_selected(const indigo_notifications *n);

@@ -178,6 +178,30 @@ handle_edit_reply(indigo_app *app)
 }
 
 static void
+handle_edit_chat_group_name(indigo_app *app)
+{
+    char text[INDIGO_CHAT_GROUP_NAME_MAX];
+
+    if (indigo_text_edit("Group name", app->group_name, false, text, sizeof text) ==
+        INDIGO_TEXT_OK) {
+        indigo_app_set_chat_group_name(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
+handle_edit_chat_group_members(indigo_app *app)
+{
+    char text[INDIGO_CHAT_GROUP_MEMBERS_TEXT_MAX];
+
+    if (indigo_text_edit("Members: handles or DIDs, comma separated", app->group_members,
+                         false, text, sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_chat_group_members(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
 handle_edit_chat_target(indigo_app *app)
 {
     char text[INDIGO_CHAT_TARGET_MAX];
@@ -259,6 +283,11 @@ handle_requests(indigo_app *app)
             indigo_app_notifications_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_NOTIFICATIONS_MORE:
+        if (!indigo_session_submit_notifications_more(app->notifications.cursor)) {
+            indigo_app_notifications_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_CHAT_INBOX:
         if (!indigo_session_submit_chat_inbox()) {
             indigo_app_messages_failed(app, "Could not start the request.");
@@ -329,6 +358,49 @@ handle_requests(indigo_app *app)
             indigo_app_chat_join_decision_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME:
+        handle_edit_chat_group_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS:
+        handle_edit_chat_group_members(app);
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_INFO:
+        if (!indigo_session_submit_chat_group_info(app->group.convo_id)) {
+            indigo_app_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_CREATE:
+        if (!indigo_session_submit_chat_group_create(app->group_name, app->group_members)) {
+            indigo_app_chat_group_create_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_RENAME:
+        if (!indigo_session_submit_chat_group_rename(app->group.convo_id, app->group_name)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_ADD:
+        if (!indigo_session_submit_chat_group_add(app->group.convo_id, app->group_members)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_REMOVE:
+        if (app->group.selected >= app->group.count ||
+            !indigo_session_submit_chat_group_remove(
+                app->group.convo_id, app->group.members[app->group.selected].did)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_LINK:
+        if (app->group.join_link_code[0]) {
+            if (!indigo_session_submit_chat_join_link_toggle(app->group.convo_id,
+                                                             app->group.join_link_enabled)) {
+                indigo_app_chat_group_failed(app, "Could not start the request.");
+            }
+        } else if (!indigo_session_submit_chat_join_link_create(app->group.convo_id)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_EDIT_DRAFT:
         handle_edit_draft(app);
         break;
@@ -347,7 +419,8 @@ handle_requests(indigo_app *app)
         handle_edit_query(app);
         break;
     case INDIGO_REQUEST_SEARCH:
-        if (!indigo_session_submit_search(app->search.query, app->search.cursor[0] != '\0')) {
+        if (!indigo_session_submit_search(app->search.query,
+                                          app->search.cursor[0] ? app->search.cursor : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -365,31 +438,34 @@ handle_requests(indigo_app *app)
         break;
     case INDIGO_REQUEST_PEOPLE:
         if (!indigo_session_submit_people(app->request_people, app->request_subject,
-                                          app->search.cursor[0] != '\0')) {
+                                          app->search.cursor[0] ? app->search.cursor : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_POST_SEARCH:
         if (!indigo_session_submit_post_search(app->search.query,
-                                               app->search.cursor[0] != '\0')) {
+                                               app->search.cursor[0] ? app->search.cursor
+                                                                      : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_AUTHOR_FEED:
       if (!indigo_session_submit_author_feed(app->request_actor,
                                              app->search.tab,
-                                             app->search.cursor[0] != '\0')) {
+                                             app->search.cursor[0] ? app->search.cursor
+                                                                    : NULL)) {
         indigo_app_search_failed(app, "Could not start the request.");
       }
         break;
     case INDIGO_REQUEST_LISTS:
-        if (!indigo_session_submit_lists(app->search.cursor[0] != '\0')) {
+        if (!indigo_session_submit_lists(app->search.cursor[0] ? app->search.cursor : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_LIST_MEMBERS:
         if (!indigo_session_submit_list_members(app->request_list_uri,
-                                                app->search.cursor[0] != '\0')) {
+                                                app->search.cursor[0] ? app->search.cursor
+                                                                       : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -399,12 +475,12 @@ handle_requests(indigo_app *app)
         }
         break;
     case INDIGO_REQUEST_MUTES:
-        if (!indigo_session_submit_mutes(app->search.cursor[0] != '\0')) {
+        if (!indigo_session_submit_mutes(app->search.cursor[0] ? app->search.cursor : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_BLOCKS:
-        if (!indigo_session_submit_blocks(app->search.cursor[0] != '\0')) {
+        if (!indigo_session_submit_blocks(app->search.cursor[0] ? app->search.cursor : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
@@ -580,7 +656,7 @@ handle_events(indigo_app *app)
             unsigned n;
             const indigo_notification *items = indigo_session_notifications(&n);
 
-            indigo_app_notifications_loaded(app, items, n);
+            indigo_app_notifications_loaded(app, items, n, ev.cursor);
             break;
         }
         case INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED:
@@ -643,6 +719,33 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED:
         case INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED:
             indigo_app_chat_join_decision_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_PAGE:
+            indigo_app_group_loaded(app, indigo_session_chat_group());
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_FAILED:
+            indigo_app_group_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_DONE:
+            indigo_app_chat_group_create_done(app, indigo_session_chat_group_started());
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_FAILED:
+            indigo_app_chat_group_create_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_DONE:
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE:
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE:
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE:
+            indigo_app_group_loaded(app, indigo_session_chat_group());
+            indigo_app_chat_group_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_FAILED:
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_FAILED:
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED:
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED:
+            indigo_app_chat_group_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_PUBLISHED:
             if (ev.partial) {

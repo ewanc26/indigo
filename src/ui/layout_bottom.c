@@ -185,6 +185,8 @@ build_bottom_messages(const indigo_app *app, indigo_canvas *c)
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == m->selected,
                                title, it->preview[0] ? it->preview : "No messages yet", "");
     }
+    indigo_layout_action_pill(c, INDIGO_ACTION_NEW_GROUP, false, false, COL_PILL_ACTIVE,
+                              "ZR Group");
     indigo_layout_action_pill(c, INDIGO_ACTION_NEW_MESSAGE, false, false, COL_PILL_ACTIVE,
                               "X New");
     indigo_layout_action_pill(c, INDIGO_ACTION_REQUESTS, false, false,
@@ -239,10 +241,42 @@ build_bottom_chat_thread(const indigo_app *app, indigo_canvas *c)
                                title, it->text, "");
     }
     if (app->chat_is_group) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_GROUP_INFO, false, false, COL_PILL_ACTIVE,
+                                  "ZR Info");
         indigo_layout_action_pill(c, INDIGO_ACTION_JOIN_REQUESTS, false, false, COL_PILL_ACTIVE,
                                   "X Requests");
     }
     indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "Reload");
+}
+
+static void
+build_bottom_chat_group(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_group *g = &app->group;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Group");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = g->scroll + row;
+        const indigo_chat_member *it;
+
+        if (idx >= g->count) {
+            break;
+        }
+        it = &g->members[idx];
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                               idx == g->selected,
+                               it->name[0] ? it->name : it->handle,
+                               it->handle[0] ? it->handle : it->did, "");
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_GROUP_RENAME, false, false, COL_PILL_ACTIVE,
+                              "A Rename");
+    indigo_layout_action_pill(c, INDIGO_ACTION_GROUP_ADD, false, false, COL_PILL_ACTIVE,
+                              "Y Add");
+    indigo_layout_action_pill(c, INDIGO_ACTION_GROUP_REMOVE, false, false, COL_PILL_ACTIVE,
+                              "X Remove");
+    indigo_layout_action_pill(c, INDIGO_ACTION_GROUP_LINK, false, false, COL_PILL_ACTIVE,
+                              g->join_link_code[0] ? "ZR Link" : "ZR Create");
 }
 
 static void
@@ -588,8 +622,7 @@ build_bottom_settings(const indigo_app *app, indigo_canvas *c)
         switch (i) {
         case 0:
             snprintf(val, sizeof val, "%s",
-                     s->theme == INDIGO_THEME_LIGHT ? "Light"
-                     : s->theme == INDIGO_THEME_DARK ? "Dark" : "Auto");
+                     s->theme == INDIGO_THEME_LIGHT ? "Light" : "Dark");
             break;
         case 1:
             snprintf(val, sizeof val, "%u%%", s->text_scale);
@@ -689,11 +722,11 @@ void
 indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, indigo_canvas *c)
 {
     (void) input;
-    indigo_palette pal = indigo_layout_palette(&app->settings);
+    indigo_layout_set_palette(&app->settings);
 
     indigo_canvas_init(c, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT);
-    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT, pal.bg_bottom);
-    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, 42, pal.bar);
+    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, INDIGO_BOTTOM_HEIGHT, COL_BG_BOTTOM);
+    indigo_canvas_rect(c, 0, 0, INDIGO_BOTTOM_WIDTH, 42, COL_BAR);
     switch (app->screen) {
     case INDIGO_SCREEN_SIGNIN:
         build_bottom_signin(app, c);
@@ -720,6 +753,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
     case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
         build_bottom_join_requests(app, c);
         break;
+    case INDIGO_SCREEN_CHAT_GROUP:
+        build_bottom_chat_group(app, c);
+        break;
     case INDIGO_SCREEN_QUEUE:
         build_bottom_queue(app, c);
         break;
@@ -743,6 +779,8 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_UPDATE:
         build_bottom_update(app, c);
+        break;
+    case INDIGO_SCREEN_COUNT:
         break;
     }
 }

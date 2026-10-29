@@ -9,7 +9,7 @@ void
 indigo_settings_defaults(indigo_settings *out)
 {
     memset(out, 0, sizeof *out);
-    out->theme = INDIGO_THEME_AUTO;
+    out->theme = INDIGO_THEME_DARK;
     out->text_scale = INDIGO_TEXT_SCALE_NORMAL;
     out->reduce_motion = false;
     out->high_contrast = false;
@@ -29,8 +29,12 @@ indigo_settings_clamp(indigo_settings *s)
      * -Wtype-limits at -O2 and hides the wrapped-value case it exists for. */
     int theme = (int) s->theme;
 
-    if (theme < (int) INDIGO_THEME_AUTO || theme > (int) INDIGO_THEME_DARK) {
-        s->theme = INDIGO_THEME_AUTO;
+    /* AUTO is accepted from a file written by an older build, but it is not a
+     * state this app can show or save: a 3DS has no system theme to follow.
+     * Normalising it here means an old file becomes an explicit Dark the next
+     * time anything is saved, rather than preserving a hidden third state. */
+    if (theme <= (int) INDIGO_THEME_AUTO || theme > (int) INDIGO_THEME_DARK) {
+        s->theme = INDIGO_THEME_DARK;
     }
     switch (s->text_scale) {
     case INDIGO_TEXT_SCALE_SMALL:

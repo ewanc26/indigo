@@ -1,1 +1,2 @@
 # "<file> <method-prefix>": raw lexicon method strings allowed in src/. Reason after '#'.
+src/atproto/session_read.c com.atproto.identity # chat_resolve_handle keeps the HTTP status: a missing account (400/404) and a service fault must read differently, and wf_agent_resolve_handle folds both into WF_ERR_HTTP.
