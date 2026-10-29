@@ -371,7 +371,7 @@ indigo_app_update_notifications(indigo_app *app, const indigo_input *input)
         open_notification(app);
     }
     if (input->refresh && !n->loading && app->request == INDIGO_REQUEST_NONE) {
-        n->loading = true;
+        indigo_notifications_begin_fetch(n, true);
         app->request = INDIGO_REQUEST_NOTIFICATIONS;
     }
     if (input->touch_pressed) {
@@ -389,7 +389,7 @@ indigo_app_update_notifications(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_REFRESH:
             if (!n->loading && app->request == INDIGO_REQUEST_NONE) {
-                n->loading = true;
+                indigo_notifications_begin_fetch(n, true);
                 app->request = INDIGO_REQUEST_NOTIFICATIONS;
             }
             break;
@@ -399,5 +399,11 @@ indigo_app_update_notifications(indigo_app *app, const indigo_input *input)
         default:
             break;
         }
+    }
+    /* Last, so opening the selected row does not also start a fetch that would
+     * be refused by the request slot. */
+    if (app->request == INDIGO_REQUEST_NONE && indigo_notifications_wants_page(n)) {
+        indigo_notifications_begin_fetch(n, false);
+        app->request = INDIGO_REQUEST_NOTIFICATIONS_MORE;
     }
 }

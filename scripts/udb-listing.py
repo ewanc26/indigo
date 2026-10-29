@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Build Indigo's Universal-DB listing from the repository (docs/UNIVERSAL-DB.md).
 
-    scripts/udb-listing.py            write meta/universal-db/indigo.json
-    scripts/udb-listing.py --check    fail if the committed file is stale or
-                                      the listing no longer fits the release
+    scripts/udb-listing.py                              write meta/universal-db/indigo.json
+    scripts/udb-listing.py --check                      fail if the committed file is stale or
+                                                        the listing no longer fits the release
+    scripts/udb-listing.py --check-screenshots DIR      fail unless DIR holds the six renders
+                                                        at Universal-DB's 400x480
+    scripts/udb-listing.py --recompress DIR             losslessly shrink the PNGs in DIR
+    scripts/udb-listing.py --screenshots                print "<render> <listing name>" pairs
 
 The entry follows Universal-DB's source/apps/*.json format (Universal-Team/db,
 CONTRIBUTING.md and docs/assets/js/app-request.js). Universal-DB fetches the
@@ -13,13 +17,15 @@ categories, icon, banner, the LLM declaration, the long description and the
 download filter that picks indigo.3dsx out of the release assets.
 
 The screenshots are not committed; scripts/udb-submit.sh renders them with the
-host snapshot renderer at submission time. Standard library only.
+host snapshot renderer at submission time, checks their size and recompresses
+them. Standard library only.
 """
 import json
 import os
 import re
 import struct
 import sys
+import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "meta", "universal-db", "indigo.json")
@@ -28,6 +34,10 @@ RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 # The one asset Universal-Updater should install. update.json, the versioned
 # copy and its checksum are for Indigo's own updater and must not be offered.
 DOWNLOAD_FILTER = r"^indigo\.3dsx$"
+# The two 3DS screens stacked, with no gap. Universal-DB serves this shape and
+# Universal-Updater splits it at height / 2 when you zoom a screenshot, so any
+# other height puts the split through the bottom screen.
+SCREENSHOT_SIZE = (400, 480)
 # Universal-DB generates screenshots' captions from their file names.
 SCREENSHOTS = [
     ("timeline-both.png", "home-timeline.png"),
@@ -45,6 +55,66 @@ def png_size(path):
     if head[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError(f"{path} is not a PNG")
     return struct.unpack(">II", head[16:24])
+
+
+def screenshot_problems(directory):
+    """The six renders Universal-DB gets, all at SCREENSHOT_SIZE."""
+    out = []
+    for src, _ in SCREENSHOTS:
+        path = os.path.join(directory, src)
+        if not os.path.exists(path):
+            out.append(f"{path} is missing; run make snapshots")
+            continue
+        size = png_size(path)
+        if size != SCREENSHOT_SIZE:
+            out.append(f"{src} is {size[0]}x{size[1]}, but Universal-DB and "
+                       f"Universal-Updater want {SCREENSHOT_SIZE[0]}x{SCREENSHOT_SIZE[1]}")
+    return out
+
+
+def png_chunk(kind, body):
+    return (struct.pack(">I", len(body)) + kind + body
+            + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff))
+
+
+def recompress_png(path):
+    """Deflate a PNG's image data at level 9, leaving every pixel alone.
+
+    tools/snapshot.c writes stored (uncompressed) deflate blocks so the host
+    renderer needs no zlib dependency, which makes a 400x480 render about
+    580 KB. Universal-DB commits the screenshots to its own repository, so the
+    submission path shrinks them here.
+    """
+    data = open(path, "rb").read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path} is not a PNG")
+    pos = 8
+    chunks = []
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos:pos + 4])[0]
+        kind = data[pos + 4:pos + 8]
+        body = data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        chunks.append((kind, body))
+    has_idat = any(kind == b"IDAT" for kind, _ in chunks)
+    if not has_idat:
+        raise ValueError(f"{path} has no image data")
+    raw = zlib.decompress(b"".join(body for kind, body in chunks if kind == b"IDAT"))
+    packed = zlib.compress(raw, 9)
+    if len(packed) >= len(b"".join(body for kind, body in chunks if kind == b"IDAT")):
+        return
+
+    out = [data[:8]]
+    written = False
+    for kind, body in chunks:
+        if kind == b"IDAT":
+            if not written:
+                out.append(png_chunk(b"IDAT", packed))
+                written = True
+            continue
+        out.append(png_chunk(kind, body))
+    with open(path, "wb") as f:
+        f.write(b"".join(out))
 
 
 def readme_description():
@@ -119,8 +189,18 @@ def problems():
     return out
 
 
+def value_after(flag, args):
+    if flag not in args:
+        return None
+    i = args.index(flag)
+    if i + 1 >= len(args):
+        raise SystemExit(f"udb-listing: {flag} needs a directory")
+    return args[i + 1]
+
+
 def main():
-    check = "--check" in sys.argv[1:]
+    args = sys.argv[1:]
+    check = "--check" in args
     bad = problems()
     data = render()
     if check:
@@ -134,6 +214,14 @@ def main():
         os.makedirs(os.path.dirname(OUT), exist_ok=True)
         with open(OUT, "w", encoding="utf8") as f:
             f.write(data)
+    snapshots = value_after("--check-screenshots", args)
+    if snapshots:
+        bad += screenshot_problems(snapshots)
+    shrink = value_after("--recompress", args)
+    if shrink:
+        for name in sorted(os.listdir(shrink)):
+            if name.endswith(".png"):
+                recompress_png(os.path.join(shrink, name))
     for b in bad:
         print("udb-listing:", b, file=sys.stderr)
     if "--screenshots" in sys.argv[1:]:

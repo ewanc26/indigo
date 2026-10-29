@@ -268,8 +268,7 @@ indigo_app_open_notifications(indigo_app *app)
     }
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_NOTIFICATIONS;
-    app->notifications.loading = true;
-    app->notifications.status[0] = '\0';
+    indigo_notifications_begin_fetch(&app->notifications, true);
     app->request = INDIGO_REQUEST_NOTIFICATIONS;
 }
 
@@ -297,6 +296,7 @@ indigo_app_open_chat_thread(indigo_app *app, const char *convo_id, const char *t
     app->screen = INDIGO_SCREEN_CHAT_THREAD;
     app->chat_is_group = group;
     indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri, convo_id);
+    indigo_copy_utf8(app->chat_thread.convo_id, sizeof app->chat_thread.convo_id, convo_id);
     indigo_copy_utf8(app->chat_thread.title, sizeof app->chat_thread.title, title ? title : "");
     app->chat_thread.loading = true;
     app->chat_thread.status[0] = '\0';
@@ -399,6 +399,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
     case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
         indigo_app_update_chat_join_requests(app, input);
         break;
+    case INDIGO_SCREEN_CHAT_GROUP:
+        indigo_app_update_chat_group(app, input);
+        break;
     case INDIGO_SCREEN_MENU:
         indigo_app_update_menu(app, input);
         break;
@@ -416,6 +419,8 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_UPDATE:
         indigo_app_update_update(app, input);
+        break;
+    case INDIGO_SCREEN_COUNT:
         break;
     }
 }

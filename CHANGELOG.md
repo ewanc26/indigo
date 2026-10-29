@@ -8,6 +8,19 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Notifications page. Reaching the last row asks for the next page with the cursor the service sent; the rows are appended, the cursor is cleared when a page adds nothing, and only a first page marks anything seen, so paging back through history cannot mark read what has not been reached. A failed page keeps the rows already shown and stops paging until a reload, rather than asking again every frame. ([compare](https://github.com/ewanc26/indigo/compare/v0.15.0...main))
+- Groups are in. ZR on Messages starts one: a name, then a comma-separated list of handles or DIDs, which Wolfram resolves, de-duplicates and checks. ZR on a group conversation opens its settings, where A renames it, Y adds members, X removes the selected one and ZR creates or enables/disables its join link, shown as `https://bsky.app/chat/<code>`. The inbox recognises a group from the conversation's `kind` rather than its member count, and the group's details are read through Wolfram's typed `getConvo`/`getConvoMembers`. ([#22](https://github.com/ewanc26/indigo/issues/22))
+
+### Changed
+
+- The Universal-DB submission now carries the screenshots Universal-Updater expects: 400x480, the two screens with no gap, instead of 400x488 with an 8px band that put the store's zoomed split through the bottom screen. The submission script checks that size and losslessly recompresses each render from about 580 KB to about 30 KB. ([#37](https://github.com/ewanc26/indigo/issues/37))
+
+### Fixed
+
+- The light theme now themes every surface the layout draws -- text, bars, pills, cards, links, errors and the like/repost accents -- instead of only the two backgrounds, which had left white text and white link cards on a near-white screen. Theme is now a two-way Light/Dark toggle rather than a three-state cycle; the old Auto value still loads as Dark because a 3DS has no system theme to follow, and the settings screen no longer claims otherwise. ([theme audit](https://github.com/ewanc26/indigo/compare/v0.15.0...main))
+
 ## [0.15.0] - 2026-10-28
 
 ### Added

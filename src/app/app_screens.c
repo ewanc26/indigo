@@ -522,7 +522,11 @@ toggle_setting_row(indigo_app *app, unsigned row)
 
     switch (row) {
     case 0:
-        s->theme = (indigo_theme) (((int) s->theme + 1) % 3);
+        /* Two states, not three. AUTO is kept only so an older settings file
+         * still loads; it draws as Dark because a 3DS has no system theme to
+         * follow, and the next toggle writes a real choice. */
+        s->theme = s->theme == INDIGO_THEME_LIGHT ? INDIGO_THEME_DARK
+                                                  : INDIGO_THEME_LIGHT;
         break;
     case 1:
         if (s->text_scale == INDIGO_TEXT_SCALE_SMALL) {

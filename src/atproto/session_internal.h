@@ -6,7 +6,10 @@
  * carries in, the one state block (the worker's and the results the main thread
  * reads), and the few helpers every job calls back into. The public interface
  * is atproto/session.h. Everything here exists only in a 3DS build with
- * Wolfram; without one session_stub.c stands in.
+ * Wolfram, or in the host end-to-end build; without one session_stub.c stands
+ * in. The host build defines INDIGO_SESSION_HOST and supplies a stub <3ds.h>
+ * from tests/e2e/stubs, so the real worker and its jobs run against a local
+ * mock PDS instead of libctru (see `make e2e`).
  *
  * The session is split by what a job is about: session.c owns the worker
  * thread, the lock, the event hand-off and the queue; session_auth.c signs in
@@ -34,14 +37,18 @@
 #include <time.h>
 #include <cJSON.h>
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_HOST) || (defined(__3DS__) && defined(WOLFRAM_3DS))
+#define INDIGO_SESSION_REAL 1
 
+/* The host end-to-end build compiles this file tree with a stub <3ds.h>; on
+ * the console this is the real one. */
 #include <3ds.h>
 #include <wolfram/3ds.h>
 #include <wolfram/actor_prefs_typed.h>
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
 #include <wolfram/attach.h>
+#include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/moderation_typed.h>
@@ -76,6 +83,12 @@ typedef enum {
     JOB_CHAT_JOIN_REQUESTS,
     JOB_CHAT_JOIN_APPROVE,
     JOB_CHAT_JOIN_REJECT,
+    JOB_CHAT_GROUP_INFO,
+    JOB_CHAT_GROUP_CREATE,
+    JOB_CHAT_GROUP_RENAME,
+    JOB_CHAT_GROUP_ADD,
+    JOB_CHAT_GROUP_REMOVE,
+    JOB_CHAT_JOIN_LINK,
     JOB_PUBLISH,
     JOB_SEARCH,
     JOB_FOLLOW,
@@ -125,8 +138,15 @@ typedef struct {
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
     char convo_messages_id[INDIGO_POST_URI_MAX];
-    /* JOB_CHAT_JOIN_APPROVE/REJECT: the requester to settle. */
+    /* JOB_CHAT_JOIN_APPROVE/REJECT and JOB_CHAT_GROUP_REMOVE: the requester
+     * or member to settle. */
     char member_did[INDIGO_CHAT_TARGET_MAX];
+    /* JOB_CHAT_GROUP_CREATE/RENAME: the group's name. The member list for
+     * create and add travels in `text`. */
+    char name[INDIGO_CHAT_GROUP_NAME_MAX];
+    /* JOB_CHAT_JOIN_LINK: create a new link, or toggle the existing one. */
+    bool link_create;
+    bool link_disable;
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;
@@ -164,14 +184,20 @@ typedef struct {
     indigo_profile profile;
     indigo_notification notes[INDIGO_NOTIFICATION_MAX];
     unsigned note_count;
+    /* The page after `notes`, and whether the service said there is one. */
+    char note_cursor[INDIGO_CURSOR_MAX];
+    bool note_has_more;
     indigo_chat_inbox chat;
     /* Conversations waiting for the account to accept them, kept apart from
      * the inbox so loading one never disturbs the other. */
     indigo_chat_inbox requests;
     indigo_chat_thread chat_thread;
     indigo_chat_join_requests join_requests;
+    indigo_chat_group group;
     /* The convo id of the last conversation started, for the caller to open. */
     char chat_started[INDIGO_CHAT_ID_MAX];
+    /* The same for the last group created. */
+    char group_started[INDIGO_CHAT_ID_MAX];
     indigo_actor actors[INDIGO_SEARCH_MAX];
     unsigned actor_count;
 /* Post search keeps its own results: indigo_post is a different type from
@@ -239,7 +265,7 @@ bool indigo_session_to_post(const wf_agent_feed_item *item, indigo_post *out);
 /* session_read.c */
 void indigo_session_do_author_feed(const indigo_job *j);
 void indigo_session_do_feed(const indigo_job *j);
-void indigo_session_do_notifications(void);
+void indigo_session_do_notifications(const indigo_job *j);
 void indigo_session_do_chat_inbox(void);
 void indigo_session_do_chat_requests(const char *cursor);
 void indigo_session_do_chat_messages(const indigo_job *j);
@@ -250,6 +276,12 @@ void indigo_session_do_chat_start(const indigo_job *j);
 void indigo_session_do_chat_join_requests(const indigo_job *j);
 void indigo_session_do_chat_join_approve(const indigo_job *j);
 void indigo_session_do_chat_join_reject(const indigo_job *j);
+void indigo_session_do_chat_group_info(const indigo_job *j);
+void indigo_session_do_chat_group_create(const indigo_job *j);
+void indigo_session_do_chat_group_rename(const indigo_job *j);
+void indigo_session_do_chat_group_add(const indigo_job *j);
+void indigo_session_do_chat_group_remove(const indigo_job *j);
+void indigo_session_do_chat_join_link(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);
 void indigo_session_do_post_search(const indigo_job *j);
 void indigo_session_do_thread(const indigo_job *j);
@@ -273,6 +305,6 @@ void indigo_session_do_moderation_list(const indigo_job *j);
 void indigo_session_do_publish(const indigo_job *j);
 void indigo_session_do_delete_post(const indigo_job *j);
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */
 
 #endif

@@ -118,17 +118,9 @@ indigo_app_profile_failed(indigo_app *app, const char *message)
 
 void
 indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
-                                unsigned count)
+                                unsigned count, const char *next_cursor)
 {
-    indigo_notifications *n = &app->notifications;
-
-    indigo_notifications_clear(n);
-    for (unsigned i = 0; items && i < count && i < INDIGO_NOTIFICATION_MAX; i++) {
-        n->items[n->count++] = items[i];
-    }
-    if (n->count == 0) {
-        indigo_copy_utf8(n->status, sizeof n->status, "No notifications yet.");
-    }
+    indigo_notifications_finish_fetch(&app->notifications, items, count, next_cursor);
 }
 
 void
@@ -212,9 +204,7 @@ indigo_app_chat_send_failed(indigo_app *app, const char *message)
 void
 indigo_app_notifications_failed(indigo_app *app, const char *message)
 {
-    app->notifications.loading = false;
-    indigo_copy_utf8(app->notifications.status, sizeof app->notifications.status, message);
-    app->notifications.status_is_error = true;
+    indigo_notifications_fail_fetch(&app->notifications, message);
 }
 
 void

@@ -62,7 +62,7 @@ Each release is a tag on this repository with the `.3dsx` attached. The changelo
 | Decoded image memory | bounded by construction: 24 slots, a 1.5MB total budget, a 96px avatar decode cap, a 400px thumbnail cap and a 256KB download cap, checked before anything is allocated. The budget holds about five full-size thumbnails; at the thumbnail cap all 24 slots would be ~6MB, so the budget is the real bound. The GPU side is bounded too: twelve textures and 2MB, because a texture is power-of-two padded and a full-size photograph is a 512x512 where an avatar is a 128x128. The 3DS build grows by 112KB of code, which is stb_image's decoder |
 | Real hardware | never run |
 
-Sign-in has two flows, and the second is not a replacement for the first. With an app password, it takes a service URL (default `https://bsky.social`), a handle and the app password, and follows the account's PDS; that is the one I have run on an emulator. With an empty password it starts browser sign-in through a hosted Wolfram OAuth node, and then the service URL has to be that node, because bsky.social does not serve the pairing calls. The OAuth flow has not been run on a host test, an emulator or hardware. The state of every feature against Cobalt is in [docs/PARITY.md](docs/PARITY.md). The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
+Sign-in has two flows, and the second is not a replacement for the first. With an app password, it takes a service URL (default `https://bsky.social`), a handle and the app password, and follows the account's PDS; that is the one I have run on an emulator. With an empty password it starts browser sign-in through the shared Wolfram OAuth node at `https://oauth.croft.click` (also used by Platinum and Cobalt, run in the croft stack behind cloudflared), and then the service URL has to be that node, because bsky.social does not serve the pairing calls. The OAuth flow has not been run on a host test, an emulator or hardware. The state of every feature against Cobalt is in [docs/PARITY.md](docs/PARITY.md). The session is saved to `sdmc:/3ds/indigo/session.dat` as plaintext: the SD card has no permissions, and an obfuscation key stored beside the file would be false comfort. Use an app password, never your main password. Logs go to `sdmc:/3ds/indigo/indigo.log` and never contain tokens or passwords.
 
 Indigo can update itself from this repository's releases: More, then "Check for updates", shows the version and asks before it downloads anything. It checks the download against the size and SHA-256 the release states, keeps your old build until the new one has started, and finishes or undoes an interrupted update when it starts. Each release's `update.json` is signed with a key only the release workflow holds, and Indigo refuses a release that is not signed with it (releases up to 0.7.0 are unsigned). None of this has been run on an emulator or a console yet; if it does not work for you, copy the new `indigo.3dsx` over the old one. The design, and what I checked to arrive at it, is in [docs/UPDATE.md](docs/UPDATE.md).
 
@@ -120,15 +120,21 @@ Wolfram is the shared protocol layer between them because the protocol layer sho
 
 ## Installing
 
-Indigo is not on Universal-DB yet, so Universal-Updater cannot install it; [docs/UNIVERSAL-DB.md](docs/UNIVERSAL-DB.md) covers what that will take. Until then, copy `indigo.3dsx` from the [latest release](https://github.com/ewanc26/indigo/releases/latest) to the SD card.
+Indigo's Universal-DB listing is prepared and waiting on its pull request ([docs/UNIVERSAL-DB.md](docs/UNIVERSAL-DB.md) covers the process). Once it is merged, Universal-Updater can install Indigo and will pick up each new release from then on. Until then, copy `indigo.3dsx` from the [latest release](https://github.com/ewanc26/indigo/releases/latest) to the SD card.
 
-The resulting application is intended for:
+Either way the file runs from the Homebrew Menu. Universal-Updater installs it flat:
+
+```
+sdmc:/3ds/indigo.3dsx
+```
+
+A manual install can use the application bundle layout instead:
 
 ```
 sdmc:/3ds/indigo/indigo.3dsx
 ```
 
-This is an application bundle layout understood by the 3DS Homebrew Menu. A CIA target is not part of the current project scope.
+The Homebrew Menu recognises the bundle as an application and uses the embedded SMDH metadata for its name, description and icon. Run one copy, not both. Whichever is running, Indigo's own updater replaces the file it was launched from, and Universal-Updater replaces the flat copy it installed. A CIA target is not part of the current project scope.
 
 For development, the Homebrew Menu's 3dslink/netloader path can also be used when the console and development machine have working network connectivity.
 
@@ -190,6 +196,7 @@ Indigo looks for Wolfram at `../wolfram/build-3ds` by default. Set `WOLFRAM_ROOT
 | `make test` | Host unit tests (ASan + UBSan, warnings are errors); no devkitARM needed |
 | `make warnings` | Warnings-as-errors sweep of every host-portable source |
 | `make snapshots` | Render PNGs of both screens to `build-host/snapshots/` |
+| `make e2e` | Host end-to-end against a mock PDS (needs a host Wolfram build); drives the real session worker |
 | `make clean` | Remove generated build output |
 
 ### When `make` misses a change
@@ -252,6 +259,18 @@ Three things make this work, each of which is a failure mode worth knowing about
 ### Host snapshots
 
 `make snapshots` replays the same display lists the 3DS draws into PNGs without a GPU. Glyphs come from a stand-in font, so text widths are approximate; the emulator is the pixel reference.
+
+### Host end-to-end
+
+`make e2e` builds the real session worker, queue and jobs on the host with a pthread-backed `<3ds.h>`, then signs in and drives group conversations against a mock PDS on `127.0.0.1`. The mock keeps a request count and the last body for each route, so the tests check the createGroup member DIDs and name, the create/getConvo/getConvoMembers order, one join-link request per toggle, and the rename, add, remove and join-request decisions, rather than only the resulting state. Each edit and decision has a 500 before its success; the join link is also failed on create, not just on a toggle. The harness drives a timeline page, a conversation's messages, the inbox, and a reply, and fails each read after a good page to show the last one is kept. It also takes the request inbox through paging, accept, decline and their failures, and starting a conversation from a DID, a handle, an unknown handle, a failed lookup, the account itself and a failed getConvoForMembers. Search, curated lists, list members, muted and blocked accounts, the saved-feed picker, a custom feed's posts and notifications are driven the same way: an empty query, an unknown notification reason, a skipped no-handle actor or no-URI list, a second page asked for by cursor (appending, with the cursor checked in the request), a fresh fetch replacing the last page, a muted word filtering a feed post, and each read failing after a good page. Notifications page too: the second page appends, is not marked seen, a page with nothing new ends the cursor, and a failed page keeps the rows already shown. It needs Wolfram built for the host:
+
+```sh
+cmake -S ../wolfram -B ../wolfram/build-host \
+  -DWOLFRAM_BUILD_TESTS=OFF -DWOLFRAM_BUILD_EXAMPLES=OFF
+cmake --build ../wolfram/build-host -j4 --target wolfram
+```
+
+`E2E_WOLFRAM_BUILD` points at a different build directory. This is a host check, not an emulator or hardware result.
 
 ### Fonts
 

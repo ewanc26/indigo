@@ -36,7 +36,11 @@ typedef enum {
     INDIGO_SCREEN_CHAT_THREAD,
     INDIGO_SCREEN_CHAT_REQUESTS,
     INDIGO_SCREEN_CHAT_JOIN_REQUESTS,
+    INDIGO_SCREEN_CHAT_GROUP,
     INDIGO_SCREEN_QUEUE,
+    /* Not a screen: the number of entries above. The two-display test iterates
+     * up to it, so a new screen is covered without editing the test. */
+    INDIGO_SCREEN_COUNT,
 } indigo_screen;
 
 typedef enum {
@@ -50,6 +54,15 @@ typedef enum {
     INDIGO_PHASE_IDLE = 0,
     INDIGO_PHASE_BUSY,
 } indigo_phase;
+
+/* What the two group text fields are being collected for. */
+typedef enum {
+    INDIGO_CHAT_GROUP_EDIT_NONE = 0,
+    INDIGO_CHAT_GROUP_EDIT_CREATE_NAME,
+    INDIGO_CHAT_GROUP_EDIT_CREATE_MEMBERS,
+    INDIGO_CHAT_GROUP_EDIT_RENAME,
+    INDIGO_CHAT_GROUP_EDIT_ADD,
+} indigo_chat_group_edit;
 
 /* Side effects the app wants; the platform glue performs them. */
 typedef enum {
@@ -67,6 +80,7 @@ typedef enum {
     INDIGO_REQUEST_THREAD,
     INDIGO_REQUEST_PROFILE,
     INDIGO_REQUEST_NOTIFICATIONS,
+    INDIGO_REQUEST_NOTIFICATIONS_MORE,
     INDIGO_REQUEST_EDIT_DRAFT,
     INDIGO_REQUEST_EDIT_IMAGE_ALT,
     INDIGO_REQUEST_PUBLISH,
@@ -87,6 +101,14 @@ typedef enum {
     INDIGO_REQUEST_CHAT_JOIN_REQUESTS_MORE,
     INDIGO_REQUEST_CHAT_JOIN_APPROVE,
     INDIGO_REQUEST_CHAT_JOIN_REJECT,
+    INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME,
+    INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS,
+    INDIGO_REQUEST_CHAT_GROUP_INFO,
+    INDIGO_REQUEST_CHAT_GROUP_CREATE,
+    INDIGO_REQUEST_CHAT_GROUP_RENAME,
+    INDIGO_REQUEST_CHAT_GROUP_ADD,
+    INDIGO_REQUEST_CHAT_GROUP_REMOVE,
+    INDIGO_REQUEST_CHAT_JOIN_LINK,
     INDIGO_REQUEST_GRAPH,
     INDIGO_REQUEST_PEOPLE,
     INDIGO_REQUEST_POST_SEARCH,
@@ -181,6 +203,17 @@ typedef struct {
     bool chat_start_pending;
     /* A group's pending join requests, copied from the session on each page. */
     indigo_chat_join_requests join_requests;
+    /* The group settings screen, and the field a keyboard is currently
+     * collecting for it. */
+    indigo_chat_group group;
+    indigo_chat_group_edit group_edit;
+    char group_name[INDIGO_CHAT_GROUP_NAME_MAX];
+    char group_members[INDIGO_CHAT_GROUP_MEMBERS_TEXT_MAX];
+    unsigned group_selected;
+    unsigned group_scroll;
+    bool group_pending;
+    char group_status[INDIGO_POST_NOTE_MAX];
+    bool group_status_is_error;
     /* Pending message requests on the signed-in account; 0 hides the line. */
     int requests_count;
     /* Offline posts saved with Save for later, mirrored to the SD card. A post
@@ -252,7 +285,7 @@ void indigo_app_thread_failed(indigo_app *app, const char *message);
 void indigo_app_profile_loaded(indigo_app *app, const indigo_profile *p);
 void indigo_app_profile_failed(indigo_app *app, const char *message);
 void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
-                                     unsigned count);
+                                     unsigned count, const char *next_cursor);
 void indigo_app_notifications_failed(indigo_app *app, const char *message);
 void indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src);
 void indigo_app_messages_failed(indigo_app *app, const char *message);
@@ -282,6 +315,19 @@ void indigo_app_join_requests_failed(indigo_app *app, const char *message);
 void indigo_app_update_chat_join_requests(indigo_app *app, const indigo_input *input);
 void indigo_app_chat_join_decision_done(indigo_app *app, bool approved);
 void indigo_app_chat_join_decision_failed(indigo_app *app, const char *message);
+/* Group creation and settings. The name and member fields come back from the
+ * keyboard separately; whichever flow opened the keyboard decides what the
+ * two fields mean. */
+void indigo_app_open_chat_group(indigo_app *app, const char *convo_id);
+void indigo_app_update_chat_group(indigo_app *app, const indigo_input *input);
+void indigo_app_set_chat_group_name(indigo_app *app, const char *text);
+void indigo_app_set_chat_group_members(indigo_app *app, const char *text);
+void indigo_app_group_loaded(indigo_app *app, const indigo_chat_group *src);
+void indigo_app_group_failed(indigo_app *app, const char *message);
+void indigo_app_chat_group_create_done(indigo_app *app, const char *convo_id);
+void indigo_app_chat_group_create_failed(indigo_app *app, const char *message);
+void indigo_app_chat_group_done(indigo_app *app);
+void indigo_app_chat_group_failed(indigo_app *app, const char *message);
 /* The search query came back from the keyboard. */
 void indigo_app_set_query(indigo_app *app, const char *text);
 void indigo_app_search_loaded(indigo_app *app, const indigo_actor *actors, unsigned count,
