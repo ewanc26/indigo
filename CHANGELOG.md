@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A message request you accept now joins the inbox even when the inbox was empty, so the conversation can be opened and is not left in neither list. A group that fails to create says so on the group screen, where you are, instead of writing the error to the inbox's hidden status line. ([#22](https://github.com/ewanc26/indigo/issues/22))
+
 ### Added
 
 - Notifications page. Reaching the last row asks for the next page with the cursor the service sent; the rows are appended, the cursor is cleared when a page adds nothing, and only a first page marks anything seen, so paging back through history cannot mark read what has not been reached. A failed page keeps the rows already shown and stops paging until a reload, rather than asking again every frame. ([compare](https://github.com/ewanc26/indigo/compare/v0.15.0...main))

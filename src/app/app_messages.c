@@ -492,7 +492,10 @@ indigo_app_chat_request_done(indigo_app *app, bool accepted)
         had = true;
     }
     indigo_chat_inbox_remove(&app->requests, app->chat_decision_id);
-    if (accepted && had && app->messages.count > 0) {
+    /* An accepted conversation joins the inbox even when the inbox is empty: that is
+     * exactly the case where dropping it would leave it in neither list, with no row
+     * to select and no way back to it except a reload. */
+    if (accepted && had) {
         indigo_chat_inbox_add_front(&app->messages, &moved);
     }
     app->requests_count = (int) app->requests.count;
@@ -723,9 +726,9 @@ indigo_app_chat_group_create_failed(indigo_app *app, const char *message)
     }
     app->group_pending = false;
     app->group_edit = INDIGO_CHAT_GROUP_EDIT_NONE;
-    indigo_copy_utf8(app->messages.status, sizeof app->messages.status,
-                     message ? message : "Could not create that group.");
-    app->messages.status_is_error = true;
+    /* Creation starts and fails on the group screen, so the error belongs where the
+     * user is looking; writing it to the inbox left the screen silent. */
+    set_group_status(app, message ? message : "Could not create that group.", true);
 }
 
 void
