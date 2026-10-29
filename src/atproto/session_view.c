@@ -294,4 +294,4 @@ indigo_session_note_kind(const char *reason)
     return INDIGO_NOTE_OTHER;
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */

@@ -397,4 +397,4 @@ indigo_session_submit_logout(void)
     return indigo_session_enqueue(&j);
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */

@@ -150,7 +150,7 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_convo *sel = m->selected < m->count ? &m->items[m->selected] : NULL;
     char requests[32];
 
-    indigo_layout_top_title(c, "Messages", "A Open  X New  Y Pending  B Back");
+    indigo_layout_top_title(c, "Messages", "A Open  X New  ZR Group  Y Pending  B Back");
     if (app->requests_count > 0 && indigo_chat_requests_label(app->requests_count, requests, sizeof requests)) {
         /* Right of the name, left of the N / M counter at x 330. */
         indigo_canvas_text(c, 200, 36, 0.55f, COL_LINK, "%s", requests);
@@ -187,7 +187,7 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     const indigo_chat_message *sel = t->selected < t->count ? &t->items[t->selected] : NULL;
 
     indigo_layout_top_title(c, "Messages", app->chat_is_group
-                                              ? "B Back  A Reply  Y Send  X Requests"
+                                              ? "B Back  A Reply  Y Send  X Requests  ZR Group"
                                               : "B Back  A Reply  Y Send");
     if (!sel) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
@@ -209,6 +209,53 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     if (t->status[0]) {
         indigo_canvas_text(c, 18, 222, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
                            "%s", t->status);
+    }
+}
+
+static void
+build_top_chat_group(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_chat_group *g = &app->group;
+    const indigo_chat_member *sel = g->selected < g->count ? &g->members[g->selected] : NULL;
+    char count[32];
+
+    indigo_layout_top_title(c, "Group", "A Rename  Y Add  X Remove  ZR Link  B Back");
+    if (!g->loaded) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "%s",
+                           app->group_pending ? "Loading group..." : "Group details are unavailable.");
+        if (app->group_status[0]) {
+            indigo_canvas_text(c, 18, 120, 0.6f,
+                               app->group_status_is_error ? COL_ERROR : COL_TEXT_DIM, "%s",
+                               app->group_status);
+        }
+        return;
+    }
+
+    snprintf(count, sizeof count, "%d member%s", g->total > 0 ? g->total : (int) g->count,
+             (g->total == 1 || (g->total == 0 && g->count == 1)) ? "" : "s");
+    indigo_canvas_text(c, 18, 48, 0.8f, COL_TEXT, "%.30s", g->name[0] ? g->name : "Group");
+    indigo_canvas_text(c, 18, 72, 0.6f, COL_TEXT_DIM, "%s", count);
+
+    if (g->join_link_url[0]) {
+        indigo_canvas_text(c, 18, 96, 0.55f, COL_LINK, "%.44s", g->join_link_url);
+        indigo_canvas_text(c, 18, 114, 0.55f, COL_TEXT_DIM, "%s",
+                           g->join_link_enabled ? "Join link enabled" : "Join link disabled");
+    } else {
+        indigo_canvas_text(c, 18, 96, 0.6f, COL_TEXT_SOFT, "No join link yet.");
+    }
+
+    if (sel) {
+        indigo_canvas_text(c, 18, 138, 0.55f, COL_TEXT_DIM, "Selected member");
+        indigo_canvas_text(c, 18, 154, 0.7f, COL_TEXT, "%.30s",
+                           sel->name[0] ? sel->name : sel->handle);
+        if (sel->handle[0]) {
+            indigo_canvas_text(c, 18, 176, 0.55f, COL_TEXT_DIM, "%s", sel->handle);
+        }
+    }
+    if (app->group_status[0]) {
+        indigo_canvas_text(c, 18, 210, 0.55f,
+                           app->group_status_is_error ? COL_ERROR : COL_TEXT_DIM, "%s",
+                           app->group_status);
     }
 }
 
@@ -430,10 +477,7 @@ build_top_settings(const indigo_app *app, indigo_canvas *c)
     const indigo_settings *s = &app->settings;
     indigo_layout_top_title(c, "Settings", "");
 
-    const char *theme_str =
-        s->theme == INDIGO_THEME_LIGHT ? "Light"
-        : s->theme == INDIGO_THEME_DARK ? "Dark"
-                                        : "Auto (follows system)";
+    const char *theme_str = s->theme == INDIGO_THEME_LIGHT ? "Light" : "Dark";
     indigo_canvas_text(c, 18, 40, 0.65f, COL_TEXT, "Theme: %s", theme_str);
     indigo_canvas_text(c, 18, 60, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
     indigo_canvas_text(c, 18, 80, 0.65f, COL_TEXT, "Reduce motion (reserved): %s",
@@ -568,17 +612,17 @@ build_top_image(const indigo_app *app, indigo_canvas *c)
 void
 indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
 {
-    indigo_palette pal = indigo_layout_palette(&app->settings);
+    indigo_layout_set_palette(&app->settings);
 
     indigo_canvas_init(c, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT);
     /* The viewer paints the whole screen itself, in a colour that is not the
      * theme's, so the themed background is not drawn first and then covered. */
     if (app->screen != INDIGO_SCREEN_IMAGE) {
-        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, pal.bg_top);
+        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, COL_BG_TOP);
     }
 
     if (app->screen == INDIGO_SCREEN_HOME || app->screen == INDIGO_SCREEN_THREAD) {
-        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, pal.bar);
+        indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, COL_BAR);
         indigo_layout_build_top_post(app, c);
         return;
     }
@@ -603,6 +647,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_CHAT_JOIN_REQUESTS:
         build_top_chat_join_requests(app, c);
+        return;
+    case INDIGO_SCREEN_CHAT_GROUP:
+        build_top_chat_group(app, c);
         return;
     case INDIGO_SCREEN_MENU:
         build_top_menu(app, c);

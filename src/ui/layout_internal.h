@@ -26,17 +26,24 @@
 #include <stdio.h>
 #include <string.h>
 
-#define COL_BG_TOP INDIGO_RGBA(18, 20, 26, 255)
-#define COL_BG_BOTTOM INDIGO_RGBA(12, 14, 18, 255)
-#define COL_BAR INDIGO_RGBA(30, 34, 44, 255)
-#define COL_TEXT INDIGO_RGBA(255, 255, 255, 255)
-#define COL_TEXT_SOFT INDIGO_RGBA(220, 224, 232, 255)
-#define COL_TEXT_DIM INDIGO_RGBA(160, 168, 184, 255)
-#define COL_PILL INDIGO_RGBA(44, 50, 66, 255)
+/* The dark palette. These are the values the layout starts with, and the ones
+ * the theme values are copied from; drawing code uses the COL_* macros below,
+ * which follow the selected theme. */
+#define DARK_BG_TOP INDIGO_RGBA(18, 20, 26, 255)
+#define DARK_BG_BOTTOM INDIGO_RGBA(12, 14, 18, 255)
+#define DARK_BAR INDIGO_RGBA(30, 34, 44, 255)
+#define DARK_TEXT INDIGO_RGBA(255, 255, 255, 255)
+#define DARK_TEXT_SOFT INDIGO_RGBA(220, 224, 232, 255)
+#define DARK_TEXT_DIM INDIGO_RGBA(160, 168, 184, 255)
+#define DARK_PILL INDIGO_RGBA(44, 50, 66, 255)
 /* A link card is a surface, not a control: one step above the background, so
  * it reads as a card the reader can look into rather than something to press. */
-#define COL_CARD INDIGO_RGBA(27, 31, 41, 255)
-#define COL_PILL_ACTIVE INDIGO_RGBA(74, 96, 180, 255)
+#define DARK_CARD INDIGO_RGBA(27, 31, 41, 255)
+#define DARK_PILL_ACTIVE INDIGO_RGBA(74, 96, 180, 255)
+#define DARK_ERROR INDIGO_RGBA(255, 138, 128, 255)
+#define DARK_LINK INDIGO_RGBA(112, 168, 255, 255)
+#define DARK_LIKED INDIGO_RGBA(255, 120, 150, 255)
+#define DARK_REPOSTED INDIGO_RGBA(120, 220, 160, 255)
 /* The one colour that is not themed: the surround of the full-size viewer. A
  * photograph has to be judged against something neutral, and it is explained
  * where it is drawn. */
@@ -74,11 +81,6 @@
 #define SETTINGS_ROW_Y0 41
 #define SETTINGS_ROW_STEP 25
 
-#define COL_ERROR INDIGO_RGBA(255, 138, 128, 255)
-
-#define COL_LINK INDIGO_RGBA(112, 168, 255, 255)
-#define COL_LIKED INDIGO_RGBA(255, 120, 150, 255)
-#define COL_REPOSTED INDIGO_RGBA(120, 220, 160, 255)
 #define POST_TEXT_SCALE 0.6f
 #define POST_TEXT_X 18
 #define POST_TEXT_Y 98
@@ -123,10 +125,37 @@ typedef struct {
     uint32_t text_dim;
     uint32_t pill;
     uint32_t pill_active;
+    uint32_t card;
+    uint32_t link;
+    uint32_t error;
+    uint32_t liked;
+    uint32_t reposted;
 } indigo_palette;
+
+/* The palette the drawing code below sees. It is set at the top of each
+ * layout build, so every surface of a screen is drawn in one theme even if the
+ * settings change between frames. */
+extern indigo_palette indigo_layout_current;
+
+#define COL_BG_TOP (indigo_layout_current.bg_top)
+#define COL_BG_BOTTOM (indigo_layout_current.bg_bottom)
+#define COL_BAR (indigo_layout_current.bar)
+#define COL_TEXT (indigo_layout_current.text)
+#define COL_TEXT_SOFT (indigo_layout_current.text_soft)
+#define COL_TEXT_DIM (indigo_layout_current.text_dim)
+#define COL_PILL (indigo_layout_current.pill)
+#define COL_PILL_ACTIVE (indigo_layout_current.pill_active)
+#define COL_CARD (indigo_layout_current.card)
+#define COL_LINK (indigo_layout_current.link)
+#define COL_ERROR (indigo_layout_current.error)
+#define COL_LIKED (indigo_layout_current.liked)
+#define COL_REPOSTED (indigo_layout_current.reposted)
 
 /* layout.c: the colours for the current settings. */
 indigo_palette indigo_layout_palette(const indigo_settings *s);
+
+/* layout.c: make the theme's colours current for the next screen build. */
+void indigo_layout_set_palette(const indigo_settings *s);
 
 /* layout_widgets.c */
 void indigo_layout_top_title(indigo_canvas *c, const char *title, const char *hint);

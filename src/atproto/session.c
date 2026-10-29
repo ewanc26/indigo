@@ -91,7 +91,7 @@ worker(void *arg)
             indigo_session_do_profile(&j);
             break;
         case JOB_NOTIFICATIONS:
-            indigo_session_do_notifications();
+            indigo_session_do_notifications(&j);
             break;
         case JOB_CHAT_INBOX:
             indigo_session_do_chat_inbox();
@@ -122,6 +122,24 @@ worker(void *arg)
             break;
         case JOB_CHAT_JOIN_REJECT:
             indigo_session_do_chat_join_reject(&j);
+            break;
+        case JOB_CHAT_GROUP_INFO:
+            indigo_session_do_chat_group_info(&j);
+            break;
+        case JOB_CHAT_GROUP_CREATE:
+            indigo_session_do_chat_group_create(&j);
+            break;
+        case JOB_CHAT_GROUP_RENAME:
+            indigo_session_do_chat_group_rename(&j);
+            break;
+        case JOB_CHAT_GROUP_ADD:
+            indigo_session_do_chat_group_add(&j);
+            break;
+        case JOB_CHAT_GROUP_REMOVE:
+            indigo_session_do_chat_group_remove(&j);
+            break;
+        case JOB_CHAT_JOIN_LINK:
+            indigo_session_do_chat_join_link(&j);
             break;
         case JOB_SEARCH:
             indigo_session_do_search(&j);

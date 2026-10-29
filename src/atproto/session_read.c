@@ -542,6 +542,56 @@ indigo_session_do_chat_decline(const indigo_job *j)
     chat_request_decision(j, false);
 }
 
+/* Resolves a handle for the new-message screen, keeping the HTTP status.
+ *
+ * wf_agent_resolve_handle folds every non-2xx answer into WF_ERR_HTTP and hands
+ * back no status, so a service fault and a handle that does not exist look the
+ * same to the caller. The endpoint is public, so asking it on the agent's own
+ * client needs no auth, and the status lets the screen say which of the two it
+ * was. A handle the AppView cannot resolve answers 400 InvalidRequest; some
+ * hosts use 404. Anything else -- 5xx, 429, no response at all -- is a lookup
+ * that failed rather than an account that is missing. */
+static wf_status
+chat_resolve_handle(const char *handle, char *out, size_t cap, long *http_status)
+{
+    wf_xrpc_client *client = g_session.agent ? wf_agent_get_xrpc_client(g_session.agent) : NULL;
+    wf_xrpc_param param = {"handle", handle};
+    wf_response res = {0};
+    cJSON *root;
+    const cJSON *did;
+    wf_status st;
+
+    out[0] = '\0';
+    *http_status = 0;
+    if (!client) {
+        return WF_ERR_INVALID_ARG;
+    }
+    st = wf_xrpc_query_params(client, "com.atproto.identity.resolveHandle", &param, 1,
+                              &res);
+    *http_status = res.status;
+    if (st != WF_OK) {
+        wf_response_free(&res);
+        return st;
+    }
+    root = cJSON_ParseWithLength(res.body ? res.body : "", res.body_len);
+    wf_response_free(&res);
+    if (!root) {
+        return WF_ERR_PARSE;
+    }
+    did = cJSON_GetObjectItemCaseSensitive(root, "did");
+    /* A recognised DID, and one that fits: a cut DID would name another
+     * account. */
+    if (!cJSON_IsString(did) || !did->valuestring ||
+        indigo_chat_target_kind_of(did->valuestring) != INDIGO_CHAT_TARGET_DID ||
+        strlen(did->valuestring) >= cap) {
+        cJSON_Delete(root);
+        return WF_ERR_PARSE;
+    }
+    memcpy(out, did->valuestring, strlen(did->valuestring) + 1);
+    cJSON_Delete(root);
+    return WF_OK;
+}
+
 void
 indigo_session_do_chat_start(const indigo_job *j)
 {
@@ -568,20 +618,16 @@ indigo_session_do_chat_start(const indigo_job *j)
     }
 
     if (kind == INDIGO_CHAT_TARGET_HANDLE) {
-        char *resolved = NULL;
-        wf_status st = wf_agent_resolve_handle(g_session.agent, target, &resolved);
-        const bool fits = resolved && strlen(resolved) < sizeof did;
+        long http_status = 0;
+        wf_status st = chat_resolve_handle(target, did, sizeof did, &http_status);
 
-        if (st == WF_OK && fits) {
-            indigo_copy_utf8(did, sizeof did, resolved);
-        }
-        free(resolved);
-        if (st != WF_OK || !fits) {
+        if (st != WF_OK) {
+            const bool missing = http_status == 400 || http_status == 404;
+
             ev.failure = WF_FAIL_OTHER;
             indigo_copy_utf8(ev.message, sizeof ev.message,
-                             st == WF_OK || st == WF_ERR_HTTP
-                                 ? "No account has that handle."
-                                 : "Could not look up that handle.");
+                             missing ? "No account has that handle."
+                                     : "Could not look up that handle.");
             indigo_session_publish_event(&ev);
             return;
         }
@@ -619,6 +665,343 @@ indigo_session_do_chat_start(const indigo_job *j)
     wf_chat_convo_free(&convo);
 
     ev.kind = INDIGO_SESSION_EVENT_CHAT_START_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+/* --- a group's name, members and join link --- */
+
+/* Split, validate, resolve and de-duplicate a member list through Wolfram. On
+ * failure sets the message in `ev` and frees `out`; on success the caller owns
+ * `out` and must free it after the request. */
+static bool
+resolve_group_members(const char *list, wf_chat_member_list *out,
+                      indigo_session_event *ev)
+{
+    const wf_status st = wf_agent_chat_resolve_member_list(
+        g_session.agent, list, wf_agent_get_did(g_session.agent), out);
+
+    if (st == WF_OK) {
+        return true;
+    }
+    ev->failure = WF_FAIL_OTHER;
+    if (!out->invalid) {
+        indigo_copy_utf8(ev->message, sizeof ev->message,
+                         "Enter someone else to put in the group.");
+    } else if (st == WF_ERR_HTTP) {
+        indigo_copy_utf8(ev->message, sizeof ev->message,
+                         "No account has that handle.");
+    } else if (st == WF_ERR_INVALID_ARG) {
+        snprintf(ev->message, sizeof ev->message,
+                 "That is not a handle or DID: %.64s", out->invalid);
+    } else {
+        indigo_copy_utf8(ev->message, sizeof ev->message,
+                         "Could not look up that handle.");
+    }
+    wf_chat_member_list_free(out);
+    return false;
+}
+
+/* Read a group's detail and full member list. The typed parsers do the JSON
+ * work; this only copies the result into the fixed-size struct a screen draws. */
+static wf_status
+fetch_group_detail(const char *convo_id, indigo_chat_group *out)
+{
+    wf_chat_convo convo;
+    wf_chat_convo_members members;
+    wf_status st;
+
+    memset(&convo, 0, sizeof convo);
+    memset(&members, 0, sizeof members);
+
+    st = wf_agent_chat_get_convo(g_session.agent, convo_id, &convo);
+    if (st != WF_OK) {
+        return st;
+    }
+    indigo_chat_group_from_convo(out, &convo, convo_id);
+    wf_chat_convo_free(&convo);
+
+    st = wf_agent_chat_get_convo_members_typed(g_session.agent, convo_id, &members);
+    if (st != WF_OK) {
+        return st;
+    }
+    indigo_chat_group_from_members(out, &members);
+    wf_chat_convo_members_free(&members);
+    return WF_OK;
+}
+
+void
+indigo_session_do_chat_group_info(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_FAILED};
+    char id[INDIGO_CHAT_ID_MAX];
+    indigo_chat_group group;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(id, sizeof id, j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    indigo_chat_group_reset(&group);
+    st = fetch_group_detail(id, &group);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "group info", st);
+        return;
+    }
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_PAGE;
+    ev.page_count = group.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_group_create(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_FAILED};
+    wf_chat_member_list members;
+    wf_chat_convo convo;
+    indigo_chat_group group;
+    char id[INDIGO_CHAT_ID_MAX];
+    wf_status st;
+
+    g_session.group_started[0] = '\0';
+    if (!g_session.agent || !wf_agent_get_did(g_session.agent)) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!j->name[0]) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_copy_utf8(ev.message, sizeof ev.message, "Give the group a name.");
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!resolve_group_members(j->text, &members, &ev)) {
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    memset(&convo, 0, sizeof convo);
+    st = wf_agent_chat_create_group_typed(
+        g_session.agent, (const char *const *) members.dids, members.count,
+        j->name, &convo);
+    wf_chat_member_list_free(&members);
+    if (st != WF_OK) {
+        wf_chat_convo_free(&convo);
+        indigo_session_publish_failure(&ev, "create group", st);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(id, sizeof id, convo.id)) {
+        wf_chat_convo_free(&convo);
+        ev.failure = WF_FAIL_OTHER;
+        indigo_copy_utf8(ev.message, sizeof ev.message,
+                         "The server did not return the new group.");
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    indigo_chat_group_from_convo(&group, &convo, id);
+    indigo_chat_group_set_name(&group, j->name);
+    wf_chat_convo_free(&convo);
+    indigo_copy_utf8(g_session.group_started, sizeof g_session.group_started, id);
+
+    /* The create response carries only the important members; the detail fetch
+     * fills the rest. If it fails, the group still exists and is usable. */
+    (void) fetch_group_detail(id, &group);
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_DONE;
+    ev.page_count = group.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_group_rename(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_FAILED};
+    wf_chat_convo convo;
+    indigo_chat_group group;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri) ||
+        !j->name[0]) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    memset(&convo, 0, sizeof convo);
+    st = wf_agent_chat_edit_group_typed(g_session.agent, j->post_uri, j->name, &convo);
+    wf_chat_convo_free(&convo);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "rename group", st);
+        return;
+    }
+
+    group = g_session.group;
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        indigo_chat_group_reset(&group);
+        indigo_copy_utf8(group.convo_id, sizeof group.convo_id, j->post_uri);
+    }
+    indigo_chat_group_set_name(&group, j->name);
+    (void) fetch_group_detail(j->post_uri, &group);
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_DONE;
+    ev.page_count = group.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_group_add(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_FAILED};
+    wf_chat_member_list members;
+    wf_chat_convo convo;
+    indigo_chat_group group;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!resolve_group_members(j->text, &members, &ev)) {
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    memset(&convo, 0, sizeof convo);
+    st = wf_agent_chat_add_members_typed(
+        g_session.agent, j->post_uri, (const char *const *) members.dids,
+        members.count, &convo);
+    wf_chat_member_list_free(&members);
+    if (st != WF_OK) {
+        wf_chat_convo_free(&convo);
+        indigo_session_publish_failure(&ev, "add group members", st);
+        return;
+    }
+
+    group = g_session.group;
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        indigo_chat_group_reset(&group);
+        indigo_copy_utf8(group.convo_id, sizeof group.convo_id, j->post_uri);
+    }
+    indigo_chat_group_from_convo(&group, &convo, j->post_uri);
+    wf_chat_convo_free(&convo);
+    (void) fetch_group_detail(j->post_uri, &group);
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE;
+    ev.page_count = group.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_group_remove(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED};
+    const char *dids[1];
+    wf_chat_convo convo;
+    indigo_chat_group group;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri) ||
+        indigo_chat_target_kind_of(j->member_did) != INDIGO_CHAT_TARGET_DID) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    dids[0] = j->member_did;
+    memset(&convo, 0, sizeof convo);
+    st = wf_agent_chat_remove_members_typed(g_session.agent, j->post_uri, dids, 1, &convo);
+    if (st != WF_OK) {
+        wf_chat_convo_free(&convo);
+        indigo_session_publish_failure(&ev, "remove group member", st);
+        return;
+    }
+
+    group = g_session.group;
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        indigo_chat_group_reset(&group);
+        indigo_copy_utf8(group.convo_id, sizeof group.convo_id, j->post_uri);
+    }
+    indigo_chat_group_from_convo(&group, &convo, j->post_uri);
+    wf_chat_convo_free(&convo);
+    (void) fetch_group_detail(j->post_uri, &group);
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE;
+    ev.page_count = group.count;
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_chat_join_link(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED};
+    wf_chat_join_link link;
+    indigo_chat_group group;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    memset(&link, 0, sizeof link);
+    st = j->link_create
+             ? wf_agent_chat_create_join_link_typed(
+                   g_session.agent, j->post_uri, false, WF_CHAT_JOIN_RULE_ANYONE,
+                   &link)
+             : j->link_disable
+                   ? wf_agent_chat_disable_join_link_typed(g_session.agent, j->post_uri, &link)
+                   : wf_agent_chat_enable_join_link_typed(g_session.agent, j->post_uri, &link);
+    if (st != WF_OK) {
+        wf_chat_join_link_free(&link);
+        indigo_session_publish_failure(&ev, "update join link", st);
+        return;
+    }
+
+    group = g_session.group;
+    if (!indigo_chat_convo_id_copy(group.convo_id, sizeof group.convo_id, j->post_uri)) {
+        indigo_chat_group_reset(&group);
+        indigo_copy_utf8(group.convo_id, sizeof group.convo_id, j->post_uri);
+    }
+    if (link.code) {
+        indigo_copy_utf8(group.join_link_code, sizeof group.join_link_code, link.code);
+        group.join_link_enabled = wf_chat_join_link_is_enabled(link.enabled_status);
+        wf_chat_join_link_url(group.join_link_code, group.join_link_url,
+                              sizeof group.join_link_url);
+    }
+    wf_chat_join_link_free(&link);
+    (void) fetch_group_detail(j->post_uri, &group);
+    g_session.group = group;
+    ev.kind = INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE;
+    ev.page_count = group.count;
     indigo_session_publish_event(&ev);
 }
 
@@ -742,9 +1125,13 @@ indigo_session_do_chat_join_reject(const indigo_job *j)
 }
 
 void
-indigo_session_do_notifications(void)
+indigo_session_do_notifications(const indigo_job *j)
 {
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED};
+    char cursor_buf[INDIGO_CURSOR_MAX];
+    const char *cursor = NULL;
+    unsigned before;
+    unsigned added;
     wf_agent_notification_list list;
     wf_status st;
 
@@ -753,14 +1140,30 @@ indigo_session_do_notifications(void)
         indigo_session_publish_event(&ev);
         return;
     }
+    if (j->paging) {
+        /* Nothing left to ask for: answer with what is held rather than making
+         * the same request again from an empty cursor. */
+        if (!g_session.note_cursor[0]) {
+            ev.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE;
+            ev.page_count = g_session.note_count;
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        indigo_copy_utf8(cursor_buf, sizeof cursor_buf, g_session.note_cursor);
+        cursor = cursor_buf;
+    }
     memset(&list, 0, sizeof list);
-    st = wf_agent_list_notifications_typed(g_session.agent, INDIGO_NOTIFICATION_MAX, NULL, &list);
+    st = wf_agent_list_notifications_typed(g_session.agent, INDIGO_NOTIFICATION_MAX, cursor,
+                                           &list);
     if (st != WF_OK) {
         indigo_session_publish_failure(&ev, "notifications", st);
         return;
     }
 
-    g_session.note_count = 0;
+    if (!j->paging) {
+        g_session.note_count = 0;
+    }
+    before = g_session.note_count;
     for (size_t i = 0; i < list.notification_count && g_session.note_count < INDIGO_NOTIFICATION_MAX;
          i++) {
         const wf_agent_notification *n = &list.notifications[i];
@@ -797,12 +1200,22 @@ indigo_session_do_notifications(void)
         }
         g_session.note_count++;
     }
+    added = g_session.note_count - before;
+    if (j->paging && added == 0) {
+        g_session.note_has_more = false;
+        g_session.note_cursor[0] = '\0';
+    } else {
+        indigo_copy_utf8(g_session.note_cursor, sizeof g_session.note_cursor,
+                         list.cursor ? list.cursor : "");
+        g_session.note_has_more = g_session.note_cursor[0] != '\0' &&
+                                 g_session.note_count < INDIGO_NOTIFICATION_MAX;
+    }
     wf_agent_notification_list_free(&list);
-    /* Mark everything up to now seen. This is always a top-of-list fetch --
-     * notifications are never paged -- so unlike Cobalt there is no paging
-     * case to exclude. A failure is logged, not surfaced: the notifications
-     * arrived, and an error about a badge on another client is noise. */
-    if (g_session.note_count > 0) {
+    /* Mark everything up to now seen, but only on a top-of-list fetch: doing it
+     * while paging backwards would mark read what the person has not reached
+     * yet. A failure is logged, not surfaced: the notifications arrived, and an
+     * error about a badge on another client is noise. */
+    if (!j->paging && g_session.note_count > 0) {
         char seen_at[32];
         /* Nothing initialises a clock on the 3DS, so time() can return a
          * negative value. Sending "1970-01-01T00:00:00Z" as seenAt would be
@@ -818,7 +1231,10 @@ indigo_session_do_notifications(void)
     }
     ev.kind = INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE;
     ev.page_count = g_session.note_count;
-    indigo_log_info("notifications: %u", g_session.note_count);
+    if (g_session.note_has_more) {
+        indigo_copy_utf8(ev.cursor, sizeof ev.cursor, g_session.note_cursor);
+    }
+    indigo_log_info("notifications: %u (+%u)", g_session.note_count, added);
     indigo_session_publish_event(&ev);
 }
 
@@ -859,6 +1275,18 @@ indigo_session_submit_notifications(void)
 {
     indigo_job j = {.kind = JOB_NOTIFICATIONS};
 
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_notifications_more(const char *cursor)
+{
+    indigo_job j = {.kind = JOB_NOTIFICATIONS, .paging = true};
+
+    if (!cursor || cursor[0] == '\0') {
+        return false;
+    }
+    snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
     return indigo_session_enqueue(&j);
 }
 
@@ -1020,29 +1448,135 @@ indigo_session_submit_chat_join_reject(const char *convo_id, const char *did)
 }
 
 bool
-indigo_session_submit_post_search(const char *query, bool paging)
+indigo_session_submit_chat_group_info(const char *convo_id)
+{
+    indigo_job j = {.kind = JOB_CHAT_GROUP_INFO};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_chat_group *
+indigo_session_chat_group(void)
+{
+    return &g_session.group;
+}
+
+bool
+indigo_session_submit_chat_group_create(const char *name, const char *members)
+{
+    indigo_job j = {.kind = JOB_CHAT_GROUP_CREATE};
+
+    if (!name || !name[0] || !members || !members[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.name, sizeof j.name, name);
+    indigo_copy_utf8(j.text, sizeof j.text, members);
+    return indigo_session_enqueue(&j);
+}
+
+const char *
+indigo_session_chat_group_started(void)
+{
+    return g_session.group_started;
+}
+
+bool
+indigo_session_submit_chat_group_rename(const char *convo_id, const char *name)
+{
+    indigo_job j = {.kind = JOB_CHAT_GROUP_RENAME};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id) ||
+        !name || !name[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.name, sizeof j.name, name);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_group_add(const char *convo_id, const char *members)
+{
+    indigo_job j = {.kind = JOB_CHAT_GROUP_ADD};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id) ||
+        !members || !members[0]) {
+        return false;
+    }
+    indigo_copy_utf8(j.text, sizeof j.text, members);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_group_remove(const char *convo_id, const char *did)
+{
+    indigo_job j = {.kind = JOB_CHAT_GROUP_REMOVE};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id) ||
+        indigo_chat_target_kind_of(did) != INDIGO_CHAT_TARGET_DID) {
+        return false;
+    }
+    indigo_copy_utf8(j.member_did, sizeof j.member_did, did);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_join_link_create(const char *convo_id)
+{
+    indigo_job j = {.kind = JOB_CHAT_JOIN_LINK};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    j.link_create = true;
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_chat_join_link_toggle(const char *convo_id, bool disable)
+{
+    indigo_job j = {.kind = JOB_CHAT_JOIN_LINK};
+
+    if (!indigo_chat_convo_id_copy(j.post_uri, sizeof j.post_uri, convo_id)) {
+        return false;
+    }
+    j.link_disable = disable;
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_post_search(const char *query, const char *cursor)
 {
     indigo_job j = {.kind = JOB_POST_SEARCH};
 
     if (!query) {
         return false;
     }
-    j.paging = paging;
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
     indigo_copy_utf8(j.query, sizeof j.query, query);
     return indigo_session_enqueue(&j);
 }
 
-bool indigo_session_submit_author_feed(const char *actor, int tab,
-                                       bool paging) {
-  indigo_job j = {.kind = JOB_AUTHOR_FEED};
+bool
+indigo_session_submit_author_feed(const char *actor, int tab, const char *cursor)
+{
+    indigo_job j = {.kind = JOB_AUTHOR_FEED};
 
-  if (!actor || !actor[0]) {
-    return false;
-  }
-  j.paging = paging;
-  j.tab = tab;
-  indigo_copy_utf8(j.actor, sizeof j.actor, actor);
-  return indigo_session_enqueue(&j);
+    if (!actor || !actor[0]) {
+        return false;
+    }
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
+    j.tab = tab;
+    indigo_copy_utf8(j.actor, sizeof j.actor, actor);
+    return indigo_session_enqueue(&j);
 }
 
 bool
@@ -1078,4 +1612,4 @@ indigo_session_notifications(unsigned *count)
     return g_session.notes;
 }
 
-#endif /* 3DS with Wolfram */
+#endif /* INDIGO_SESSION_REAL */

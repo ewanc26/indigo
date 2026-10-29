@@ -4,6 +4,7 @@
 #include "app/timeline.h"
 #include "atproto/errors.h"
 #include "atproto/chat.h"
+#include <wolfram/chat_group.h>
 #include <wolfram/chat_typed.h>
 #include "atproto/prefs.h"
 #include "media/media.h"
@@ -51,6 +52,9 @@ static int s_failures;
     } while (0)
 
 static unsigned text_commands(const indigo_canvas *c);
+static bool has_text_colour(const indigo_canvas *c, uint32_t colour);
+static bool has_rect_colour(const indigo_canvas *c, uint32_t colour);
+static bool text_has(const indigo_canvas *c, const char *needle);
 
 static void
 test_chat_inbox_counterpart(void)
@@ -1353,6 +1357,164 @@ test_partial_thread_publish_clears_draft(void)
 }
 
 static void
+test_chat_group(void)
+{
+    wf_agent_profile_view me = { (char *)"did:plc:me", (char *)"me.test",
+                                 (char *)"Me", NULL, NULL, false };
+    wf_agent_profile_view ann = { (char *)"did:plc:ann", (char *)"ann.test",
+                                  (char *)"Ann", NULL, NULL, false };
+    wf_agent_profile_view bob = { (char *)"did:plc:bob", (char *)"bob.test",
+                                  NULL, NULL, NULL, false };
+    wf_agent_profile_view important[2] = { me, ann };
+    wf_agent_profile_view all[3] = { me, ann, bob };
+    wf_chat_convo convo;
+    wf_chat_convo_members members;
+    indigo_chat_group group;
+
+    memset(&convo, 0, sizeof convo);
+    convo.id = (char *)"convo-group";
+    convo.group_name = (char *)"Weekend crew";
+    convo.members = important;
+    convo.member_count = 2;
+    convo.group_member_count = 3;
+    convo.has_group_member_count = 1;
+    convo.join_link_code = (char *)"join-code";
+    convo.join_link_status = (char *)"enabled";
+    convo.has_join_link = 1;
+
+    memset(&group, 0, sizeof group);
+    indigo_chat_group_from_convo(&group, &convo, "convo-group");
+    CHECK(group.loaded);
+    CHECK(strcmp(group.convo_id, "convo-group") == 0);
+    CHECK(strcmp(group.name, "Weekend crew") == 0);
+    CHECK(group.count == 2);
+    CHECK(group.total == 3);
+    CHECK(group.join_link_enabled);
+    CHECK(strcmp(group.join_link_code, "join-code") == 0);
+    CHECK(strcmp(group.join_link_url, "https://bsky.app/chat/join-code") == 0);
+
+    memset(&members, 0, sizeof members);
+    members.members = all;
+    members.member_count = 3;
+    indigo_chat_group_from_members(&group, &members);
+    CHECK(group.count == 3);
+    CHECK(strcmp(group.members[2].name, "bob.test") == 0);
+    CHECK(indigo_chat_group_member_index(&group, "did:plc:bob") == 2);
+    CHECK(indigo_chat_group_member_index(&group, "did:plc:none") == -1);
+
+    CHECK(indigo_chat_group_move(&group, 9, 2));
+    CHECK(group.selected == 2 && group.scroll == 1);
+    CHECK(indigo_chat_group_select(&group, 0, 2));
+    CHECK(group.selected == 0 && group.scroll == 0);
+
+    CHECK(wf_chat_join_link_url("abc", group.join_link_url, sizeof group.join_link_url));
+    CHECK(strcmp(group.join_link_url, "https://bsky.app/chat/abc") == 0);
+    CHECK(!wf_chat_join_link_url("", group.join_link_url, sizeof group.join_link_url));
+    CHECK(!wf_chat_join_link_url("abc", group.join_link_url, 4));
+    indigo_chat_group_reset(&group);
+    CHECK(!group.loaded && group.count == 0 && group.convo_id[0] == '\0');
+}
+
+static void
+test_chat_group_flow(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_chat_group loaded;
+
+    /* ZR on Messages starts a group: name first, then members. */
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MESSAGES;
+    in.zr = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME);
+    CHECK(app.group_edit == INDIGO_CHAT_GROUP_EDIT_CREATE_NAME);
+
+    indigo_app_set_chat_group_name(&app, "Weekend crew");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS);
+    CHECK(app.group_edit == INDIGO_CHAT_GROUP_EDIT_CREATE_MEMBERS);
+    CHECK(strcmp(app.group_name, "Weekend crew") == 0);
+
+    indigo_app_set_chat_group_members(&app, "@ann.test, did:plc:bob");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_GROUP_CREATE);
+    CHECK(app.group_pending);
+
+    indigo_app_chat_group_create_done(&app, "convo-group");
+    CHECK(!app.group_pending);
+    CHECK(app.screen == INDIGO_SCREEN_CHAT_THREAD);
+    CHECK(app.chat_is_group);
+    CHECK(strcmp(app.chat_thread.title, "Weekend crew") == 0);
+    CHECK(strcmp(app.request_post_uri, "convo-group") == 0);
+    CHECK(app.group_name[0] == '\0' && app.group_members[0] == '\0');
+
+    /* ZR in the group opens its settings, which asks for the detail. */
+    app.request = INDIGO_REQUEST_NONE;
+    in = (indigo_input) {0};
+    in.zr = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.screen == INDIGO_SCREEN_CHAT_GROUP);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_GROUP_INFO);
+    CHECK(strcmp(app.group.convo_id, "convo-group") == 0);
+
+    memset(&loaded, 0, sizeof loaded);
+    loaded.loaded = true;
+    indigo_copy_utf8(loaded.convo_id, sizeof loaded.convo_id, "convo-group");
+    indigo_copy_utf8(loaded.name, sizeof loaded.name, "Weekend crew");
+    loaded.count = 2;
+    loaded.total = 2;
+    indigo_copy_utf8(loaded.members[0].did, sizeof loaded.members[0].did, "did:plc:me");
+    indigo_copy_utf8(loaded.members[1].did, sizeof loaded.members[1].did, "did:plc:ann");
+    indigo_copy_utf8(loaded.members[1].name, sizeof loaded.members[1].name, "Ann");
+    indigo_app_group_loaded(&app, &loaded);
+    CHECK(!app.group_pending);
+    CHECK(app.group.selected == 0);
+
+    /* A opens the rename keyboard; the new name submits the edit. */
+    app.request = INDIGO_REQUEST_NONE;
+    in = (indigo_input) {0};
+    in.confirm = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME);
+    CHECK(app.group_edit == INDIGO_CHAT_GROUP_EDIT_RENAME);
+    CHECK(strcmp(app.group_name, "Weekend crew") == 0);
+    indigo_app_set_chat_group_name(&app, "Weekend crew 2");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_GROUP_RENAME);
+    indigo_app_chat_group_done(&app);
+    CHECK(strcmp(app.group_status, "Group updated.") == 0);
+
+    /* Y opens the add-members keyboard, X removes the selected member, and ZR
+     * asks for the join link. */
+    app.request = INDIGO_REQUEST_NONE;
+    in = (indigo_input) {0};
+    in.like = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS);
+    CHECK(app.group_edit == INDIGO_CHAT_GROUP_EDIT_ADD);
+    indigo_app_set_chat_group_members(&app, "did:plc:bob");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_GROUP_ADD);
+
+    app.request = INDIGO_REQUEST_NONE;
+    app.group_pending = false;
+    in = (indigo_input) {0};
+    in.repost = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_GROUP_REMOVE);
+
+    app.request = INDIGO_REQUEST_NONE;
+    app.group_pending = false;
+    in = (indigo_input) {0};
+    in.zr = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_CHAT_JOIN_LINK);
+
+    /* An empty member list is refused before a job is started. */
+    indigo_app_set_chat_group_members(&app, "   ");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
+    CHECK(app.group_status_is_error);
+}
+
+static void
 test_chat_thread_and_open(void)
 {
     indigo_app app;
@@ -1571,6 +1733,58 @@ test_chat_screens_use_both(void)
     indigo_layout_build(&app, &in, &top, &bottom);
     CHECK(text_commands(&top) >= 2);
     CHECK(text_commands(&bottom) >= 2);
+
+    app.screen = INDIGO_SCREEN_CHAT_GROUP;
+    app.group.loaded = true;
+    indigo_copy_utf8(app.group.name, sizeof app.group.name, "Weekend crew");
+    app.group.count = 1;
+    app.group.total = 1;
+    indigo_copy_utf8(app.group.members[0].name, sizeof app.group.members[0].name, "Ann");
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_commands(&top) >= 2);
+    CHECK(text_commands(&bottom) >= 2);
+}
+
+static unsigned
+display_content(const indigo_canvas *c)
+{
+    unsigned n = 0;
+
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind != INDIGO_CMD_RECT) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static void
+test_every_screen_uses_both_displays(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+
+    /* The contract in AGENTS.md section 6: every screen has content on both
+     * displays, and the image viewer's top display is a picture rather than
+     * text. Build each screen from the state the layout expects. */
+    indigo_app_init(&app);
+    indigo_copy_utf8(app.image.url, sizeof app.image.url,
+                     "https://cdn.example/img.jpg");
+    app.image.aspect_w = 4;
+    app.image.aspect_h = 3;
+    indigo_copy_utf8(app.menu.title, sizeof app.menu.title, "Post");
+
+    for (int screen = INDIGO_SCREEN_SIGNIN; screen < INDIGO_SCREEN_COUNT; screen++) {
+        app.screen = (indigo_screen) screen;
+        indigo_layout_build(&app, &in, &top, &bottom);
+        CHECK(top.width == INDIGO_TOP_WIDTH && top.height == INDIGO_TOP_HEIGHT);
+        CHECK(bottom.width == INDIGO_BOTTOM_WIDTH && bottom.height == INDIGO_BOTTOM_HEIGHT);
+        CHECK(display_content(&top) >= 2 ||
+              (app.screen == INDIGO_SCREEN_IMAGE && top.image_count > 0));
+        CHECK(display_content(&bottom) >= 2);
+    }
 }
 
 static void
@@ -1711,7 +1925,9 @@ test_notifications(void)
     indigo_app app;
     indigo_input in = {0};
     indigo_field f;
-    indigo_notification items[2] = {0};
+    indigo_notification items[3] = {0};
+    indigo_notification more[1] = {0};
+    static indigo_notification many[INDIGO_NOTIFICATION_MAX];
 
     indigo_app_init(&app);
     app.screen = INDIGO_SCREEN_HOME;
@@ -1731,12 +1947,35 @@ test_notifications(void)
     indigo_copy_utf8(items[0].handle, sizeof items[0].handle, "rhi.example.social");
     items[1].kind = INDIGO_NOTE_REPLY;
     indigo_copy_utf8(items[1].target_uri, sizeof items[1].target_uri, "at://a/app.bsky.feed.post/9");
-    indigo_app_notifications_loaded(&app, items, 2);
-    CHECK(app.notifications.count == 2);
+    items[2].kind = INDIGO_NOTE_MENTION;
+    indigo_copy_utf8(items[2].target_uri, sizeof items[2].target_uri,
+                     "at://a/app.bsky.feed.post/10");
+    indigo_app_notifications_loaded(&app, items, 3, "next-page");
+    CHECK(app.notifications.count == 3);
+    CHECK(strcmp(app.notifications.cursor, "next-page") == 0);
+    CHECK(app.notifications.has_more);
 
+    /* Paging is deliberate: moving onto a middle row asks for nothing. */
     in = (indigo_input) {0};
     in.down = true;
     indigo_app_update(&app, &in);
+    CHECK(app.notifications.selected == 1);
+    CHECK(app.request == INDIGO_REQUEST_NONE);
+
+    /* Reaching the last row asks for the page the cursor names. */
+    indigo_app_update(&app, &in);
+    CHECK(app.notifications.selected == 2);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NOTIFICATIONS_MORE);
+
+    /* The page lands appended, and a page with no cursor ends the paging. */
+    more[0].kind = INDIGO_NOTE_LIKE;
+    indigo_copy_utf8(more[0].handle, sizeof more[0].handle, "later.example");
+    indigo_app_notifications_loaded(&app, more, 1, NULL);
+    CHECK(app.notifications.count == 4);
+    CHECK(strcmp(app.notifications.items[3].handle, "later.example") == 0);
+    CHECK(!app.notifications.has_more);
+    CHECK(!indigo_notifications_wants_page(&app.notifications));
+
     in = (indigo_input) {0};
     in.confirm = true;
     indigo_app_update(&app, &in);
@@ -1747,6 +1986,56 @@ test_notifications(void)
     in.back = true;
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_NOTIFICATIONS);
+
+    /* A refresh replaces the list and resets the cursor rather than appending
+     * the new first page under the old rows. */
+    indigo_notifications_begin_fetch(&app.notifications, true);
+    CHECK(app.notifications.loading);
+    CHECK(app.notifications.count == 0);
+    indigo_app_notifications_loaded(&app, more, 1, "another");
+    CHECK(app.notifications.count == 1);
+    CHECK(app.notifications.selected == 0);
+    CHECK(app.notifications.scroll == 0);
+    CHECK(strcmp(app.notifications.cursor, "another") == 0);
+    CHECK(app.notifications.has_more);
+
+    /* A failed page leaves what is already readable on screen. */
+    indigo_app_notifications_failed(&app, "Network is down.");
+    CHECK(!app.notifications.loading);
+    CHECK(app.notifications.status_is_error);
+    CHECK(app.notifications.count == 1);
+    CHECK(!app.notifications.has_more);
+    CHECK(strcmp(app.notifications.status, "Network is down.") == 0);
+    CHECK(!indigo_notifications_wants_page(&app.notifications));
+
+    /* An empty first page says so instead of showing a blank list. */
+    indigo_notifications_begin_fetch(&app.notifications, true);
+    indigo_app_notifications_loaded(&app, NULL, 0, NULL);
+    CHECK(app.notifications.count == 0);
+    CHECK(!app.notifications.has_more);
+    CHECK(strcmp(app.notifications.status, "No notifications yet.") == 0);
+
+    /* The window is 30 rows: a full list takes no more, and a cursor that would
+     * ask for rows with nowhere to go is not kept. */
+    indigo_notifications_begin_fetch(&app.notifications, true);
+    for (unsigned i = 0; i < INDIGO_NOTIFICATION_MAX; i++) {
+        memset(&many[i], 0, sizeof many[i]);
+        many[i].kind = INDIGO_NOTE_LIKE;
+    }
+    indigo_app_notifications_loaded(&app, many, INDIGO_NOTIFICATION_MAX, "more");
+    CHECK(app.notifications.count == INDIGO_NOTIFICATION_MAX);
+    CHECK(!app.notifications.has_more);
+    CHECK(!indigo_notifications_wants_page(&app.notifications));
+
+    /* A page that arrives with two rows of room adds two and stops. */
+    indigo_notifications_begin_fetch(&app.notifications, true);
+    indigo_app_notifications_loaded(&app, many, INDIGO_NOTIFICATION_MAX - 2, "more");
+    CHECK(app.notifications.count == INDIGO_NOTIFICATION_MAX - 2);
+    CHECK(app.notifications.has_more);
+    indigo_notifications_begin_fetch(&app.notifications, false);
+    indigo_app_notifications_loaded(&app, many, 5, "still");
+    CHECK(app.notifications.count == INDIGO_NOTIFICATION_MAX);
+    CHECK(!app.notifications.has_more);
 }
 
 static void
@@ -2064,7 +2353,7 @@ test_settings_defaults_and_clamp(void)
     indigo_settings s;
 
     indigo_settings_defaults(&s);
-    CHECK(s.theme == INDIGO_THEME_AUTO);
+    CHECK(s.theme == INDIGO_THEME_DARK);
     CHECK(s.text_scale == INDIGO_TEXT_SCALE_NORMAL);
     CHECK(!s.reduce_motion);
     CHECK(!s.high_contrast);
@@ -2077,9 +2366,14 @@ test_settings_defaults_and_clamp(void)
     s.text_scale = (indigo_text_scale) 101;
     memset(s.default_feed, 'a', sizeof s.default_feed);
     indigo_settings_clamp(&s);
-    CHECK(s.theme == INDIGO_THEME_AUTO);
+    CHECK(s.theme == INDIGO_THEME_DARK);
     CHECK(s.text_scale == INDIGO_TEXT_SCALE_NORMAL);
     CHECK(s.default_feed[INDIGO_SETTINGS_FEED_MAX - 1] == '\0');
+
+    /* AUTO is a legacy file value, not a state the UI can show. */
+    s.theme = INDIGO_THEME_AUTO;
+    indigo_settings_clamp(&s);
+    CHECK(s.theme == INDIGO_THEME_DARK);
 }
 
 static void
@@ -2146,7 +2440,7 @@ test_settings_codec(void)
               INDIGO_CODEC_OK);
         CHECK(out.large_targets);
         CHECK(out.alt_text);
-        CHECK(out.theme == INDIGO_THEME_AUTO);
+        CHECK(out.theme == INDIGO_THEME_DARK);
         CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
         CHECK(out.default_feed[0] == '\0');
     }
@@ -2158,7 +2452,7 @@ test_settings_codec(void)
 
         CHECK(indigo_settings_decode(mixed, strlen(mixed), &out) ==
               INDIGO_CODEC_OK);
-        CHECK(out.theme == INDIGO_THEME_AUTO);              /* out of range */
+        CHECK(out.theme == INDIGO_THEME_DARK);              /* out of range */
         CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);  /* in range, but
                                                              * not a scale */
         CHECK(!out.high_contrast);                          /* not a boolean */
@@ -2172,7 +2466,7 @@ test_settings_codec(void)
                            "reduce_motion=2\nend\n";
 
         CHECK(indigo_settings_decode(junk, strlen(junk), &out) == INDIGO_CODEC_OK);
-        CHECK(out.theme == INDIGO_THEME_AUTO);
+        CHECK(out.theme == INDIGO_THEME_DARK);
         CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
         CHECK(!out.reduce_motion);
     }
@@ -2182,6 +2476,14 @@ test_settings_codec(void)
         const char *crlf = "indigo-settings 1\r\ntheme=2\r\nend\r\n";
 
         CHECK(indigo_settings_decode(crlf, strlen(crlf), &out) == INDIGO_CODEC_OK);
+        CHECK(out.theme == INDIGO_THEME_DARK);
+    }
+
+    /* A legacy Auto value loads as the Dark the old build actually drew. */
+    {
+        const char *legacy = "indigo-settings 1\ntheme=0\nend\n";
+
+        CHECK(indigo_settings_decode(legacy, strlen(legacy), &out) == INDIGO_CODEC_OK);
         CHECK(out.theme == INDIGO_THEME_DARK);
     }
 
@@ -2218,7 +2520,7 @@ test_settings_codec(void)
     in.text_scale = (indigo_text_scale) 7;
     CHECK(indigo_settings_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
     CHECK(indigo_settings_decode(buf, len, &out) == INDIGO_CODEC_OK);
-    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.theme == INDIGO_THEME_DARK);
     CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
 }
 
@@ -2688,7 +2990,7 @@ test_settings_store(void)
     /* A first run has no file, and that is not an error: the caller gets the
      * defaults and carries on. */
     CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
-    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.theme == INDIGO_THEME_DARK);
     CHECK(out.default_feed[0] == '\0');
 
     indigo_settings_defaults(&in);
@@ -2716,7 +3018,7 @@ test_settings_store(void)
         fclose(f);
     }
     CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_UNREADABLE);
-    CHECK(out.theme == INDIGO_THEME_AUTO);
+    CHECK(out.theme == INDIGO_THEME_DARK);
     CHECK(out.text_scale == INDIGO_TEXT_SCALE_NORMAL);
     CHECK(indigo_settings_store_load(path, &out) == INDIGO_STORE_MISSING);
     f = fopen(bad, "rb");
@@ -2747,11 +3049,49 @@ test_palette_follows_settings(void)
     CHECK(dark.bg_top != light.bg_top);
     CHECK(dark.text != light.text);
 
+    CHECK(dark.card != light.card);
+    CHECK(dark.link != light.link);
+    CHECK(dark.error != light.error);
+    CHECK(dark.liked != light.liked);
+    CHECK(dark.reposted != light.reposted);
+
     s.high_contrast = true;
     contrast = indigo_layout_palette(&s);
     CHECK(contrast.bg_top == INDIGO_RGBA(0, 0, 0, 255));
     CHECK(contrast.text == INDIGO_RGBA(255, 255, 255, 255));
     CHECK(contrast.bg_top != light.bg_top);
+    CHECK(contrast.card != dark.card);
+    CHECK(contrast.link != dark.link);
+}
+
+static void
+test_light_theme_reaches_the_layout(void)
+{
+    static indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top, bottom;
+    indigo_palette light;
+
+    /* The palette used to change only the two backgrounds, leaving white text
+     * and white cards on a near-white screen. Every surface the layout draws
+     * must come from the same palette. */
+    indigo_app_init(&app);
+    app.settings.theme = INDIGO_THEME_LIGHT;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    light = indigo_layout_palette(&app.settings);
+    CHECK(has_rect_colour(&top, light.bg_top));
+    CHECK(has_rect_colour(&bottom, light.bg_bottom));
+    CHECK(has_text_colour(&top, light.text));
+    CHECK(has_text_colour(&bottom, light.text));
+    CHECK(light.text != INDIGO_RGBA(255, 255, 255, 255));
+
+    /* AUTO has no system theme to follow on a 3DS. It reads as Dark rather
+     * than claiming to follow a setting that does not exist. */
+    indigo_app_open_settings(&app);
+    app.settings.theme = INDIGO_THEME_AUTO;
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(text_has(&top, "Theme: Dark"));
+    CHECK(!text_has(&top, "Auto"));
 }
 
 static void
@@ -3555,6 +3895,28 @@ text_commands(const indigo_canvas *c)
         }
     }
     return n;
+}
+
+static bool
+has_text_colour(const indigo_canvas *c, uint32_t colour)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind == INDIGO_CMD_TEXT && c->cmds[i].color == colour) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool
+has_rect_colour(const indigo_canvas *c, uint32_t colour)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind == INDIGO_CMD_RECT && c->cmds[i].color == colour) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* How many lines of text the layout gave the post. The block is identified by
@@ -5181,6 +5543,16 @@ test_settings_screen(void)
     indigo_app_update(&app, &in);
     CHECK(app.settings_selected == 0);
     CHECK(app.settings.theme == INDIGO_THEME_LIGHT);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
+
+    /* A second tap goes back to Dark instead of cycling through a third
+     * "Auto" state the screen cannot honour. */
+    in = (indigo_input) {0};
+    in.touch_pressed = true;
+    in.touch_x = (int) (r.x + 4);
+    in.touch_y = (int) (r.y + 4);
+    indigo_app_update(&app, &in);
+    CHECK(app.settings.theme == INDIGO_THEME_DARK);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_SAVE_SETTINGS);
 
     /* The last settings row is reachable and toggles the setting it names,
@@ -6960,9 +7332,12 @@ main(void)
     test_compose_thread_touch_flow();
     test_partial_thread_publish_clears_draft();
     test_messages_list();
+    test_chat_group();
+    test_chat_group_flow();
     test_chat_thread_and_open();
     test_chat_start_and_decisions();
     test_chat_screens_use_both();
+    test_every_screen_uses_both_displays();
     test_chat_reply();
     test_messages_loaded_and_failed();
     test_notifications();
@@ -7039,6 +7414,7 @@ main(void)
     test_shapes_stay_on_screen();
     test_settings_screen_shows_the_build();
     test_palette_follows_settings();
+    test_light_theme_reaches_the_layout();
     test_layout_draws_post_images();
     test_layout_draws_video_poster();
     test_video_duration();
