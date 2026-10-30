@@ -3,12 +3,9 @@
  * against a mock PDS on 127.0.0.1. `make e2e` builds this with INDIGO_SESSION_HOST
  * and a pthread-backed <3ds.h>; nothing here runs on the console.
  *
- * The scenarios go through the same submit calls the screens use, so the request
- * bodies and the state each screen reads are exercised, not a copy of them.
- *
- * Groups are not covered here: the group session API this branch was written
- * against has not landed, so those scenarios stay on the backup branch until it
- * does.
+ * The group scenarios go through the same submit calls the screens use, so the
+ * member resolution, the request bodies and the state the group screen reads
+ * are all exercised, not a copy of them.
  */
 
 #include "atproto/session.h"
@@ -69,6 +66,417 @@ wait_for_kind(indigo_session_event_kind kind, indigo_session_event *out)
     return true;
 }
 
+/* The createGroup/getConvo answer: a group with three members and an optional
+ * join link. */
+static const char *
+group_view_json(const char *id, const char *name, const char *code,
+                const char *status)
+{
+    static char buf[4][2048];
+    static int k;
+    char *b = buf[k++ & 3];
+    char link[256] = "";
+
+    if (code) {
+        snprintf(link, sizeof link,
+                 ",\"joinLink\":{\"code\":\"%s\",\"enabledStatus\":\"%s\","
+                 "\"requireApproval\":false,\"joinRule\":\"anyone\"}",
+                 code, status ? status : "enabled");
+    }
+    snprintf(b, 2048,
+             "{\"convo\":{\"id\":\"%s\",\"rev\":\"1\",\"unreadCount\":0,"
+             "\"members\":[{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\"},"
+             "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\",\"displayName\":\"bob\"},"
+             "{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\","
+             "\"displayName\":\"carol\"}],"
+             "\"kind\":{\"$type\":\"chat.bsky.convo.defs#groupConvo\",\"name\":\"%s\","
+             "\"memberCount\":3,\"memberLimit\":50,\"joinRequestCount\":0%s}}}",
+             id, name, link);
+    return b;
+}
+
+static const char *
+group_members_json(void)
+{
+    return "{\"members\":["
+           "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\"},"
+           "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\",\"displayName\":\"bob\"},"
+           "{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\","
+           "\"displayName\":\"carol\"}]}";
+}
+
+static const char *
+join_link_json(const char *status)
+{
+    static char buf[2][256];
+    static int k;
+    char *b = buf[k++ & 1];
+
+    snprintf(b, 256,
+             "{\"joinLink\":{\"code\":\"join-code\",\"enabledStatus\":\"%s\","
+             "\"requireApproval\":false,\"joinRule\":\"anyone\","
+             "\"createdAt\":\"2026-10-01T10:00:00.000Z\"}}",
+             status);
+    return b;
+}
+
+/* The join-request answer: two people asking to join g1. */
+static const char *
+join_requests_two(void)
+{
+    return "{\"requests\":["
+           "{\"convoId\":\"g1\",\"requestedBy\":{\"did\":\"did:plc:bob\","
+           "\"handle\":\"bob.test\",\"displayName\":\"bob\"},"
+           "\"requestedAt\":\"2026-10-01T10:00:00.000Z\"},"
+           "{\"convoId\":\"g1\",\"requestedBy\":{\"did\":\"did:plc:dave\","
+           "\"handle\":\"dave.test\",\"displayName\":\"dave\"},"
+           "\"requestedAt\":\"2026-10-01T10:00:00.000Z\"}]}";
+}
+
+static void
+test_group_create_and_join_link(const char *data_dir)
+{
+    e2e_pds *pds = NULL;
+    int port = 0;
+    char svc[64];
+    char session_path[512];
+    indigo_session_event ev;
+
+    CHECK(e2e_pds_start(&pds, &port));
+    if (!pds) {
+        return;
+    }
+    snprintf(svc, sizeof svc, "http://127.0.0.1:%d", port);
+    snprintf(session_path, sizeof session_path, "%s/session.dat", data_dir);
+    unlink(session_path);
+
+    e2e_pds_route(pds, "com.atproto.server.createSession", 200,
+                  "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\","
+                  "\"accessJwt\":\"a.b.c\",\"refreshJwt\":\"d.e.f\",\"active\":true}");
+    e2e_pds_route(pds, "com.atproto.identity.resolveHandle", 200,
+                  "{\"did\":\"did:plc:alice\"}");
+    e2e_pds_route(pds, "chat.bsky.group.createGroup", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvoMembers", 200,
+                  group_members_json());
+    e2e_pds_route(pds, "chat.bsky.group.createJoinLink", 200,
+                  join_link_json("enabled"));
+    e2e_pds_route(pds, "chat.bsky.group.disableJoinLink", 200,
+                  join_link_json("disabled"));
+    e2e_pds_route(pds, "chat.bsky.group.enableJoinLink", 200,
+                  join_link_json("enabled"));
+
+    CHECK(indigo_session_start(session_path));
+    CHECK(indigo_session_submit_login(svc, "ewancroft.test", "app-pass"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SIGNED_IN, &ev));
+
+    /* An entry that is neither a handle nor a DID stops before any request,
+     * and names the entry back. */
+    const int creates_before = e2e_pds_hits(pds, "chat.bsky.group.createGroup");
+    CHECK(indigo_session_submit_chat_group_create("Weekend crew", "not a handle"));
+    CHECK(wait_event(&ev));
+    CHECK(ev.kind == INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_FAILED);
+    CHECK(strstr(ev.message, "not a handle") != NULL);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.createGroup") == creates_before);
+
+    /* The handle resolves to a DID; the viewer and a duplicate are dropped,
+     * and the request carries DIDs rather than the text that was typed. */
+    const int resolves_before = e2e_pds_hits(pds, "com.atproto.identity.resolveHandle");
+    CHECK(indigo_session_submit_chat_group_create(
+        "Weekend crew", "@alice.test, did:plc:bob, did:plc:abc, did:plc:bob"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_DONE, &ev));
+    CHECK(ev.page_count == 3);
+    CHECK(e2e_pds_hits(pds, "com.atproto.identity.resolveHandle") ==
+          resolves_before + 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.createGroup") ==
+          creates_before + 1);
+    CHECK(e2e_pds_request_contains(pds, "chat.bsky.group.createGroup",
+        "{\"members\":[\"did:plc:alice\",\"did:plc:bob\"],\"name\":\"Weekend crew\"}"));
+    CHECK(!e2e_pds_request_contains(pds, "chat.bsky.group.createGroup",
+        "alice.test"));
+    CHECK(!e2e_pds_request_contains(pds, "chat.bsky.group.createGroup",
+        "did:plc:abc"));
+    CHECK_STR(indigo_session_chat_group_started(), "g1");
+
+    const indigo_chat_group *group = indigo_session_chat_group();
+    CHECK(group->loaded);
+    CHECK_STR(group->name, "Weekend crew");
+    CHECK(group->total == 3);
+    CHECK(group->count == 3);
+    CHECK(group->join_link_code[0] == '\0');
+    CHECK(group->join_link_url[0] == '\0');
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoMembers") == 1);
+
+    /* A failed create leaves no link and does not read the group back. */
+    e2e_pds_route(pds, "chat.bsky.group.createJoinLink", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_join_link_create("g1"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.createJoinLink") == 1);
+    group = indigo_session_chat_group();
+    CHECK(!group->join_link_enabled);
+    CHECK(group->join_link_code[0] == '\0');
+    CHECK(group->join_link_url[0] == '\0');
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 1);
+
+    /* Creating the link makes it, reads the group back and shows the public URL. */
+    e2e_pds_route(pds, "chat.bsky.group.createJoinLink", 200,
+                  join_link_json("enabled"));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", "join-code", "enabled"));
+    CHECK(indigo_session_submit_chat_join_link_create("g1"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.createJoinLink") == 2);
+    group = indigo_session_chat_group();
+    CHECK(group->join_link_enabled);
+    CHECK_STR(group->join_link_code, "join-code");
+    CHECK_STR(group->join_link_url, "https://bsky.app/chat/join-code");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 2);
+
+    /* Disabling toggles the existing link; it never creates a second one. */
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", "join-code", "disabled"));
+    CHECK(indigo_session_submit_chat_join_link_toggle("g1", true));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.disableJoinLink") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.createJoinLink") == 2);
+    group = indigo_session_chat_group();
+    CHECK(!group->join_link_enabled);
+    CHECK_STR(group->join_link_url, "https://bsky.app/chat/join-code");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 3);
+
+    /* A failed toggle keeps the last known state and is not retried. */
+    e2e_pds_route(pds, "chat.bsky.group.enableJoinLink", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_join_link_toggle("g1", false));
+    CHECK(wait_event(&ev));
+    CHECK(ev.kind == INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED);
+    group = indigo_session_chat_group();
+    CHECK(!group->join_link_enabled);
+    CHECK_STR(group->join_link_code, "join-code");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.enableJoinLink") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 3);
+
+    /* The next press enables it, one request, and the URL is unchanged. */
+    e2e_pds_route(pds, "chat.bsky.group.enableJoinLink", 200,
+                  join_link_json("enabled"));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", "join-code", "enabled"));
+    CHECK(indigo_session_submit_chat_join_link_toggle("g1", false));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE, &ev));
+    group = indigo_session_chat_group();
+    CHECK(group->join_link_enabled);
+    CHECK_STR(group->join_link_url, "https://bsky.app/chat/join-code");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.enableJoinLink") == 2);
+
+    indigo_session_stop();
+    e2e_pds_free(pds);
+}
+
+/* A group's settings and pending join requests, from the detail fetch through
+ * rename, add and remove to the two decisions. Every request goes through the
+ * same submit calls the screens use. */
+static void
+test_group_settings_and_join_requests(const char *data_dir)
+{
+    e2e_pds *pds = NULL;
+    int port = 0;
+    char svc[64];
+    char session_path[512];
+    indigo_session_event ev;
+
+    CHECK(e2e_pds_start(&pds, &port));
+    if (!pds) {
+        return;
+    }
+    snprintf(svc, sizeof svc, "http://127.0.0.1:%d", port);
+    snprintf(session_path, sizeof session_path, "%s/session-members.dat", data_dir);
+    unlink(session_path);
+
+    e2e_pds_route(pds, "com.atproto.server.createSession", 200,
+                  "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\","
+                  "\"accessJwt\":\"a.b.c\",\"refreshJwt\":\"d.e.f\",\"active\":true}");
+    e2e_pds_route(pds, "com.atproto.identity.resolveHandle", 200,
+                  "{\"did\":\"did:plc:dave\"}");
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvoMembers", 200,
+                  group_members_json());
+    e2e_pds_route(pds, "chat.bsky.group.editGroup", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.group.addMembers", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.group.removeMembers", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.group.listJoinRequests", 200,
+                  join_requests_two());
+    e2e_pds_route(pds, "chat.bsky.group.approveJoinRequest", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.group.rejectJoinRequest", 200, "{}");
+
+    CHECK(indigo_session_start(session_path));
+    CHECK(indigo_session_submit_login(svc, "ewancroft.test", "app-pass"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SIGNED_IN, &ev));
+
+    /* Opening the settings reads the convo and its full member list. */
+    CHECK(indigo_session_submit_chat_group_info("g1"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_PAGE, &ev));
+    CHECK(ev.page_count == 3);
+    const indigo_chat_group *group = indigo_session_chat_group();
+    CHECK(group->loaded);
+    CHECK_STR(group->name, "Weekend crew");
+    CHECK(group->count == 3);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoMembers") == 1);
+
+    /* A failed rename leaves the old name and does not read the group back. */
+    e2e_pds_route(pds, "chat.bsky.group.editGroup", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_group_rename("g1", "New name"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.editGroup") == 1);
+    group = indigo_session_chat_group();
+    CHECK_STR(group->name, "Weekend crew");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 1);
+
+    /* Rename sends the new name and reads the group back. */
+    e2e_pds_route(pds, "chat.bsky.group.editGroup", 200,
+                  group_view_json("g1", "New name", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "New name", NULL, NULL));
+    CHECK(indigo_session_submit_chat_group_rename("g1", "New name"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.editGroup") == 2);
+    CHECK(e2e_pds_request_contains(pds, "chat.bsky.group.editGroup", "New name"));
+    group = indigo_session_chat_group();
+    CHECK_STR(group->name, "New name");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 2);
+
+    /* A failed add keeps the member list as it was, and the next press works. */
+    const int resolves_before = e2e_pds_hits(pds, "com.atproto.identity.resolveHandle");
+    e2e_pds_route(pds, "chat.bsky.group.addMembers", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_group_add("g1", "@dave.test"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.addMembers") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoMembers") == 2);
+    group = indigo_session_chat_group();
+    CHECK(group->count == 3);
+    CHECK(indigo_chat_group_member_index(group, "did:plc:dave") == -1);
+
+    /* Adding a handle resolves it, then sends the DID, and the detail fetch
+     * brings the new member in. */
+    e2e_pds_route(pds, "chat.bsky.group.addMembers", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvoMembers", 200,
+                  "{\"members\":["
+                  "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\"},"
+                  "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\"},"
+                  "{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\"},"
+                  "{\"did\":\"did:plc:dave\",\"handle\":\"dave.test\"}]}");
+    CHECK(indigo_session_submit_chat_group_add("g1", "@dave.test"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE, &ev));
+    CHECK(ev.page_count == 4);
+    CHECK(e2e_pds_hits(pds, "com.atproto.identity.resolveHandle") ==
+          resolves_before + 2);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.addMembers") == 2);
+    CHECK(e2e_pds_request_contains(pds, "chat.bsky.group.addMembers",
+                                   "did:plc:dave"));
+    CHECK(!e2e_pds_request_contains(pds, "chat.bsky.group.addMembers",
+                                    "dave.test"));
+    group = indigo_session_chat_group();
+    CHECK(group->count == 4);
+    CHECK(indigo_chat_group_member_index(group, "did:plc:dave") == 3);
+
+    /* A failed remove keeps the member; the next press removes it. */
+    e2e_pds_route(pds, "chat.bsky.group.removeMembers", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_group_remove("g1", "did:plc:dave"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.removeMembers") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoMembers") == 3);
+    group = indigo_session_chat_group();
+    CHECK(group->count == 4);
+    CHECK(indigo_chat_group_member_index(group, "did:plc:dave") == 3);
+
+    /* Removing the member sends the DID and reads back without it. */
+    e2e_pds_route(pds, "chat.bsky.group.removeMembers", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getConvoMembers", 200,
+                  group_members_json());
+    CHECK(indigo_session_submit_chat_group_remove("g1", "did:plc:dave"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE, &ev));
+    CHECK(ev.page_count == 3);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.removeMembers") == 2);
+    CHECK(e2e_pds_request_contains(pds, "chat.bsky.group.removeMembers",
+                                   "did:plc:dave"));
+    group = indigo_session_chat_group();
+    CHECK(group->count == 3);
+    CHECK(indigo_chat_group_member_index(group, "did:plc:dave") == -1);
+
+    /* The two pending requests are listed, then settled one at a time; each
+     * decision removes its own row and never refetches the list. */
+    CHECK(indigo_session_submit_chat_join_requests("g1", false));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE, &ev));
+    const indigo_chat_join_requests *requests = indigo_session_chat_join_requests();
+    CHECK(requests->count == 2);
+    CHECK(strcmp(requests->items[0].did, "did:plc:bob") == 0);
+    CHECK(strcmp(requests->items[0].name, "bob") == 0);
+    CHECK(strcmp(requests->items[1].did, "did:plc:dave") == 0);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.listJoinRequests") == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.approveJoinRequest") == 0);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.rejectJoinRequest") == 0);
+
+    /* A failed approve keeps both rows and is not retried by itself. */
+    e2e_pds_route(pds, "chat.bsky.group.approveJoinRequest", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_join_approve("g1", "did:plc:bob"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.approveJoinRequest") == 1);
+    requests = indigo_session_chat_join_requests();
+    CHECK(requests->count == 2);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.listJoinRequests") == 1);
+
+    /* The next press approves the row and removes it. */
+    e2e_pds_route(pds, "chat.bsky.group.approveJoinRequest", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    CHECK(indigo_session_submit_chat_join_approve("g1", "did:plc:bob"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.approveJoinRequest") == 2);
+    requests = indigo_session_chat_join_requests();
+    CHECK(requests->count == 1);
+    CHECK(strcmp(requests->items[0].did, "did:plc:dave") == 0);
+
+    /* A failed reject keeps the last row; the next press rejects it. */
+    e2e_pds_route(pds, "chat.bsky.group.rejectJoinRequest", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_chat_join_reject("g1", "did:plc:dave"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.rejectJoinRequest") == 1);
+    CHECK(indigo_session_chat_join_requests()->count == 1);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.listJoinRequests") == 1);
+
+    e2e_pds_route(pds, "chat.bsky.group.rejectJoinRequest", 200, "{}");
+    CHECK(indigo_session_submit_chat_join_reject("g1", "did:plc:dave"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.rejectJoinRequest") == 2);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.approveJoinRequest") == 2);
+    CHECK(indigo_session_chat_join_requests()->count == 0);
+    CHECK(e2e_pds_hits(pds, "chat.bsky.group.listJoinRequests") == 1);
+
+    indigo_session_stop();
+    e2e_pds_free(pds);
+}
+
 /* A postView in the shape getTimeline answers with. */
 static const char *
 post_json(const char *n, const char *text)
@@ -87,6 +495,9 @@ post_json(const char *n, const char *text)
     return b;
 }
 
+/* The timeline, one conversation's messages, the inbox and a reply, through
+ * the same submits the screens use. The read jobs keep their last good page
+ * when the next fetch fails. */
 static void
 test_timeline_and_chat(const char *data_dir)
 {
@@ -503,14 +914,14 @@ test_chat_start(const char *data_dir)
                   "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
     CHECK(indigo_session_submit_chat_start("alice.test"));
     CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_START_FAILED, &ev));
-    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(strstr(ev.message, "Could not look up that handle.") != NULL);
     CHECK(e2e_pds_hits(pds, "com.atproto.identity.resolveHandle") == 3);
     CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoForMembers") == 0);
 
     e2e_pds_route(pds, "com.atproto.identity.resolveHandle", 200, "{}");
     CHECK(indigo_session_submit_chat_start("alice.test"));
     CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_START_FAILED, &ev));
-    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(strstr(ev.message, "Could not look up that handle.") != NULL);
     CHECK(e2e_pds_hits(pds, "com.atproto.identity.resolveHandle") == 4);
     CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvoForMembers") == 0);
 
@@ -640,6 +1051,7 @@ test_search(const char *data_dir)
     CHECK(count == 3);
     CHECK_STR(actors[2].handle, "erin.test");
     CHECK(e2e_pds_hits(pds, "app.bsky.actor.searchActors") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.actor.searchActors", "cursor=ac"));
 
     /* No query is refused before a request is made, and a NULL one is not even
      * taken as a job. */
@@ -696,6 +1108,7 @@ test_search(const char *data_dir)
     CHECK(posts == 3);
     CHECK_STR(hits[2].text, "third hit");
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.searchPosts") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.feed.searchPosts", "cursor=pc"));
 
     /* A failed post search keeps the last page too. */
     e2e_pds_route(pds, "app.bsky.feed.searchPosts", 500,
@@ -729,6 +1142,7 @@ test_search(const char *data_dir)
     CHECK(posts == 3);
     CHECK_STR(hits[2].text, "third of mine");
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.getAuthorFeed") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.feed.getAuthorFeed", "cursor=fc"));
 
     CHECK(!indigo_session_submit_author_feed(NULL, 0, NULL));
     CHECK(!indigo_session_submit_author_feed("", 0, NULL));
@@ -748,6 +1162,217 @@ test_search(const char *data_dir)
 /* Curated lists, one list's members and the muted and blocked accounts. The
  * members and the moderation lists share the actor array the search uses, so
  * each fetch is checked against what the previous one left there. */
+static void
+test_lists_and_moderation(const char *data_dir)
+{
+    e2e_pds *pds = NULL;
+    int port = 0;
+    char svc[64];
+    char session_path[512];
+    indigo_session_event ev;
+
+    CHECK(e2e_pds_start(&pds, &port));
+    if (!pds) {
+        return;
+    }
+    snprintf(svc, sizeof svc, "http://127.0.0.1:%d", port);
+    snprintf(session_path, sizeof session_path, "%s/session-lists.dat", data_dir);
+    unlink(session_path);
+
+    e2e_pds_route(pds, "com.atproto.server.createSession", 200,
+                  "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\","
+                  "\"accessJwt\":\"a.b.c\",\"refreshJwt\":\"d.e.f\",\"active\":true}");
+    /* A list with no URI cannot be opened and is left out. */
+    e2e_pds_route(pds, "app.bsky.graph.getLists", 200,
+                  "{\"lists\":["
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\",\"name\":\"Friends\","
+                  "\"description\":\"close friends\"},"
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/2\",\"name\":\"News\"},"
+                  "{\"name\":\"No URI\"}],\"cursor\":\"lc\"}");
+    e2e_pds_route(pds, "app.bsky.graph.getList", 200,
+                  "{\"list\":{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\","
+                  "\"name\":\"Friends\"},\"items\":["
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.listitem/1\","
+                  "\"subject\":{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\","
+                  "\"displayName\":\"bob\"}},"
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.listitem/2\","
+                  "\"subject\":{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\"}}],"
+                  "\"cursor\":\"mc\"}");
+    e2e_pds_route(pds, "app.bsky.graph.getMutes", 200,
+                  "{\"mutes\":["
+                  "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\",\"displayName\":\"bob\"},"
+                  "{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\"}],"
+                  "\"cursor\":\"muc\"}");
+    e2e_pds_route(pds, "app.bsky.graph.getBlocks", 200,
+                  "{\"blocks\":[{\"did\":\"did:plc:dave\",\"handle\":\"dave.test\","
+                  "\"displayName\":\"dave\"}]}");
+
+    CHECK(indigo_session_start(session_path));
+    CHECK(indigo_session_submit_login(svc, "ewancroft.test", "app-pass"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SIGNED_IN, &ev));
+
+    /* Two lists, in order, with the cursor for the next page. */
+    CHECK(indigo_session_submit_lists(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LISTS_PAGE, &ev));
+    CHECK(ev.page_count == 2);
+    CHECK_STR(ev.cursor, "lc");
+    unsigned count = 0;
+    const indigo_list *lists = NULL;
+    indigo_session_lists_results(&lists, &count);
+    CHECK(count == 2);
+    CHECK_STR(lists[0].uri, "at://did:plc:abc/app.bsky.graph.list/1");
+    CHECK_STR(lists[0].name, "Friends");
+    CHECK_STR(lists[0].description, "close friends");
+    CHECK_STR(lists[1].name, "News");
+    CHECK_STR(lists[1].description, "");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getLists") == 1);
+
+    /* The cursor asks for a second page, which appends rather than replaces. */
+    e2e_pds_route(pds, "app.bsky.graph.getLists", 200,
+                  "{\"lists\":[{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/3\","
+                  "\"name\":\"Music\"}]}");
+    CHECK(indigo_session_submit_lists("lc"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LISTS_PAGE, &ev));
+    CHECK(ev.page_count == 3);
+    CHECK_STR(ev.cursor, "");
+    indigo_session_lists_results(&lists, &count);
+    CHECK(count == 3);
+    CHECK_STR(lists[2].name, "Music");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getLists") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.graph.getLists", "cursor=lc"));
+
+    /* A fresh fetch replaces the held lists. */
+    e2e_pds_route(pds, "app.bsky.graph.getLists", 200,
+                  "{\"lists\":[{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/2\","
+                  "\"name\":\"News\"}]}");
+    CHECK(indigo_session_submit_lists(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LISTS_PAGE, &ev));
+    CHECK(ev.page_count == 1);
+    indigo_session_lists_results(&lists, &count);
+    CHECK(count == 1);
+    CHECK_STR(lists[0].name, "News");
+    CHECK_STR(ev.cursor, "");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getLists") == 3);
+
+    /* A failed fetch keeps the lists that are already there. */
+    e2e_pds_route(pds, "app.bsky.graph.getLists", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_lists(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    indigo_session_lists_results(&lists, &count);
+    CHECK(count == 1);
+    CHECK_STR(lists[0].name, "News");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getLists") == 4);
+
+    /* One list's members land in the actor array and carry the cursor. */
+    CHECK(!indigo_session_submit_list_members(NULL, NULL));
+    CHECK(!indigo_session_submit_list_members("", NULL));
+    CHECK(indigo_session_submit_list_members("at://did:plc:abc/app.bsky.graph.list/1", NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 2);
+    CHECK_STR(ev.cursor, "mc");
+    const indigo_actor *actors = indigo_session_search_results(&count);
+    CHECK(count == 2);
+    CHECK_STR(actors[0].handle, "bob.test");
+    CHECK_STR(actors[0].display_name, "bob");
+    CHECK_STR(actors[1].handle, "carol.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getList") == 1);
+
+    /* A member page asked for by cursor appends too. */
+    e2e_pds_route(pds, "app.bsky.graph.getList", 200,
+                  "{\"list\":{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\","
+                  "\"name\":\"Friends\"},\"items\":[{"
+                  "\"uri\":\"at://did:plc:abc/app.bsky.graph.listitem/3\","
+                  "\"subject\":{\"did\":\"did:plc:dan\",\"handle\":\"dan.test\"}}]}");
+    CHECK(indigo_session_submit_list_members("at://did:plc:abc/app.bsky.graph.list/1", "mc"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 3);
+    CHECK_STR(ev.cursor, "");
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 3);
+    CHECK_STR(actors[2].handle, "dan.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getList") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.graph.getList", "cursor=mc"));
+
+    /* A fresh fetch of the members replaces the held ones. */
+    e2e_pds_route(pds, "app.bsky.graph.getList", 200,
+                  "{\"list\":{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\","
+                  "\"name\":\"Friends\"},\"items\":[{"
+                  "\"uri\":\"at://did:plc:abc/app.bsky.graph.listitem/4\","
+                  "\"subject\":{\"did\":\"did:plc:erin\",\"handle\":\"erin.test\"}}]}");
+    CHECK(indigo_session_submit_list_members("at://did:plc:abc/app.bsky.graph.list/1", NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 1);
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 1);
+    CHECK_STR(actors[0].handle, "erin.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getList") == 3);
+
+    /* A failed member fetch keeps the last page. */
+    e2e_pds_route(pds, "app.bsky.graph.getList", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_list_members("at://did:plc:abc/app.bsky.graph.list/1", NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 1);
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getList") == 4);
+
+    /* The muted and blocked accounts come through the same rows and event as
+     * every other list of people. */
+    CHECK(indigo_session_submit_mutes(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 2);
+    CHECK_STR(ev.cursor, "muc");
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 2);
+    CHECK_STR(actors[0].handle, "bob.test");
+    CHECK_STR(actors[1].handle, "carol.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getMutes") == 1);
+
+    /* Their cursor appends, and an account with no handle is left out. */
+    e2e_pds_route(pds, "app.bsky.graph.getMutes", 200,
+                  "{\"mutes\":[{\"did\":\"did:plc:erin\",\"handle\":\"erin.test\"},"
+                  "{\"did\":\"did:plc:nohandle\"}]}");
+    CHECK(indigo_session_submit_mutes("muc"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 3);
+    CHECK_STR(ev.cursor, "");
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 3);
+    CHECK_STR(actors[2].handle, "erin.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getMutes") == 2);
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.graph.getMutes", "cursor=muc"));
+
+    CHECK(indigo_session_submit_blocks(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_PAGE, &ev));
+    CHECK(ev.page_count == 1);
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 1);
+    CHECK_STR(actors[0].handle, "dave.test");
+    CHECK_STR(actors[0].display_name, "dave");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getBlocks") == 1);
+
+    /* A failed list of mutes raises the failure and leaves the blocked row. */
+    e2e_pds_route(pds, "app.bsky.graph.getMutes", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_mutes(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SEARCH_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    actors = indigo_session_search_results(&count);
+    CHECK(count == 1);
+    CHECK_STR(actors[0].handle, "dave.test");
+    CHECK(e2e_pds_hits(pds, "app.bsky.graph.getMutes") == 3);
+
+    indigo_session_stop();
+    e2e_pds_free(pds);
+}
+
+/* The saved feeds picker and one custom feed's posts. The picker survives a
+ * failed getFeedGenerators by naming feeds after their record keys, and the
+ * feed page is filtered by the account's muted words, which the timeline's
+ * preferences fetch carries. */
 static void
 test_feeds(const char *data_dir)
 {
@@ -961,10 +1586,51 @@ test_notifications(const char *data_dir)
     CHECK(notes[5].kind == INDIGO_NOTE_OTHER);
     CHECK(notes[5].text[0] == '\0');
     CHECK(e2e_pds_hits(pds, "app.bsky.notification.listNotifications") == 1);
+    /* The service named a next page; the event carries it for the caller. */
+    CHECK_STR(ev.cursor, "notes-2");
+
     /* The list was marked seen once, with the time in the body. */
     CHECK(e2e_pds_hits(pds, "app.bsky.notification.updateSeen") == 1);
     CHECK(e2e_pds_request_contains(pds, "app.bsky.notification.updateSeen",
                                    "\"seenAt\":\""));
+
+    /* The next page is appended, sent the cursor it was given, and does not
+     * mark anything seen: those rows are older than the first page. */
+    e2e_pds_route(pds, "app.bsky.notification.listNotifications", 200,
+                  "{\"notifications\":["
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.feed.post/n7\",\"cid\":\"c7\","
+                  "\"author\":{\"did\":\"did:plc:sam\",\"handle\":\"sam.test\"},"
+                  "\"reason\":\"reply\",\"record\":{\"$type\":\"app.bsky.feed.post\","
+                  "\"text\":\"one more\",\"createdAt\":\"2026-10-01T09:00:00.000Z\"},"
+                  "\"isRead\":true}],"
+                  "\"cursor\":\"notes-3\"}");
+    CHECK(indigo_session_submit_notifications_more("notes-2"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE, &ev));
+    CHECK(ev.page_count == 7);
+    CHECK_STR(ev.cursor, "notes-3");
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.notification.listNotifications",
+                                        "cursor=notes-2"));
+    notes = indigo_session_notifications(&count);
+    CHECK(count == 7);
+    CHECK(notes[6].kind == INDIGO_NOTE_REPLY);
+    CHECK_STR(notes[6].text, "one more");
+    CHECK(e2e_pds_hits(pds, "app.bsky.notification.updateSeen") == 1);
+
+    /* A page that adds nothing ends the paging rather than leaving a cursor
+     * that would ask for the same rows again. */
+    e2e_pds_route(pds, "app.bsky.notification.listNotifications", 200,
+                  "{\"notifications\":[],\"cursor\":\"notes-3\"}");
+    CHECK(indigo_session_submit_notifications_more("notes-3"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE, &ev));
+    CHECK(ev.page_count == 7);
+    CHECK(ev.cursor[0] == '\0');
+    indigo_session_notifications(&count);
+    CHECK(count == 7);
+    CHECK(e2e_pds_hits(pds, "app.bsky.notification.updateSeen") == 1);
+
+    /* Nothing to page from, so no request is made. */
+    CHECK(!indigo_session_submit_notifications_more(""));
+    CHECK(!indigo_session_submit_notifications_more(NULL));
 
     /* A failed fetch surfaces the failure, keeps the list and is not marked
      * seen. */
@@ -974,8 +1640,8 @@ test_notifications(const char *data_dir)
     CHECK(wait_for_kind(INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED, &ev));
     CHECK(ev.failure != WF_FAIL_NONE);
     indigo_session_notifications(&count);
-    CHECK(count == 6);
-    CHECK(e2e_pds_hits(pds, "app.bsky.notification.listNotifications") == 2);
+    CHECK(count == 7);
+    CHECK(e2e_pds_hits(pds, "app.bsky.notification.listNotifications") == 4);
     CHECK(e2e_pds_hits(pds, "app.bsky.notification.updateSeen") == 1);
 
     /* An empty list is not a seen mark to send either. */
@@ -1001,10 +1667,13 @@ main(int argc, char **argv)
     }
 
     indigo_log_init();
+    test_group_create_and_join_link(argv[1]);
+    test_group_settings_and_join_requests(argv[1]);
     test_timeline_and_chat(argv[1]);
     test_chat_requests_and_decisions(argv[1]);
     test_chat_start(argv[1]);
     test_search(argv[1]);
+    test_lists_and_moderation(argv[1]);
     test_feeds(argv[1]);
     test_notifications(argv[1]);
     indigo_log_shutdown();
