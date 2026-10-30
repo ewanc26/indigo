@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#if !(defined(INDIGO_SESSION_REAL))
+#if !defined(INDIGO_SESSION_HOST) && !(defined(__3DS__) && defined(WOLFRAM_3DS))
 static bool s_pending;
 static indigo_session_event s_stub;
 
@@ -132,6 +132,13 @@ indigo_session_submit_notifications(void)
 }
 
 bool
+indigo_session_submit_notifications_more(const char *cursor)
+{
+    (void) cursor;
+    return false;
+}
+
+bool
 indigo_session_submit_chat_inbox(void)
 {
     return false;
@@ -249,6 +256,74 @@ indigo_session_submit_chat_join_reject(const char *convo_id, const char *did)
 }
 
 bool
+indigo_session_submit_chat_group_info(const char *convo_id)
+{
+    (void) convo_id;
+    return false;
+}
+
+const indigo_chat_group *
+indigo_session_chat_group(void)
+{
+    static const indigo_chat_group empty;
+
+    return &empty;
+}
+
+bool
+indigo_session_submit_chat_group_create(const char *name, const char *members)
+{
+    (void) name;
+    (void) members;
+    return false;
+}
+
+const char *
+indigo_session_chat_group_started(void)
+{
+    return "";
+}
+
+bool
+indigo_session_submit_chat_group_rename(const char *convo_id, const char *name)
+{
+    (void) convo_id;
+    (void) name;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_group_add(const char *convo_id, const char *members)
+{
+    (void) convo_id;
+    (void) members;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_group_remove(const char *convo_id, const char *did)
+{
+    (void) convo_id;
+    (void) did;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_join_link_create(const char *convo_id)
+{
+    (void) convo_id;
+    return false;
+}
+
+bool
+indigo_session_submit_chat_join_link_toggle(const char *convo_id, bool disable)
+{
+    (void) convo_id;
+    (void) disable;
+    return false;
+}
+
+bool
 indigo_session_submit_publish_thread(const char *const *texts, unsigned count, int reply_gate)
 {
     (void) texts;
@@ -289,10 +364,10 @@ indigo_session_notifications(unsigned *count)
 }
 
 bool
-indigo_session_submit_search(const char *query, bool paging)
+indigo_session_submit_search(const char *query, const char *cursor)
 {
     (void) query;
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
@@ -317,42 +392,44 @@ indigo_session_submit_graph(indigo_graph_action action, const char *did,
 }
 
 bool
-indigo_session_submit_people(indigo_search_kind kind, const char *subject, bool paging)
+indigo_session_submit_people(indigo_search_kind kind, const char *subject,
+                              const char *cursor)
 {
     (void) kind;
     (void) subject;
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
 bool
-indigo_session_submit_post_search(const char *query, bool paging)
+indigo_session_submit_post_search(const char *query, const char *cursor)
 {
     (void) query;
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
-bool indigo_session_submit_author_feed(const char *actor, int tab,
-                                       bool paging) {
-  (void)actor;
-  (void)tab;
-  (void)paging;
-  return false;
-}
-
 bool
-indigo_session_submit_lists(bool paging)
+indigo_session_submit_author_feed(const char *actor, int tab, const char *cursor)
 {
-    (void) paging;
+    (void) actor;
+    (void) tab;
+    (void) cursor;
     return false;
 }
 
 bool
-indigo_session_submit_list_members(const char *list_uri, bool paging)
+indigo_session_submit_lists(const char *cursor)
+{
+    (void) cursor;
+    return false;
+}
+
+bool
+indigo_session_submit_list_members(const char *list_uri, const char *cursor)
 {
     (void) list_uri;
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
@@ -363,16 +440,16 @@ indigo_session_submit_feeds(void)
 }
 
 bool
-indigo_session_submit_mutes(bool paging)
+indigo_session_submit_mutes(const char *cursor)
 {
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
 bool
-indigo_session_submit_blocks(bool paging)
+indigo_session_submit_blocks(const char *cursor)
 {
-    (void) paging;
+    (void) cursor;
     return false;
 }
 
@@ -431,4 +508,4 @@ indigo_session_has_saved(void)
     return false;
 }
 
-#endif /* no 3DS or no Wolfram */
+#endif /* no 3DS, no Wolfram, and not the host end-to-end build */
