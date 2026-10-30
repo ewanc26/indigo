@@ -63,16 +63,27 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - name: Commit is releasable
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # main's own CI run may still be going; wait for the gate.
-          RELEASE_WAIT_SECONDS: "1500"
-        run: scripts/check-flow.sh release "${{ steps.v.outputs.version }}" "${{ steps.v.outputs.sha }}"
+  # Wolfram's check, pinned to a Wolfram tag, instead of a local copy of the
+  # same rules. `sha` is the commit being released, not the triggering one: a
+  # repair dispatch runs from main while its tag points at an earlier commit.
+  # wait_seconds covers main's own CI run still going.
+  release-check:
+    name: release-check
+    needs: check
+    permissions:
+      contents: read
+      checks: read
+    uses: ewanc26/wolfram/.github/workflows/release-check-reusable.yml@v0.44.2
+    with:
+      tag: v${{ needs.check.outputs.version }}
+      sha: ${{ needs.check.outputs.sha }}
+      canon_ref: v0.44.2
+      required_checks: CI gate
+      wait_seconds: 1500
 
   build:
     name: Build release assets
-    needs: check
+    needs: [check, release-check]
     runs-on: ubuntu-latest
     container: devkitpro/devkitarm:latest
     steps:

@@ -21,6 +21,7 @@ as the release notes.
 ### Changed
 
 - Wolfram is pinned to v0.43.2. The follower and following lists are populated again, and its public headers end with a newline, so the host sweep builds under `-Wpedantic -Werror` on Clang 16 and older (the new macOS leg). ([wolfram#226](https://github.com/ewanc26/wolfram/pull/226))
+- The release workflow uses Wolfram's shared release check, pinned to v0.44.2, instead of its own copy of the tag, changelog, main-ancestry and `CI gate` rules. It is given the commit the tag names, so a repair dispatch validates that release rather than `main`'s head. ([wolfram#100](https://github.com/ewanc26/wolfram/issues/100))
 
 ## [0.15.0] - 2026-10-28
 
