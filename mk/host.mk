@@ -111,7 +111,8 @@ e2e: $(HOST_OUT)/e2e
 	@# directory. `rm` rather than trusting a previous run's state.
 	@mkdir -p $(HOST_OUT)/e2e-data
 	@rm -f $(HOST_OUT)/e2e-data/session.dat
-	@./$(HOST_OUT)/e2e $(HOST_OUT)/e2e-data
+	@LSAN_OPTIONS=suppressions=$(CURDIR)/tests/e2e/lsan.supp \
+	  ./$(HOST_OUT)/e2e $(HOST_OUT)/e2e-data
 
 $(HOST_OUT)/e2e: $(HOST_E2E_SRCS) $(HOST_WOLFRAM_LIB) \
                   $(wildcard src/*/*.h tests/e2e/*.h tests/e2e/stubs/*.h)

@@ -1,0 +1,5 @@
+# Wolfram's libcurl write buffer and cJSON's parse tree are not released by the
+# host library before the process exits; on the console both come from Wolfram's
+# own allocator. Leak checking stays on for everything Indigo allocates.
+leak:wf_curl_write_cb
+leak:libcjson
