@@ -19,6 +19,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+/* Strict POSIX on Darwin leaves INADDR_LOOPBACK out of <netinet/in.h>, so the
+ * harness would not build on the same host `make test` runs on. Same value. */
+#ifndef INADDR_LOOPBACK
+#define INADDR_LOOPBACK 0x7f000001UL
+#endif
+
 #define E2E_PDS_ROUTES 16
 #define E2E_PDS_NSID_MAX 80
 #define E2E_PDS_BODY_MAX 2048
