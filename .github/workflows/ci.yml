@@ -107,13 +107,60 @@ jobs:
           name: indigo-3dsx
           path: indigo/indigo.3dsx
 
+  # macOS is a host platform, not an afterthought: the e2e harness failed to
+  # compile there because Darwin hides INADDR_LOOPBACK under the strict POSIX
+  # level the harness asks for, and the Linux job could not see it. This leg
+  # runs the same host targets as `host`, so a Darwin-only break fails the PR
+  # instead of the next run on a Mac.
+  host-macos:
+    name: macOS host tests, warnings and e2e
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: indigo
+      - name: Wolfram pin
+        id: wolfram
+        run: echo "ref=$(tr -d '[:space:]' < indigo/wolfram.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: ewanc26/wolfram
+          ref: ${{ steps.wolfram.outputs.ref }}
+          path: wolfram
+      # Homebrew's cJSON is keg-only: its headers are under cjson/, not on the
+      # default include path, and it ships no libcjson.pc the build can find.
+      # Point the host build at the keg explicitly rather than relying on
+      # pkg-config resolving a formula that is not linked.
+      - name: Dependencies
+        run: |
+          brew install cjson secp256k1
+          {
+            echo "HOST_CJSON_CFLAGS=-I$(brew --prefix cjson)/include/cjson"
+            echo "HOST_CJSON_LIBS=-L$(brew --prefix cjson)/lib -lcjson"
+          } >> "$GITHUB_ENV"
+      - name: Build Wolfram for the host
+        run: |
+          cmake -S wolfram -B wolfram/build-host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWOLFRAM_BUILD_TESTS=OFF \
+            -DWOLFRAM_BUILD_EXAMPLES=OFF
+          cmake --build wolfram/build-host --target wolfram -j"$(sysctl -n hw.ncpu)"
+      - run: make test
+        working-directory: indigo
+      - run: make warnings
+        working-directory: indigo
+      - run: make snapshots
+        working-directory: indigo
+      - run: make e2e
+        working-directory: indigo
+
   # The one status branch protection should require. It fails if any job it
   # waits on failed or was cancelled, so adding a job to `needs` is how a new
   # check becomes mandatory without touching repository settings.
   gate:
     name: CI gate
     if: always()
-    needs: [checks, host, build-3ds]
+    needs: [checks, host, host-macos, build-3ds]
     runs-on: ubuntu-latest
     steps:
       - env:
