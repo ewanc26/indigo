@@ -2,7 +2,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 /* The account's curated lists. getLists is paged; the cursor is dropped like
  * actor and post search, because a 3DS list that cannot show page two is not

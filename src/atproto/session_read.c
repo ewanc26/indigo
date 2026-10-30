@@ -2,7 +2,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 /* A playlist for a short clip is a few kilobytes; a feature-length one with
  * ten-second segments is about 900 lines. The cap stops a hostile URL

@@ -34,7 +34,7 @@
 #include <time.h>
 #include <cJSON.h>
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 #include <3ds.h>
 #include <wolfram/3ds.h>
