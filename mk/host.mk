@@ -55,7 +55,10 @@ HOST_E2E_SESSION_SRCS := src/atproto/session.c src/atproto/session_auth.c \
                          src/atproto/session_write.c
 HOST_E2E_SRCS := tests/e2e_main.c tests/e2e/mock_pds.c tests/e2e/host_platform.c \
                  $(HOST_SRCS) $(HOST_E2E_SESSION_SRCS)
-HOST_E2E_CFLAGS := -DINDIGO_SESSION_HOST -DINDIGO_SESSION_REAL -Itests -Itests/e2e/stubs
+# glibc hides usleep/nanosleep under -std=c11 unless a POSIX feature level is
+# asked for; the harness and its pthread <3ds.h> stub need both.
+HOST_E2E_CFLAGS := -DINDIGO_SESSION_HOST -DINDIGO_SESSION_REAL -D_DEFAULT_SOURCE \
+                   -D_POSIX_C_SOURCE=200809L -Itests -Itests/e2e/stubs
 
 test: $(HOST_OUT)/tests
 	@# The suite runs 70-odd tests in one process and each holds a 565KB
