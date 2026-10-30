@@ -3,7 +3,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 #define WORKER_STACK 0x20000
 

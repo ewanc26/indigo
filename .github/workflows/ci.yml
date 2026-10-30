@@ -46,9 +46,25 @@ jobs:
           repository: ewanc26/wolfram
           ref: ${{ steps.wolfram.outputs.ref }}
           path: wolfram
-      - name: cJSON headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcjson-dev
+      - name: cJSON headers and Wolfram's host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config libcjson-dev \
+            libcurl4-openssl-dev libssl-dev libsecp256k1-dev
       - run: make test
+        working-directory: indigo
+      # The end-to-end harness runs the real session worker against a mock PDS
+      # on the loopback interface, so it needs Wolfram built for the host with
+      # its whole agent surface rather than the few sources `make test` links.
+      - name: Build Wolfram for the host
+        run: |
+          cmake -S wolfram -B wolfram/build-host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWOLFRAM_BUILD_TESTS=OFF \
+            -DWOLFRAM_BUILD_EXAMPLES=OFF
+          cmake --build wolfram/build-host --target wolfram -j"$(nproc)"
+      - run: make e2e
         working-directory: indigo
       - run: make warnings
         working-directory: indigo

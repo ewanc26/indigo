@@ -2,7 +2,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 void
 indigo_session_do_profile(const indigo_job *j)

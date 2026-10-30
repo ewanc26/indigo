@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#if !(defined(__3DS__) && defined(WOLFRAM_3DS))
+#if !(defined(INDIGO_SESSION_REAL))
 static bool s_pending;
 static indigo_session_event s_stub;
 
