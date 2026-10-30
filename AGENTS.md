@@ -628,6 +628,18 @@ Do not call emulator or host testing hardware testing.
 
 When changing Wolfram's 3DS integration, build Wolfram's 3DS target as well as Indigo.
 
+### End-to-end validation
+
+`make e2e` builds the real session worker (the `session_*.c` files, with
+`INDIGO_SESSION_REAL`) and a pthread-backed `<3ds.h>` from `tests/e2e/stubs/`,
+then drives it against `tests/e2e/mock_pds.c` on `127.0.0.1`. It covers sign-in,
+the timeline, one conversation's messages, chat start and its failures, actor
+and post search, a person's posts, feeds and notifications, through the same
+submit calls the screens use. It needs a host build of Wolfram at
+`$(WOLFRAM_ROOT)/build-host`; the target says how to make one rather than
+skipping silently. Nothing here runs on a console: it is host coverage, not
+hardware or emulator validation.
+
 ## 23. Common mistakes
 
 Watch for:
@@ -655,7 +667,7 @@ Watch for:
   and `tests/`, so a snapshot scenario that does not compile is caught by
   `make snapshots` alone;
 - **Profile tabs.** A person's posts screen (`INDIGO_SEARCH_AUTHOR`) takes its tabs, filters and fetch from `wolfram/profile_tab.h`; do not write Indigo's own filter strings. `indigo_search.tab` holds the tab, the header box cycles it (`indigo_app_next_author_tab`), and likes is offered on the signed-in account only.
-- believing the host targets cover `src/atproto/session*.c`. Its Wolfram calls all sit behind `#if defined(__3DS__)`, so `make test`, `make warnings` and `make snapshots` compile none of them. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, five times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`), and a missing `<wolfram/feed_gen_typed.h>` for `wf_feedgen_get_feed_generators_typed`. Run `make` for the console before calling a session change done;
+- believing the host targets cover `src/atproto/session*.c`. They compile none of the session sources: `make test`, `make warnings` and `make snapshots` leave `INDIGO_SESSION_REAL` undefined, so the worker is `session_stub.c` and the `session_*.c` files are empty. `make e2e` is the one host target that defines it. A wrong Wolfram signature, a missing include or an undeclared static has passed all three and failed only the cross-build, five times now: `wf_display_facet`, a missing `<limits.h>` for `UINT_MAX`, `wf_agent_get_author_feed_typed`'s `filter` argument, `s_account` (a static that never existed; the agent's own handle comes from `wf_agent_get_handle`), and a missing `<wolfram/feed_gen_typed.h>` for `wf_feedgen_get_feed_generators_typed`. Run `make` for the console before calling a session change done;
 - trusting `make warnings` to match the cross-build's diagnostics. The host
   sweep compiles at `-O2` but the `make test` binary is `-O1`, and the ARM
   `CFLAGS` carry no `-Werror`, so a value-range warning such as

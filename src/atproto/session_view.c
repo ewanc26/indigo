@@ -2,7 +2,7 @@
 
 #include "atproto/session_internal.h"
 
-#if defined(__3DS__) && defined(WOLFRAM_3DS)
+#if defined(INDIGO_SESSION_REAL)
 
 static void
 embed_note(const wf_post_display *d, char *dst, size_t cap)
