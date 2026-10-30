@@ -10,6 +10,7 @@ as the release notes.
 
 ### Added
 
+- `make e2e` runs the real session worker on the host against a mock PDS: sign-in, the timeline, a conversation, chat start, actor and post search, a person's posts, feeds and notifications. The worker's Wolfram calls sit behind the console guard, so no host target compiled them before and only the 3DS build caught a wrong signature. Host coverage only; not run on an emulator or hardware. ([#119](https://github.com/ewanc26/indigo/pull/119))
 - A Credits entry at the bottom of the More menu lists the repositories behind the stack — Cobalt, Indigo, Wolfram, Platinum and Channel Blue — with every `https://github.com/ewanc26/...` address printed in full on the top screen. Nothing is a button, because the 3DS cannot open a browser; the bottom screen names the projects and B or the Back button leaves. The menu's app-wide entries grew by one, and host tests check both displays and the return path.
 
 ## [0.15.0] - 2026-10-28
