@@ -65,7 +65,7 @@ ifneq ($(WOLFRAM_VERSION),$(WOLFRAM_PIN))
 endif
 
 ifneq ($(wildcard $(WOLFRAM_LIB)),)
-  WOLFRAM_CFLAGS := -DWOLFRAM_3DS -DINDIGO_WOLFRAM_VERSION=\"$(or $(WOLFRAM_VERSION),unknown)\" -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
+  WOLFRAM_CFLAGS := -DINDIGO_SESSION_REAL -DWOLFRAM_3DS -DINDIGO_WOLFRAM_VERSION=\"$(or $(WOLFRAM_VERSION),unknown)\" -I$(WOLFRAM_ROOT)/include -I$(WOLFRAM_BUILD)/_deps/cjson-src
   WOLFRAM_LIBS := $(WOLFRAM_LIB)                   $(WOLFRAM_BUILD)/_deps/cjson-build/libcjson.a                   $(WOLFRAM_BUILD)/_deps/libcbor-build/src/libcbor.a
 else
   $(warning Wolfram is not built for 3DS at $(WOLFRAM_LIB); building without protocol support. Run: make wolfram-3ds)
