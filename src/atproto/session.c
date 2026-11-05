@@ -87,6 +87,9 @@ worker(void *arg)
         case JOB_THREAD:
             indigo_session_do_thread(&j);
             break;
+        case JOB_THREAD_MUTE:
+            indigo_session_do_thread_mute(&j);
+            break;
         case JOB_PROFILE:
             indigo_session_do_profile(&j);
             break;

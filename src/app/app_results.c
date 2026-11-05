@@ -78,10 +78,12 @@ indigo_app_signed_out(indigo_app *app, const char *message)
 
 void
 indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
-                         unsigned focus)
+                         unsigned focus, const char *root_uri)
 {
     indigo_timeline *t = &app->thread;
 
+    indigo_copy_utf8(app->thread_root, sizeof app->thread_root,
+                     root_uri ? root_uri : "");
     indigo_timeline_clear(t);
     for (unsigned i = 0; posts && i < count; i++) {
         if (!indigo_timeline_append(t, &posts[i])) {
@@ -98,6 +100,49 @@ indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned cou
 void
 indigo_app_thread_failed(indigo_app *app, const char *message)
 {
+    indigo_timeline_fail_fetch(&app->thread, message);
+}
+
+bool
+indigo_app_thread_muted(const indigo_app *app)
+{
+    return app && app->thread_muted && app->thread_root[0] &&
+           strcmp(app->thread_root, app->thread_muted_root) == 0;
+}
+
+void
+indigo_app_toggle_thread_mute(indigo_app *app)
+{
+    if (!app || app->request != INDIGO_REQUEST_NONE || app->thread.loading ||
+        !app->thread_root[0]) {
+        return;
+    }
+    app->request_thread_mute = !indigo_app_thread_muted(app);
+    indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri,
+                     app->thread_root);
+    app->request = INDIGO_REQUEST_THREAD_MUTE;
+}
+
+void
+indigo_app_thread_mute_done(indigo_app *app, const char *root_uri, bool muted)
+{
+    if (!app || !root_uri) {
+        return;
+    }
+    indigo_copy_utf8(app->thread_muted_root, sizeof app->thread_muted_root, root_uri);
+    app->thread_muted = muted;
+}
+
+void
+indigo_app_thread_mute_failed(indigo_app *app, const char *message)
+{
+    if (!app) {
+        return;
+    }
+    /* The thread, its selection and its scroll are untouched: the status is
+     * said where the person is looking, and the label still says what the
+     * server last confirmed. */
+    indigo_app_set_status(&app->signin, message, true);
     indigo_timeline_fail_fetch(&app->thread, message);
 }
 

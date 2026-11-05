@@ -554,6 +554,16 @@ fill_social(indigo_app *app, const scenario *s)
     } else if (s->screen == INDIGO_SCREEN_THREAD) {
         fill_timeline(&app->thread, s->timeline, s->select);
         app->thread_focus = 1;
+        /* One thread scenario exists to show the muted label. There is no
+         * server read for muted threads, so the state is the one a done event
+         * would have written: this root, muted. */
+        if (s->select == 9) {
+            indigo_copy_utf8(app->thread_root, sizeof app->thread_root,
+                             app->thread.count > 0 ? app->thread.posts[0].uri : "");
+            indigo_copy_utf8(app->thread_muted_root,
+                             sizeof app->thread_muted_root, app->thread_root);
+            app->thread_muted = app->thread_root[0] != '\0';
+        }
     } else if (s->screen == INDIGO_SCREEN_PROFILE) {
         indigo_profile *p = &app->profile;
 
@@ -946,6 +956,7 @@ main(int argc, char **argv)
         {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0, false},
         {"timeline-video", INDIGO_SCREEN_HOME, false, 0, 0, 4, 0, false},
         {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1, false},
+        {"thread-muted", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 9, false},
         {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0, false},
         {"profile-follow", INDIGO_SCREEN_PROFILE, false, 0, 0, 1, 0, false},
         {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0, false},

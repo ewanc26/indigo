@@ -256,6 +256,9 @@ indigo_app_update_thread(indigo_app *app, const indigo_input *input)
                 indigo_app_open_profile(app, sel->handle);
             }
             break;
+        case INDIGO_ACTION_MUTE_THREAD:
+            indigo_app_toggle_thread_mute(app);
+            break;
         case INDIGO_ACTION_DELETE:
             begin_delete_confirmation(app);
             break;

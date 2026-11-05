@@ -22,6 +22,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_POST_DELETE_FAILED,
     INDIGO_SESSION_EVENT_THREAD_PAGE,
     INDIGO_SESSION_EVENT_THREAD_FAILED,
+    INDIGO_SESSION_EVENT_THREAD_MUTE_DONE,
+    INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED,
     INDIGO_SESSION_EVENT_PROFILE_LOADED,
     INDIGO_SESSION_EVENT_PROFILE_FAILED,
     INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE,
@@ -129,6 +131,11 @@ typedef struct {
     indigo_graph_action graph;
     /* A message was sent: true when it succeeded. */
     bool sent;
+    /* THREAD_PAGE: the conversation's true root, which is what a thread mute
+     * names rather than the post that was opened. THREAD_MUTE_*: the root the
+     * request addressed, and `muted` the state now in effect. */
+    char thread_root[INDIGO_POST_URI_MAX];
+    bool muted;
 } indigo_session_event;
 
 /*
@@ -159,6 +166,11 @@ bool indigo_session_submit_delete_post(const char *post_uri);
 
 /* Replies, ancestors and the post itself; `uri` is an at:// post URI. */
 bool indigo_session_submit_thread(const char *uri);
+
+/* Mute or unmute notifications for a conversation, by its root AT-URI
+ * (app.bsky.graph.muteThread/unmuteThread). The protocol has no read for
+ * which threads are muted, so the app reflects only what this run did. */
+bool indigo_session_submit_thread_mute(const char *root_uri, bool mute);
 /* `actor` is a handle or DID. */
 bool indigo_session_submit_profile(const char *actor);
 bool indigo_session_submit_notifications(void);

@@ -76,7 +76,11 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
         if (indigo_app_selected_post_is_own(app)) {
             indigo_layout_action_pill(c, INDIGO_ACTION_DELETE, false, false, COL_PILL_ACTIVE, "Delete");
         } else {
-            indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, false, false, COL_PILL_ACTIVE, "Profile");
+            /* Thread mute lives in the fourth pill; the author's profile is
+             * still Select, which is what the title bar says. */
+            indigo_layout_action_pill(c, INDIGO_ACTION_MUTE_THREAD, false, false,
+                                      COL_PILL_ACTIVE,
+                                      indigo_app_thread_muted(app) ? "Unmute" : "Mute");
         }
     } else {
         indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE, "A Open");

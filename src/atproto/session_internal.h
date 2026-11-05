@@ -65,6 +65,7 @@ typedef enum {
     JOB_POST_ACTION,
     JOB_DELETE_POST,
     JOB_THREAD,
+    JOB_THREAD_MUTE,
     JOB_PROFILE,
     JOB_NOTIFICATIONS,
     JOB_CHAT_INBOX,
@@ -140,6 +141,8 @@ typedef struct {
     /* JOB_CHAT_JOIN_LINK: create a new link, or toggle the existing one. */
     bool link_create;
     bool link_disable;
+    /* JOB_THREAD_MUTE: mute when true, unmute when false. */
+    bool mute;
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;
@@ -278,6 +281,7 @@ void indigo_session_do_chat_join_link(const indigo_job *j);
 void indigo_session_do_post_action(const indigo_job *j);
 void indigo_session_do_post_search(const indigo_job *j);
 void indigo_session_do_thread(const indigo_job *j);
+void indigo_session_do_thread_mute(const indigo_job *j);
 void indigo_session_do_timeline(const indigo_job *j);
 
 /* session_people.c */

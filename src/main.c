@@ -430,6 +430,12 @@ handle_requests(indigo_app *app)
             indigo_app_follow_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_THREAD_MUTE:
+        if (!indigo_session_submit_thread_mute(app->request_post_uri,
+                                                app->request_thread_mute)) {
+            indigo_app_thread_mute_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_GRAPH:
         if (!indigo_session_submit_graph(app->request_graph, app->profile.did,
                                          app->profile.block_uri)) {
@@ -640,7 +646,7 @@ handle_events(indigo_app *app)
             unsigned n;
             const indigo_post *page = indigo_session_page(&n);
 
-            indigo_app_thread_loaded(app, page, n, ev.focus);
+            indigo_app_thread_loaded(app, page, n, ev.focus, ev.thread_root);
             break;
         }
         case INDIGO_SESSION_EVENT_THREAD_FAILED:
@@ -802,6 +808,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_FOLLOW_FAILED:
             indigo_app_follow_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_THREAD_MUTE_DONE:
+            indigo_app_thread_mute_done(app, ev.thread_root, ev.muted);
+            break;
+        case INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED:
+            indigo_app_thread_mute_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_GRAPH_DONE:
             indigo_app_graph_done(app, ev.graph, ev.record_uri);

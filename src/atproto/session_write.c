@@ -1,8 +1,35 @@
-/* Publishing a post, reply or quote, and deleting your own post. */
+/* Publishing a post, reply or quote, deleting your own post, and muting a
+ * conversation. */
 
 #include "atproto/session_internal.h"
 
 #if defined(INDIGO_SESSION_REAL)
+
+/* app.bsky.graph.muteThread/unmuteThread. The server owns the mute; the only
+ * local state is the event that tells the screen which way it went. */
+void
+indigo_session_do_thread_mute(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED,
+                               .muted = j->mute};
+    wf_status st;
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+    indigo_copy_utf8(ev.thread_root, sizeof ev.thread_root, j->root_uri);
+    st = j->mute ? wf_agent_mute_thread(g_session.agent, j->root_uri)
+                 : wf_agent_unmute_thread(g_session.agent, j->root_uri);
+    if (st != WF_OK) {
+        ev.failure = wf_failure_classify(st, 0, NULL);
+        indigo_log_warn("thread %s failed: wolfram status %d (%s)",
+                        j->mute ? "mute" : "unmute", (int) st,
+                        wf_failure_tag(ev.failure));
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    ev.kind = INDIGO_SESSION_EVENT_THREAD_MUTE_DONE;
+    indigo_log_info("thread %s: %s", j->mute ? "muted" : "unmuted", j->root_uri);
+    indigo_session_publish_event(&ev);
+}
 
 void
 indigo_session_do_publish(const indigo_job *j)

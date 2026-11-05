@@ -218,6 +218,22 @@ indigo_session_do_thread(const indigo_job *j)
          p && p->kind == WF_AGENT_THREAD_KIND_POST && parents < 8; p = p->parent) {
         chain[parents++] = p;
     }
+    /* The conversation's root, which is what app.bsky.graph.muteThread names.
+     * It is the last ancestor reached, not the post that was opened; walk the
+     * whole chain even past the eight the page keeps. A blocked or missing
+     * parent ends the walk, and the highest post reached stands in. */
+    {
+        const wf_agent_thread_node *top = &thread.root;
+
+        for (const wf_agent_thread_node *p = thread.root.parent; p; p = p->parent) {
+            if (p->kind != WF_AGENT_THREAD_KIND_POST) {
+                break;
+            }
+            top = p;
+        }
+        indigo_copy_utf8(ev.thread_root, sizeof ev.thread_root,
+                         top->post.uri ? top->post.uri : j->post_uri);
+    }
     g_session.page_count = 0;
     for (unsigned i = parents; i > 0; i--) {
         if (indigo_session_thread_post_to_post(&chain[i - 1]->post, parents - i, &g_session.page[g_session.page_count])) {
@@ -1267,6 +1283,18 @@ indigo_session_submit_thread(const char *uri)
     indigo_job j = {.kind = JOB_THREAD};
 
     snprintf(j.post_uri, sizeof j.post_uri, "%s", uri);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_thread_mute(const char *root_uri, bool mute)
+{
+    indigo_job j = {.kind = JOB_THREAD_MUTE, .mute = mute};
+
+    if (!root_uri || strncmp(root_uri, "at://", 5) != 0) {
+        return false;
+    }
+    snprintf(j.root_uri, sizeof j.root_uri, "%s", root_uri);
     return indigo_session_enqueue(&j);
 }
 
