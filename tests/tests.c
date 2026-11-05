@@ -4808,6 +4808,75 @@ test_search_paging(void)
     CHECK(!app.search.has_more);
 }
 
+/* The editor is a working copy: a failed write leaves both the editor and the
+ * profile behind it untouched, and only a done event replaces the fields. */
+static void
+test_profile_editor(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_input in;
+    char long_name[INDIGO_POST_NAME_MAX + 1];
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+    indigo_copy_utf8(app.profile.handle, sizeof app.profile.handle, "me.test");
+    indigo_copy_utf8(app.signin.account, sizeof app.signin.account, "me.test");
+    indigo_copy_utf8(app.profile.display_name, sizeof app.profile.display_name, "Rhiannon");
+    indigo_copy_utf8(app.profile.bio, sizeof app.profile.bio, "Old bio");
+
+    CHECK(indigo_app_profile_is_self(&app));
+    indigo_app_open_profile_edit(&app);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE_EDIT);
+    CHECK(app.history_count == 1);
+    CHECK(strcmp(app.profile_edit.display_name, "Rhiannon") == 0);
+    CHECK(strcmp(app.profile_edit.bio, "Old bio") == 0);
+
+    memset(&in, 0, sizeof in);
+    in.down = true;
+    indigo_app_update_profile_edit(&app, &in);
+    CHECK(app.profile_edit.selected == 1);
+    memset(&in, 0, sizeof in);
+    in.confirm = true;
+    indigo_app_update_profile_edit(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_PROFILE_BIO);
+
+    indigo_app_set_profile_bio(&app, "New bio");
+    memset(&in, 0, sizeof in);
+    in.up = true;
+    indigo_app_update_profile_edit(&app, &in);
+    CHECK(app.profile_edit.selected == 0);
+    indigo_app_set_profile_name(&app, "Ewan");
+
+    /* Too long is refused before a job is made, with the editor intact. */
+    memset(long_name, 'a', sizeof long_name);
+    long_name[INDIGO_POST_NAME_MAX] = '\0';
+    CHECK(!indigo_app_profile_edit_valid(long_name, ""));
+    CHECK(indigo_app_profile_edit_valid("", ""));
+
+    memset(&in, 0, sizeof in);
+    in.like = true;
+    indigo_app_update_profile_edit(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_PROFILE_UPDATE);
+
+    /* A failure keeps the editor, its values and its message. */
+    indigo_app_profile_update_failed(&app, "No connection.");
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE_EDIT);
+    CHECK(app.profile_edit.status_is_error);
+    CHECK(strcmp(app.profile_edit.display_name, "Ewan") == 0);
+    CHECK(strcmp(app.profile_edit.bio, "New bio") == 0);
+    CHECK(strcmp(app.profile.display_name, "Rhiannon") == 0);
+
+    /* Success replaces the profile and returns to it. */
+    app.profile_edit.saving = true;
+    indigo_app_profile_update_done(&app);
+    CHECK(app.screen == INDIGO_SCREEN_PROFILE);
+    CHECK(strcmp(app.profile.display_name, "Ewan") == 0);
+    CHECK(strcmp(app.profile.bio, "New bio") == 0);
+    CHECK(strcmp(app.profile.status, "Profile updated.") == 0);
+}
+
 /* Following is a toggle the server can disagree with, so it is tested in both
  * directions plus the failure that has to put the state back. */
 static void
@@ -7436,6 +7505,7 @@ main(void)
     test_search_results_bounded();
     test_search_paging();
     test_no_duplicate_back_hints();
+    test_profile_editor();
     test_follow_toggle();
     test_follow_failure_reverts();
     test_follow_guards();

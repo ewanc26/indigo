@@ -44,6 +44,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Open a link on a phone via QR code | yes | implemented | not started | Indigo: the More menu's link page encodes with Wolfram's wf_qr_encode, displays the QR matrix on the top screen and the address below; host-tested, not scanned from a physical screen. |
 | Notifications, mark as seen | yes | implemented | emulator fetch; seen marking host only |
 | Profiles, follow, unfollow | yes | implemented | host |
+| Edit your own profile | yes | implemented: display name and bio | host tests and snapshots; text-only, avatar and banner uploads are not included |
 | Followers, following | yes | implemented, paged | host |
 | Profile tabs | yes | yes: posts, replies, media and likes (likes on the signed-in account only), cycled by tapping the header box on a person's posts (`INDIGO_SEARCH_AUTHOR`) | host tests; not run on a 3DS or Azahar |
 | Pinned posts | yes | implemented | host |

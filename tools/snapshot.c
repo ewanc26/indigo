@@ -604,6 +604,13 @@ fill_social(indigo_app *app, const scenario *s)
                              "at://did:plc:rhiannon7wvx2m4qz6kbyt/app.bsky.graph.follow/"
                              "self/3kqz9d2f7xw4");
         }
+    } else if (s->screen == INDIGO_SCREEN_PROFILE_EDIT) {
+        indigo_profile_edit *e = &app->profile_edit;
+
+        indigo_copy_utf8(e->display_name, sizeof e->display_name, "Rhiannon");
+        indigo_copy_utf8(e->bio, sizeof e->bio,
+                         "Walker, reader, occasional poet. Rivers before roads, always.");
+        e->selected = 0;
     } else if (s->screen == INDIGO_SCREEN_NOTIFICATIONS) {
         indigo_notification n[3];
 
@@ -962,6 +969,7 @@ main(int argc, char **argv)
         {"profile-following", INDIGO_SCREEN_PROFILE, false, 0, 0, 2, 0, false},
         {"profile-muted", INDIGO_SCREEN_PROFILE, false, 0, 0, 3, 0, false},
         {"profile-pinned", INDIGO_SCREEN_PROFILE, false, 0, 0, 4, 0, false},
+        {"profile-edit", INDIGO_SCREEN_PROFILE_EDIT, false, 0, 0, 0, 0, false},
         {"notifications", INDIGO_SCREEN_NOTIFICATIONS, false, 0, 0, 0, 0, false},
         {"messages", INDIGO_SCREEN_MESSAGES, false, 0, 0, 0, 0, false},
         {"requests", INDIGO_SCREEN_CHAT_REQUESTS, false, 0, 0, 0, 0, false},

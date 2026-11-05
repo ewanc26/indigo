@@ -67,6 +67,7 @@ typedef enum {
     JOB_THREAD,
     JOB_THREAD_MUTE,
     JOB_PROFILE,
+    JOB_PROFILE_UPDATE,
     JOB_NOTIFICATIONS,
     JOB_CHAT_INBOX,
     JOB_CHAT_MESSAGES,
@@ -126,6 +127,9 @@ typedef struct {
     indigo_graph_action graph;
     indigo_search_kind people_kind;
     char actor[INDIGO_PROFILE_DID_MAX];
+    /* JOB_PROFILE_UPDATE: the account's own name and bio. */
+    char display_name[INDIGO_POST_NAME_MAX];
+    char description[INDIGO_PROFILE_BIO_MAX];
     /* JOB_AUTHOR_FEED's wf_profile_tab. */
     int tab;
     char list_uri[INDIGO_POST_URI_MAX];
@@ -289,6 +293,7 @@ void indigo_session_do_follow(const indigo_job *j);
 void indigo_session_do_graph(const indigo_job *j);
 void indigo_session_do_people(const indigo_job *j);
 void indigo_session_do_profile(const indigo_job *j);
+void indigo_session_do_profile_update(const indigo_job *j);
 void indigo_session_do_search(const indigo_job *j);
 void indigo_session_publish_actor_page(const indigo_job *j, wf_agent_actor_list *list, indigo_session_event *ev);
 
