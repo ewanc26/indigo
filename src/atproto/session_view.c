@@ -149,6 +149,7 @@ indigo_session_fill_post(const wf_agent_post_view *pv, indigo_post *out)
     out->like_count = indigo_session_count_of(pv->like_count);
     out->repost_count = indigo_session_count_of(pv->repost_count);
     out->reply_count = indigo_session_count_of(pv->reply_count);
+    out->bookmarked = pv->viewer.has_bookmarked && pv->viewer.bookmarked;
     if (pv->viewer.like && strlen(pv->viewer.like) < sizeof out->like_uri) {
         snprintf(out->like_uri, sizeof out->like_uri, "%s", pv->viewer.like);
     }

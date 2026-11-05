@@ -62,6 +62,7 @@ indigo_app_signed_out(indigo_app *app, const char *message)
     s->account[0] = '\0';
     memset(s->password, 0, sizeof s->password);
     indigo_timeline_clear(&app->timeline);
+    indigo_timeline_clear(&app->bookmarks);
     indigo_timeline_clear(&app->thread);
     indigo_notifications_clear(&app->notifications);
     memset(&app->profile, 0, sizeof app->profile);
@@ -86,7 +87,24 @@ indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned cou
                      root_uri ? root_uri : "");
     indigo_timeline_clear(t);
     for (unsigned i = 0; posts && i < count; i++) {
-        if (!indigo_timeline_append(t, &posts[i])) {
+        indigo_post p = posts[i];
+        /* A thread post has no viewer.bookmarked (the thread view does not
+         * carry it), so borrow the state from a loaded list for the same URI.
+         * A reply that is in no list stays false, the one case the menu can
+         * offer a duplicate create for; see docs/PARITY.md. */
+        for (unsigned j = 0; j < app->timeline.count; j++) {
+            if (strcmp(app->timeline.posts[j].uri, p.uri) == 0) {
+                p.bookmarked = app->timeline.posts[j].bookmarked;
+                break;
+            }
+        }
+        for (unsigned j = 0; j < app->bookmarks.count; j++) {
+            if (strcmp(app->bookmarks.posts[j].uri, p.uri) == 0) {
+                p.bookmarked = app->bookmarks.posts[j].bookmarked;
+                break;
+            }
+        }
+        if (!indigo_timeline_append(t, &p)) {
             break;
         }
     }
@@ -786,6 +804,51 @@ indigo_app_open_settings(indigo_app *app)
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_SETTINGS;
     app->settings_selected = 0;
+}
+
+void
+indigo_app_bookmarks_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
+                            const char *next_cursor)
+{
+    indigo_timeline *t = &app->bookmarks;
+
+    for (unsigned i = 0; posts && i < count; i++) {
+        if (!indigo_timeline_append(t, &posts[i])) {
+            break;
+        }
+    }
+    indigo_timeline_finish_fetch(t, next_cursor);
+    if (t->count == 0) {
+        indigo_copy_utf8(t->status, sizeof t->status,
+                         "No bookmarks yet. Use Bookmark in a post's menu.");
+        t->status_is_error = false;
+    }
+}
+
+void
+indigo_app_bookmarks_failed(indigo_app *app, const char *message)
+{
+    indigo_timeline_fail_fetch(&app->bookmarks, message);
+}
+
+void
+indigo_app_bookmark_done(indigo_app *app, const char *post_uri, bool bookmarked)
+{
+    indigo_timeline *t = indigo_app_active_list(app);
+
+    indigo_app_set_bookmarked(app, post_uri, bookmarked);
+    indigo_copy_utf8(t->status, sizeof t->status,
+                     bookmarked ? "Saved to bookmarks." : "Removed from bookmarks.");
+    t->status_is_error = false;
+}
+
+void
+indigo_app_bookmark_failed(indigo_app *app, const char *message)
+{
+    indigo_timeline *t = indigo_app_active_list(app);
+
+    indigo_copy_utf8(t->status, sizeof t->status, message);
+    t->status_is_error = true;
 }
 
 void

@@ -226,6 +226,8 @@ typedef enum {
     INDIGO_MENU_FIND_POSTS,
     INDIGO_MENU_LISTS,
     INDIGO_MENU_FEEDS,
+    INDIGO_MENU_BOOKMARKS,
+    INDIGO_MENU_BOOKMARK,
     INDIGO_MENU_MUTED,
     INDIGO_MENU_BLOCKED,
     INDIGO_MENU_QUEUE,
@@ -268,6 +270,7 @@ typedef struct {
     unsigned scroll;
     /* The post the menu was opened on, for the entries that are about it. */
     char post_uri[INDIGO_POST_URI_MAX];
+    bool post_bookmarked;
 } indigo_menu;
 
 /* `post` may be NULL when nothing is selected: the facet targets are then

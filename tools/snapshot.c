@@ -551,6 +551,8 @@ fill_social(indigo_app *app, const scenario *s)
         app->thread_focus = 1;
         indigo_app_open_image(app);
         app->screen = was;
+    } else if (s->screen == INDIGO_SCREEN_BOOKMARKS) {
+        fill_timeline(&app->bookmarks, s->timeline, s->select);
     } else if (s->screen == INDIGO_SCREEN_THREAD) {
         fill_timeline(&app->thread, s->timeline, s->select);
         app->thread_focus = 1;
@@ -962,6 +964,7 @@ main(int argc, char **argv)
         {"timeline-loading", INDIGO_SCREEN_HOME, false, 0, 0, 2, 0, false},
         {"timeline-error", INDIGO_SCREEN_HOME, false, 0, 0, 3, 0, false},
         {"timeline-video", INDIGO_SCREEN_HOME, false, 0, 0, 4, 0, false},
+        {"bookmarks", INDIGO_SCREEN_BOOKMARKS, false, 0, 0, 1, 0, false},
         {"thread", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 1, false},
         {"thread-muted", INDIGO_SCREEN_THREAD, false, 0, 0, 1, 9, false},
         {"profile", INDIGO_SCREEN_PROFILE, false, 0, 0, 0, 0, false},

@@ -39,6 +39,7 @@ typedef enum {
     INDIGO_SCREEN_CHAT_JOIN_REQUESTS,
     INDIGO_SCREEN_CHAT_GROUP,
     INDIGO_SCREEN_QUEUE,
+    INDIGO_SCREEN_BOOKMARKS,
     INDIGO_SCREEN_CREDITS,
     /* Not a screen: the number of entries above. */
     INDIGO_SCREEN_COUNT,
@@ -73,6 +74,9 @@ typedef enum {
     INDIGO_REQUEST_SIGN_OUT,
     INDIGO_REQUEST_TIMELINE_REFRESH,
     INDIGO_REQUEST_TIMELINE_MORE,
+    INDIGO_REQUEST_BOOKMARKS,
+    INDIGO_REQUEST_BOOKMARKS_MORE,
+    INDIGO_REQUEST_BOOKMARK,
     INDIGO_REQUEST_LIKE,
     INDIGO_REQUEST_UNLIKE,
     INDIGO_REQUEST_REPOST,
@@ -160,6 +164,8 @@ typedef struct {
     /* The state INDIGO_REQUEST_THREAD_MUTE is asking for. The root travels in
      * request_post_uri. */
     bool request_thread_mute;
+    /* The state INDIGO_REQUEST_BOOKMARK is asking for. */
+    bool request_bookmark;
     /* The state INDIGO_REQUEST_GRAPH is asking for. */
     indigo_graph_action request_graph;
     /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
@@ -182,6 +188,9 @@ typedef struct {
     indigo_settings settings;
     unsigned settings_selected;
     indigo_timeline timeline;
+    /* Private bookmarks, kept out of the home timeline so opening them does
+     * not replace what Back returns to. */
+    indigo_timeline bookmarks;
     /* The post being read in the thread view and the list around it. */
     indigo_timeline thread;
     unsigned thread_focus;
@@ -414,6 +423,19 @@ void indigo_app_toggle_follow(indigo_app *app);
  * only for a root this run muted successfully; a mute made elsewhere does not
  * show here. The request is refused while a job is in flight, and a failure
  * leaves the open thread, its selection and its scroll alone. */
+/* Bookmarks: a private list opened from the menu, and the toggle on the
+ * selected post. The list has its own storage and paging cursor. */
+void indigo_app_open_bookmarks(indigo_app *app);
+void indigo_app_update_bookmarks(indigo_app *app, const indigo_input *input);
+void indigo_app_bookmarks_loaded(indigo_app *app, const indigo_post *posts,
+                                 unsigned count, const char *next_cursor);
+void indigo_app_bookmarks_failed(indigo_app *app, const char *message);
+void indigo_app_toggle_bookmark(indigo_app *app);
+void indigo_app_bookmark_done(indigo_app *app, const char *post_uri, bool bookmarked);
+void indigo_app_bookmark_failed(indigo_app *app, const char *message);
+/* Update every loaded copy of a post's bookmark flag. */
+void indigo_app_set_bookmarked(indigo_app *app, const char *post_uri, bool bookmarked);
+
 bool indigo_app_thread_muted(const indigo_app *app);
 void indigo_app_toggle_thread_mute(indigo_app *app);
 void indigo_app_thread_mute_done(indigo_app *app, const char *root_uri, bool muted);

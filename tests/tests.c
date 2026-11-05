@@ -570,7 +570,9 @@ test_layout_invariants(void)
         /* START is hinted exactly where it exits: sign-in, Home and the menu. */
         CHECK(count_text(&top, "START") + count_text(&bottom, "START") ==
               (screen == INDIGO_SCREEN_SIGNIN || screen == INDIGO_SCREEN_HOME ||
-               screen == INDIGO_SCREEN_MENU ? 1u : 0u));
+               screen == INDIGO_SCREEN_BOOKMARKS || screen == INDIGO_SCREEN_MENU
+                   ? 1u
+                   : 0u));
     }
 }
 
@@ -2251,23 +2253,24 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 16);
+    CHECK(app.menu.count == 17);
     CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
     CHECK(app.menu.items[6].kind == INDIGO_MENU_FEEDS);
-    CHECK(app.menu.items[7].kind == INDIGO_MENU_MUTED);
-    CHECK(app.menu.items[8].kind == INDIGO_MENU_BLOCKED);
-    CHECK(app.menu.items[9].kind == INDIGO_MENU_QUEUE);
-    CHECK(app.menu.items[11].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[12].kind == INDIGO_MENU_CREDITS);
-    CHECK(app.menu.items[13].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[14].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[10].label, "My profile") == 0);
+    CHECK(app.menu.items[7].kind == INDIGO_MENU_BOOKMARKS);
+    CHECK(app.menu.items[8].kind == INDIGO_MENU_MUTED);
+    CHECK(app.menu.items[9].kind == INDIGO_MENU_BLOCKED);
+    CHECK(app.menu.items[10].kind == INDIGO_MENU_QUEUE);
+    CHECK(app.menu.items[12].kind == INDIGO_MENU_SETTINGS);
+    CHECK(app.menu.items[13].kind == INDIGO_MENU_CREDITS);
+    CHECK(app.menu.items[14].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[15].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[11].label, "My profile") == 0);
 
-    /* Sign out is the fifteenth item, so it sits below the window until the
+    /* Sign out is the sixteenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 14; i++) {
+    for (unsigned i = 0; i < 15; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -3364,6 +3367,95 @@ test_timeline_actions(void)
 }
 
 static void
+test_bookmarks(void)
+{
+    static indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_post a = make_post("at://a/app.bsky.feed.post/1", "saved");
+    indigo_post b = make_post("at://a/app.bsky.feed.post/2", "later");
+    indigo_menu menu;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_app_sign_in_succeeded(&app, "me.example");
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_TIMELINE_REFRESH);
+    a.bookmarked = true;
+    indigo_timeline_append(&app.timeline, &a);
+    indigo_timeline_append(&app.timeline, &b);
+
+    /* The post menu names the state it would change, and the app menu has the
+     * private list. */
+    indigo_menu_build(&menu, &a, "me.example");
+    CHECK(menu.items[2].kind == INDIGO_MENU_BOOKMARK);
+    CHECK(strcmp(menu.items[2].label, "Remove bookmark") == 0);
+    CHECK(menu.post_bookmarked);
+    b.bookmarked = false;
+    indigo_menu_build(&menu, &b, "me.example");
+    CHECK(strcmp(menu.items[2].label, "Bookmark") == 0);
+    CHECK(!menu.post_bookmarked);
+
+    /* Opening the list is its own request; the first page replaces what was
+     * there and reports the cursor after it. */
+    indigo_app_open_bookmarks(&app);
+    CHECK(app.screen == INDIGO_SCREEN_BOOKMARKS);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_BOOKMARKS);
+    CHECK(app.bookmarks.loading);
+    indigo_app_bookmarks_loaded(&app, &a, 1, "next");
+    CHECK(app.bookmarks.count == 1);
+    CHECK(app.bookmarks.posts[0].bookmarked);
+    CHECK(app.bookmarks.has_more);
+    CHECK(strcmp(app.bookmarks.cursor, "next") == 0);
+
+    /* Near the end of the page, moving asks for the next one. */
+    in = (indigo_input) {0};
+    in.page_down = true;
+    indigo_app_update(&app, &in);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_BOOKMARKS_MORE);
+    CHECK(app.bookmarks.loading);
+    b.bookmarked = true;
+    indigo_app_bookmarks_loaded(&app, &b, 1, "");
+    CHECK(app.bookmarks.count == 2);
+    CHECK(!app.bookmarks.has_more);
+    CHECK(app.bookmarks.posts[1].bookmarked);
+
+    /* Toggling is a request keyed by the post URI; no record URI is invented.
+     * A failure leaves the last confirmed state in place. */
+    indigo_timeline_select(&app.bookmarks, 0, INDIGO_TIMELINE_ROWS);
+    indigo_app_toggle_bookmark(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_BOOKMARK);
+    CHECK(!app.request_bookmark);
+    CHECK(strcmp(app.request_post_uri, a.uri) == 0);
+    indigo_app_bookmark_failed(&app, "Could not reach the server.");
+    CHECK(app.bookmarks.posts[0].bookmarked);
+    CHECK(app.bookmarks.count == 2);
+    CHECK(app.bookmarks.status_is_error);
+
+    /* Success updates every loaded copy and takes the row out of the list. */
+    indigo_app_toggle_bookmark(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_BOOKMARK);
+    indigo_app_bookmark_done(&app, a.uri, false);
+    CHECK(!app.timeline.posts[0].bookmarked);
+    CHECK(app.bookmarks.count == 1);
+    CHECK(strcmp(app.bookmarks.posts[0].uri, b.uri) == 0);
+    CHECK(!app.bookmarks.status_is_error);
+
+    /* Bookmarking a post adds no row on its own; the list is refetched when it
+     * is opened. The flag is still visible everywhere the post is. */
+    app.bookmarks.posts[0].bookmarked = false;
+    app.timeline.posts[1].bookmarked = false;
+    indigo_app_toggle_bookmark(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_BOOKMARK);
+    CHECK(app.request_bookmark);
+    indigo_app_bookmark_done(&app, b.uri, true);
+    CHECK(app.timeline.posts[1].bookmarked);
+
+    /* Signing out is the end of the private list too. */
+    indigo_app_signed_out(&app, "Signed out.");
+    CHECK(app.bookmarks.count == 0);
+}
+
+static void
 test_copy_utf8(void)
 {
     char b[5];
@@ -3527,9 +3619,9 @@ test_facet_menu(void)
     p.facets[2] = (indigo_post_facet) {INDIGO_FACET_LINK, 36, 58, "https://example.com/x"};
 
     indigo_menu_build(&menu, &p, "me.example.com");
-    /* Three facet targets, the two entries about the post, then the thirteen app
-     * actions. */
-    CHECK(menu.count == 21);
+    /* Three facet targets, the three entries about the post, then the fourteen
+     * app actions. */
+    CHECK(menu.count == 23);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -3539,9 +3631,10 @@ test_facet_menu(void)
     CHECK(strcmp(menu.items[2].label, "Link: https://example.com/x") == 0);
     CHECK(menu.items[3].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
+    CHECK(menu.items[5].kind == INDIGO_MENU_BOOKMARK);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
-    CHECK(menu.items[5].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[20].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[6].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[22].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -3567,8 +3660,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 21);
-    CHECK(app.menu.items[20].kind == INDIGO_MENU_CLOSE);
+    CHECK(app.menu.count == 23);
+    CHECK(app.menu.items[22].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -3647,21 +3740,21 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 18);
+    CHECK(menu.count == 20);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
-    CHECK(menu.items[2].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
      * bounds. */
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 18);
+    CHECK(menu.count == 20);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 16);
-    CHECK(strcmp(menu.items[10].label, "Your profile") == 0);
+    CHECK(menu.count == 17);
+    CHECK(strcmp(menu.items[11].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -7489,6 +7582,7 @@ main(void)
     test_timeline_selection();
     test_timeline_paging();
     test_timeline_actions();
+    test_bookmarks();
     test_copy_utf8();
     test_wrap();
     test_canvas_spans();

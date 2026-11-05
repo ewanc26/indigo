@@ -330,6 +330,9 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
             indigo_copy_utf8(m->post_uri, sizeof m->post_uri, post->uri);
             add_item(m, INDIGO_MENU_LIKED_BY, "Who liked this", "");
             add_item(m, INDIGO_MENU_REPOSTED_BY, "Who reposted this", "");
+            m->post_bookmarked = post->bookmarked;
+            add_item(m, INDIGO_MENU_BOOKMARK,
+                     post->bookmarked ? "Remove bookmark" : "Bookmark", "");
         }
     }
     add_item(m, INDIGO_MENU_COMPOSE, "New post", "");
@@ -339,6 +342,7 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_FIND_POSTS, "Find posts", "");
     add_item(m, INDIGO_MENU_LISTS, "Lists", "");
     add_item(m, INDIGO_MENU_FEEDS, "Feeds", "");
+    add_item(m, INDIGO_MENU_BOOKMARKS, "Bookmarks", "");
     add_item(m, INDIGO_MENU_MUTED, "Muted accounts", "");
     add_item(m, INDIGO_MENU_BLOCKED, "Blocked accounts", "");
     add_item(m, INDIGO_MENU_QUEUE, "Queued posts", "");
