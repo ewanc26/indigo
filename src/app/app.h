@@ -77,6 +77,7 @@ typedef enum {
     INDIGO_REQUEST_REPOST,
     INDIGO_REQUEST_UNREPOST,
     INDIGO_REQUEST_DELETE_POST,
+    INDIGO_REQUEST_THREAD_MUTE,
     INDIGO_REQUEST_THREAD,
     INDIGO_REQUEST_PROFILE,
     INDIGO_REQUEST_NOTIFICATIONS,
@@ -152,6 +153,9 @@ typedef struct {
     /* The state INDIGO_REQUEST_FOLLOW is asking for, so main.c can turn the
      * optimistic toggle into a follow or an unfollow. */
     bool request_follow;
+    /* The state INDIGO_REQUEST_THREAD_MUTE is asking for. The root travels in
+     * request_post_uri. */
+    bool request_thread_mute;
     /* The state INDIGO_REQUEST_GRAPH is asking for. */
     indigo_graph_action request_graph;
     /* The list INDIGO_REQUEST_PEOPLE is asking for, and whose it is. */
@@ -178,6 +182,12 @@ typedef struct {
     indigo_timeline thread;
     unsigned thread_focus;
     char thread_uri[INDIGO_POST_URI_MAX];
+    /* The conversation's root, as the session found it, and the root the last
+     * successful mute addressed. The two are compared rather than a bare bool,
+     * so reopening another thread never inherits this one's label. */
+    char thread_root[INDIGO_POST_URI_MAX];
+    char thread_muted_root[INDIGO_POST_URI_MAX];
+    bool thread_muted;
     /* A destructive action is inert until the confirmation screen accepts it. */
     bool confirm_delete;
     char delete_uri[INDIGO_POST_URI_MAX];
@@ -280,7 +290,7 @@ void indigo_app_delete_failed(indigo_app *app, const char *message);
 
 /* Results fed back by the platform glue. */
 void indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigned count,
-                              unsigned focus);
+                              unsigned focus, const char *root_uri);
 void indigo_app_thread_failed(indigo_app *app, const char *message);
 void indigo_app_profile_loaded(indigo_app *app, const indigo_profile *p);
 void indigo_app_profile_failed(indigo_app *app, const char *message);
@@ -383,6 +393,14 @@ void indigo_app_post_search_loaded(indigo_app *app, const indigo_post *posts, un
 /* Follow/unfollow. The toggle flips `following` at once and reverts it if the
  * job fails, so the button responds to the press rather than to the network. */
 void indigo_app_toggle_follow(indigo_app *app);
+/* Thread mute. The protocol has no read for muted threads, so this is true
+ * only for a root this run muted successfully; a mute made elsewhere does not
+ * show here. The request is refused while a job is in flight, and a failure
+ * leaves the open thread, its selection and its scroll alone. */
+bool indigo_app_thread_muted(const indigo_app *app);
+void indigo_app_toggle_thread_mute(indigo_app *app);
+void indigo_app_thread_mute_done(indigo_app *app, const char *root_uri, bool muted);
+void indigo_app_thread_mute_failed(indigo_app *app, const char *message);
 void indigo_app_follow_done(indigo_app *app, bool following, const char *follow_uri);
 void indigo_app_follow_failed(indigo_app *app, const char *message);
 /* Mute/unmute and block/unblock. Mute flips optimistically like follow; block

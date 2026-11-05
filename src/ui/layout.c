@@ -104,6 +104,7 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_GROUP_LINK:
     case INDIGO_ACTION_REFRESH:
     case INDIGO_ACTION_AUTHOR:
+    case INDIGO_ACTION_MUTE_THREAD:
     case INDIGO_ACTION_DELETE:
     case INDIGO_ACTION_DELETE_CANCEL:
         return s_pill[3];
@@ -266,7 +267,8 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_IMAGE};
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
-        INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_DELETE,
+        INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_MUTE_THREAD,
+        INDIGO_ACTION_DELETE,
         INDIGO_ACTION_DELETE_CONFIRM, INDIGO_ACTION_DELETE_CANCEL, INDIGO_ACTION_BACK,
         INDIGO_ACTION_IMAGE};
     static const indigo_action profile_actions[] = {
