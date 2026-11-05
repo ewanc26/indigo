@@ -107,6 +107,9 @@ typedef struct {
     /* Record URIs of the viewer's own like/repost, empty when none. */
     char like_uri[INDIGO_POST_URI_MAX];
     char repost_uri[INDIGO_POST_URI_MAX];
+    /* Private bookmark state from viewer.bookmarked. Bookmarks have no record
+     * URI: toggling one is a create or delete keyed by the post URI. */
+    bool bookmarked;
     /* An action is in flight for this post. */
     bool like_pending;
     bool repost_pending;
@@ -160,6 +163,9 @@ bool indigo_timeline_set_like(indigo_timeline *t, const char *post_uri,
                               const char *like_uri, bool pending);
 bool indigo_timeline_set_repost(indigo_timeline *t, const char *post_uri,
                                 const char *repost_uri, bool pending);
+/* A bookmark has no record URI: the flag is the whole state. */
+bool indigo_timeline_set_bookmarked(indigo_timeline *t, const char *post_uri,
+                                    bool bookmarked);
 
 /* Copy `src` into `dst` of `cap` bytes, truncating on a UTF-8 boundary. */
 void indigo_copy_utf8(char *dst, size_t cap, const char *src);

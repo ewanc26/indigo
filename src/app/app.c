@@ -18,6 +18,7 @@ indigo_app_init(indigo_app *app)
     app->screen = INDIGO_SCREEN_SIGNIN;
     indigo_signin_init(&app->signin);
     indigo_timeline_init(&app->timeline);
+    indigo_timeline_init(&app->bookmarks);
     indigo_timeline_init(&app->thread);
     /* The memset above leaves text_scale at 0, which is not a valid scale. */
     indigo_settings_defaults(&app->settings);
@@ -147,14 +148,29 @@ indigo_app_go_back(indigo_app *app)
 indigo_timeline *
 indigo_app_active_list(indigo_app *app)
 {
-    return app->screen == INDIGO_SCREEN_THREAD ? &app->thread : &app->timeline;
+    if (app->screen == INDIGO_SCREEN_THREAD) {
+        return &app->thread;
+    }
+    if (app->screen == INDIGO_SCREEN_BOOKMARKS) {
+        return &app->bookmarks;
+    }
+    return &app->timeline;
 }
 
 bool
 indigo_app_selected_post_is_own(const indigo_app *app)
 {
-    const indigo_timeline *t = app->screen == INDIGO_SCREEN_THREAD ? &app->thread : &app->timeline;
-    const indigo_post *p = indigo_timeline_selected(t);
+    const indigo_timeline *t;
+    const indigo_post *p;
+
+    if (app->screen == INDIGO_SCREEN_THREAD) {
+        t = &app->thread;
+    } else if (app->screen == INDIGO_SCREEN_BOOKMARKS) {
+        t = &app->bookmarks;
+    } else {
+        t = &app->timeline;
+    }
+    p = indigo_timeline_selected(t);
 
     return p && app->signin.account[0] && strcasecmp(p->handle, app->signin.account) == 0;
 }
@@ -172,6 +188,20 @@ indigo_app_set_repost(indigo_app *app, const char *post_uri, const char *repost_
 {
     indigo_timeline_set_repost(&app->timeline, post_uri, repost_uri, pending);
     indigo_timeline_set_repost(&app->thread, post_uri, repost_uri, pending);
+    indigo_timeline_set_repost(&app->bookmarks, post_uri, repost_uri, pending);
+}
+
+void
+indigo_app_set_bookmarked(indigo_app *app, const char *post_uri, bool bookmarked)
+{
+    indigo_timeline_set_bookmarked(&app->timeline, post_uri, bookmarked);
+    indigo_timeline_set_bookmarked(&app->thread, post_uri, bookmarked);
+    indigo_timeline_set_bookmarked(&app->bookmarks, post_uri, bookmarked);
+    /* Removing one from the bookmarks screen drops its row: leaving it there
+     * would offer to open a post that is no longer saved. */
+    if (!bookmarked) {
+        indigo_timeline_remove_post(&app->bookmarks, post_uri, INDIGO_TIMELINE_ROWS);
+    }
 }
 
 static void
@@ -195,6 +225,19 @@ indigo_app_toggle_like(indigo_app *app)
     request_post_action(app, p->like_uri[0] ? INDIGO_REQUEST_UNLIKE : INDIGO_REQUEST_LIKE, p,
                         p->like_uri);
     indigo_app_set_like(app, p->uri, p->like_uri, true);
+}
+
+void
+indigo_app_toggle_bookmark(indigo_app *app)
+{
+    const indigo_post *p = indigo_timeline_selected(indigo_app_active_list(app));
+
+    if (!p || !p->uri[0] || app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri, p->uri);
+    app->request_bookmark = !p->bookmarked;
+    app->request = INDIGO_REQUEST_BOOKMARK;
 }
 
 void
@@ -261,6 +304,18 @@ indigo_app_open_profile(indigo_app *app, const char *actor)
 }
 
 void
+indigo_app_open_bookmarks(indigo_app *app)
+{
+    if (app->request != INDIGO_REQUEST_NONE) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_BOOKMARKS;
+    indigo_timeline_begin_fetch(&app->bookmarks, true);
+    app->request = INDIGO_REQUEST_BOOKMARKS;
+}
+
+void
 indigo_app_open_notifications(indigo_app *app)
 {
     if (app->request != INDIGO_REQUEST_NONE) {
@@ -308,7 +363,9 @@ indigo_app_open_menu(indigo_app *app)
 {
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_MENU;
-    indigo_menu_build(&app->menu, indigo_timeline_selected(&app->timeline),
+    /* The post the menu is about is the selected one on whichever list is in
+     * front; on Home that is the timeline, and in a thread it is the thread. */
+    indigo_menu_build(&app->menu, indigo_timeline_selected(indigo_app_active_list(app)),
                       app->signin.account);
 }
 
@@ -325,6 +382,9 @@ indigo_app_image_source(const indigo_app *app)
     }
     if (app->screen == INDIGO_SCREEN_THREAD) {
         return indigo_timeline_selected(&app->thread);
+    }
+    if (app->screen == INDIGO_SCREEN_BOOKMARKS) {
+        return indigo_timeline_selected(&app->bookmarks);
     }
     if (app->screen == INDIGO_SCREEN_HOME) {
         return indigo_timeline_selected(&app->timeline);
@@ -407,6 +467,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_QUEUE:
         indigo_app_update_queue(app, input);
+        break;
+    case INDIGO_SCREEN_BOOKMARKS:
+        indigo_app_update_bookmarks(app, input);
         break;
     case INDIGO_SCREEN_CHAT_REQUESTS:
         indigo_app_update_chat_requests(app, input);

@@ -16,6 +16,10 @@ typedef enum {
     INDIGO_SESSION_EVENT_SIGNED_OUT,
     INDIGO_SESSION_EVENT_TIMELINE_PAGE,
     INDIGO_SESSION_EVENT_TIMELINE_FAILED,
+    INDIGO_SESSION_EVENT_BOOKMARKS_PAGE,
+    INDIGO_SESSION_EVENT_BOOKMARKS_FAILED,
+    INDIGO_SESSION_EVENT_BOOKMARK_DONE,
+    INDIGO_SESSION_EVENT_BOOKMARK_FAILED,
     INDIGO_SESSION_EVENT_POST_ACTION_DONE,
     INDIGO_SESSION_EVENT_POST_ACTION_FAILED,
     INDIGO_SESSION_EVENT_POST_DELETED,
@@ -138,6 +142,8 @@ typedef struct {
      * request addressed, and `muted` the state now in effect. */
     char thread_root[INDIGO_POST_URI_MAX];
     bool muted;
+    /* BOOKMARK_DONE: the state now in effect for post_uri. */
+    bool bookmarked;
 } indigo_session_event;
 
 /*
@@ -159,6 +165,10 @@ bool indigo_session_submit_logout(void);
 
 /* `cursor` NULL or empty fetches the first page. */
 bool indigo_session_submit_timeline(const char *cursor);
+/* The private bookmarks list, and creating or deleting one for `post_uri`.
+ * The list keeps its own storage and cursor, the way post search does. */
+bool indigo_session_submit_bookmarks(const char *cursor);
+bool indigo_session_submit_bookmark(const char *post_uri, bool bookmarked);
 /* `undo_uri` is the like/repost record to delete for UNLIKE/UNREPOST. */
 bool indigo_session_submit_post_action(indigo_post_action action, const char *post_uri,
                                        const char *post_cid, const char *undo_uri);
@@ -334,6 +344,9 @@ bool indigo_session_busy(void);
 /* The posts of the last TIMELINE_PAGE event. Valid until the next submit, so
  * read it as soon as the event is polled. */
 const indigo_post *indigo_session_page(unsigned *count);
+/* The posts of the last BOOKMARKS_PAGE event, in getBookmarks order. Same
+ * lifetime rule as indigo_session_page(). */
+const indigo_post *indigo_session_bookmarks(unsigned *count);
 
 /* Results of the last PROFILE_LOADED / NOTIFICATIONS_PAGE event; same
  * lifetime rule as indigo_session_page(). */

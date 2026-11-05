@@ -142,6 +142,112 @@ indigo_session_do_timeline(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
+/* The private bookmark list. getBookmarks returns bookmark records (with the
+ * post view as an opaque JSON item), so the subject URIs are fetched through
+ * getPosts, which is the one conversion path the rest of the app uses. The
+ * getBookmarks order is kept even when getPosts leaves a missing post out. */
+void
+indigo_session_do_bookmarks(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_BOOKMARKS_FAILED};
+    wf_bookmark_list marks;
+    wf_agent_post_list posts;
+    const char *uris[INDIGO_PAGE_SIZE];
+    unsigned uri_count = 0;
+    unsigned added_from;
+    wf_status st;
+
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    memset(&marks, 0, sizeof marks);
+    memset(&posts, 0, sizeof posts);
+    st = wf_agent_get_bookmarks_typed(g_session.agent, INDIGO_PAGE_SIZE,
+                                      j->cursor[0] ? j->cursor : NULL, &marks);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "bookmarks", st);
+        return;
+    }
+    for (size_t i = 0; i < marks.count && uri_count < INDIGO_PAGE_SIZE; i++) {
+        if (marks.items[i].uri && marks.items[i].uri[0]) {
+            uris[uri_count++] = marks.items[i].uri;
+        }
+    }
+    if (uri_count > 0) {
+        st = wf_agent_get_posts_typed(g_session.agent, uris, uri_count, &posts);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "bookmarks", st);
+            wf_bookmark_list_free(&marks);
+            return;
+        }
+    }
+
+    if (!j->paging) {
+        g_session.bookmark_count = 0;
+    }
+    added_from = g_session.bookmark_count;
+    for (size_t i = 0; i < marks.count && g_session.bookmark_count < INDIGO_TIMELINE_MAX;
+         i++) {
+        const char *uri = marks.items[i].uri;
+
+        if (!uri || !uri[0]) {
+            continue;
+        }
+        for (size_t p = 0; p < posts.post_count; p++) {
+            if (posts.posts[p].uri && strcmp(posts.posts[p].uri, uri) == 0) {
+                if (indigo_session_fill_post(&posts.posts[p],
+                                             &g_session.bookmarks[g_session.bookmark_count])) {
+                    /* Being in getBookmarks is the state, even if the post
+                     * view did not repeat viewer.bookmarked. */
+                    g_session.bookmarks[g_session.bookmark_count].bookmarked = true;
+                    g_session.bookmark_count++;
+                }
+                break;
+            }
+        }
+    }
+    fill_video_durations(&g_session.bookmarks[added_from],
+                         g_session.bookmark_count - added_from);
+    ev.kind = INDIGO_SESSION_EVENT_BOOKMARKS_PAGE;
+    ev.page_count = g_session.bookmark_count;
+    /* Only the rows this page added: the accessor hands back the whole held
+     * list, and appending all of it again would duplicate every earlier page. */
+    ev.focus = added_from;
+    indigo_copy_utf8(ev.cursor, sizeof ev.cursor, marks.cursor ? marks.cursor : "");
+    wf_agent_post_list_free(&posts);
+    wf_bookmark_list_free(&marks);
+    indigo_log_info("bookmarks: %u", g_session.bookmark_count);
+    indigo_session_publish_event(&ev);
+}
+
+void
+indigo_session_do_bookmark(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_BOOKMARK_FAILED,
+                               .bookmarked = j->bookmark};
+    wf_status st;
+
+    snprintf(ev.post_uri, sizeof ev.post_uri, "%s", j->post_uri);
+    if (!g_session.agent) {
+        ev.failure = WF_FAIL_NOT_READY;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    st = j->bookmark ? wf_agent_create_bookmark(g_session.agent, j->post_uri, NULL)
+                     : wf_agent_delete_bookmark(g_session.agent, j->post_uri);
+    if (st == WF_OK) {
+        ev.kind = INDIGO_SESSION_EVENT_BOOKMARK_DONE;
+    } else {
+        ev.failure = wf_failure_classify(st, 0, NULL);
+        indigo_log_warn("bookmark %s failed: wolfram status %d (%s)",
+                        j->bookmark ? "create" : "delete", (int) st,
+                        wf_failure_tag(ev.failure));
+    }
+    indigo_session_publish_event(&ev);
+}
+
 void
 indigo_session_do_post_action(const indigo_job *j)
 {
@@ -1262,6 +1368,30 @@ indigo_session_submit_timeline(const char *cursor)
     if (cursor) {
         snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
     }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_bookmarks(const char *cursor)
+{
+    indigo_job j = {.kind = JOB_BOOKMARKS};
+
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_bookmark(const char *post_uri, bool bookmarked)
+{
+    indigo_job j = {.kind = JOB_BOOKMARK, .bookmark = bookmarked};
+
+    if (!post_uri || strncmp(post_uri, "at://", 5) != 0) {
+        return false;
+    }
+    snprintf(j.post_uri, sizeof j.post_uri, "%s", post_uri);
     return indigo_session_enqueue(&j);
 }
 

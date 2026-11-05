@@ -278,6 +278,21 @@ handle_requests(indigo_app *app)
             indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_BOOKMARKS:
+        if (!indigo_session_submit_bookmarks(NULL)) {
+            indigo_app_bookmarks_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BOOKMARKS_MORE:
+        if (!indigo_session_submit_bookmarks(app->bookmarks.cursor)) {
+            indigo_app_bookmarks_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BOOKMARK:
+        if (!indigo_session_submit_bookmark(app->request_post_uri, app->request_bookmark)) {
+            indigo_app_bookmark_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_LIKE:
         post_action(app, INDIGO_POST_ACTION_LIKE);
         break;
@@ -654,6 +669,26 @@ handle_events(indigo_app *app)
         }
         case INDIGO_SESSION_EVENT_TIMELINE_FAILED:
             indigo_timeline_fail_fetch(&app->timeline, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_BOOKMARKS_PAGE: {
+            unsigned n;
+            const indigo_post *page = indigo_session_bookmarks(&n);
+
+            /* Called even for an empty page, so a list with no bookmarks
+             * finishes loading and says so instead of saying "Loading...". */
+            if (ev.focus <= n) {
+                indigo_app_bookmarks_loaded(app, page + ev.focus, n - ev.focus, ev.cursor);
+            }
+            break;
+        }
+        case INDIGO_SESSION_EVENT_BOOKMARKS_FAILED:
+            indigo_app_bookmarks_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_BOOKMARK_DONE:
+            indigo_app_bookmark_done(app, ev.post_uri, ev.bookmarked);
+            break;
+        case INDIGO_SESSION_EVENT_BOOKMARK_FAILED:
+            indigo_app_bookmark_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_POST_ACTION_DONE:
             if (ev.action == INDIGO_POST_ACTION_LIKE || ev.action == INDIGO_POST_ACTION_UNLIKE) {

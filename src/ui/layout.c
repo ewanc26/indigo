@@ -265,6 +265,10 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
         INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH, INDIGO_ACTION_MENU,
         INDIGO_ACTION_IMAGE};
+    static const indigo_action bookmarks_actions[] = {
+        INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
+        INDIGO_ACTION_REPOST, INDIGO_ACTION_OPEN, INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK,
+        INDIGO_ACTION_IMAGE};
     static const indigo_action thread_actions[] = {
         INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1, INDIGO_ACTION_ROW2, INDIGO_ACTION_LIKE,
         INDIGO_ACTION_REPOST, INDIGO_ACTION_REPLY, INDIGO_ACTION_MUTE_THREAD,
@@ -335,6 +339,9 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         break;
     case INDIGO_SCREEN_THREAD:
         USE(thread_actions);
+        break;
+    case INDIGO_SCREEN_BOOKMARKS:
+        USE(bookmarks_actions);
         break;
     case INDIGO_SCREEN_PROFILE:
         USE(profile_actions);

@@ -647,7 +647,8 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, INDIGO_TOP_HEIGHT, COL_BG_TOP);
     }
 
-    if (app->screen == INDIGO_SCREEN_HOME || app->screen == INDIGO_SCREEN_THREAD) {
+    if (app->screen == INDIGO_SCREEN_HOME || app->screen == INDIGO_SCREEN_THREAD ||
+        app->screen == INDIGO_SCREEN_BOOKMARKS) {
         indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, COL_BAR);
         indigo_layout_build_top_post(app, c);
         return;

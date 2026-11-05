@@ -42,6 +42,7 @@
 #include <wolfram/actor_typed.h>
 #include <wolfram/agent.h>
 #include <wolfram/attach.h>
+#include <wolfram/bookmark_typed.h>
 #include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
@@ -62,6 +63,8 @@ typedef enum {
     JOB_RESUME,
     JOB_LOGOUT,
     JOB_TIMELINE,
+    JOB_BOOKMARKS,
+    JOB_BOOKMARK,
     JOB_POST_ACTION,
     JOB_DELETE_POST,
     JOB_THREAD,
@@ -147,6 +150,8 @@ typedef struct {
     bool link_disable;
     /* JOB_THREAD_MUTE: mute when true, unmute when false. */
     bool mute;
+    /* JOB_BOOKMARK: create when true, delete when false. */
+    bool bookmark;
     /* True when this job asks for the next page of the last search rather
      * than a fresh one, so the worker appends instead of resetting. */
     bool paging;
@@ -205,6 +210,10 @@ typedef struct {
  * to be valid until the next result arrives. */
     indigo_post posts[INDIGO_SEARCH_MAX];
     unsigned post_count;
+/* Bookmarks are their own bounded list: opening them must not disturb post
+ * search, and the page can hold more rows than a search result set. */
+    indigo_post bookmarks[INDIGO_TIMELINE_MAX];
+    unsigned bookmark_count;
 /* Curated lists keep their own array for the same reason the posts do: a
  * list is a third type, and the screen needs the previous list to stay valid
  * until the next result arrives. */
@@ -264,6 +273,8 @@ bool indigo_session_to_post(const wf_agent_feed_item *item, indigo_post *out);
 
 /* session_read.c */
 void indigo_session_do_author_feed(const indigo_job *j);
+void indigo_session_do_bookmark(const indigo_job *j);
+void indigo_session_do_bookmarks(const indigo_job *j);
 void indigo_session_do_feed(const indigo_job *j);
 void indigo_session_do_notifications(const indigo_job *j);
 void indigo_session_do_chat_inbox(void);

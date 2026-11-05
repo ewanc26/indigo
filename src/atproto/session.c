@@ -78,6 +78,12 @@ worker(void *arg)
         case JOB_TIMELINE:
             indigo_session_do_timeline(&j);
             break;
+        case JOB_BOOKMARKS:
+            indigo_session_do_bookmarks(&j);
+            break;
+        case JOB_BOOKMARK:
+            indigo_session_do_bookmark(&j);
+            break;
         case JOB_POST_ACTION:
             indigo_session_do_post_action(&j);
             break;
@@ -278,6 +284,13 @@ indigo_session_page(unsigned *count)
 {
     *count = g_session.page_count;
     return g_session.page;
+}
+
+const indigo_post *
+indigo_session_bookmarks(unsigned *count)
+{
+    *count = g_session.bookmark_count;
+    return g_session.bookmarks;
 }
 
 bool

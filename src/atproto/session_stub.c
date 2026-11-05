@@ -94,6 +94,21 @@ indigo_session_submit_timeline(const char *cursor)
 }
 
 bool
+indigo_session_submit_bookmarks(const char *cursor)
+{
+    (void) cursor;
+    return false;
+}
+
+bool
+indigo_session_submit_bookmark(const char *post_uri, bool bookmarked)
+{
+    (void) post_uri;
+    (void) bookmarked;
+    return false;
+}
+
+bool
 indigo_session_submit_post_action(indigo_post_action action, const char *post_uri,
                                   const char *post_cid, const char *undo_uri)
 {
@@ -497,6 +512,13 @@ indigo_session_busy(void)
 
 const indigo_post *
 indigo_session_page(unsigned *count)
+{
+    *count = 0;
+    return NULL;
+}
+
+const indigo_post *
+indigo_session_bookmarks(unsigned *count)
 {
     *count = 0;
     return NULL;
