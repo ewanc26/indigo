@@ -26,6 +26,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED,
     INDIGO_SESSION_EVENT_PROFILE_LOADED,
     INDIGO_SESSION_EVENT_PROFILE_FAILED,
+    INDIGO_SESSION_EVENT_PROFILE_UPDATE_DONE,
+    INDIGO_SESSION_EVENT_PROFILE_UPDATE_FAILED,
     INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE,
     INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED,
     INDIGO_SESSION_EVENT_PUBLISHED,
@@ -173,6 +175,9 @@ bool indigo_session_submit_thread(const char *uri);
 bool indigo_session_submit_thread_mute(const char *root_uri, bool mute);
 /* `actor` is a handle or DID. */
 bool indigo_session_submit_profile(const char *actor);
+/* Replace the signed-in account's own display name and bio. Empty strings are
+ * valid and clear the field. */
+bool indigo_session_submit_profile_update(const char *display_name, const char *bio);
 bool indigo_session_submit_notifications(void);
 /* The next page of notifications, from the cursor the last page reported. The
  * worker appends rather than replacing, and does not mark anything seen: those

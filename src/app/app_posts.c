@@ -2,6 +2,8 @@
 
 #include "app/app_internal.h"
 
+#include <strings.h>
+
 /* The touch actions the timeline and the thread share: pick a row, like,
  * repost, open the picture. */
 static void
@@ -275,9 +277,23 @@ void
 indigo_app_update_profile(indigo_app *app, const indigo_input *input)
 {
     indigo_profile *p = &app->profile;
+    const bool self = indigo_app_profile_is_self(app);
 
     if (input->back) {
         indigo_app_go_back(app);
+        return;
+    }
+    /* On your own profile the primary action edits it; the follow, mute and
+     * block actions address someone else, so they are not offered at all. */
+    if (self) {
+        if ((input->confirm || input->like) && p->loaded && !p->loading) {
+            indigo_app_open_profile_edit(app);
+        }
+        if (input->touch_pressed &&
+            indigo_layout_hit_app(app, input->touch_x, input->touch_y) == INDIGO_ACTION_FOLLOW) {
+            indigo_app_open_profile_edit(app);
+        }
+        return;
     }
     /* Y follows, matching the post screen's use of Y for the primary action
      * on the focused item. The button shows the state, so the same press
@@ -328,6 +344,111 @@ indigo_app_update_profile(indigo_app *app, const indigo_input *input)
             break;
         }
     }
+}
+
+bool
+indigo_app_profile_is_self(const indigo_app *app)
+{
+    const indigo_profile *p = &app->profile;
+
+    return p->loaded && p->handle[0] && app->signin.account[0] &&
+           strcasecmp(p->handle, app->signin.account) == 0;
+}
+
+void
+indigo_app_open_profile_edit(indigo_app *app)
+{
+    indigo_profile_edit *e = &app->profile_edit;
+
+    if (!indigo_app_profile_is_self(app) || app->screen == INDIGO_SCREEN_PROFILE_EDIT) {
+        return;
+    }
+    memset(e, 0, sizeof *e);
+    indigo_copy_utf8(e->display_name, sizeof e->display_name, app->profile.display_name);
+    indigo_copy_utf8(e->bio, sizeof e->bio, app->profile.bio);
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_PROFILE_EDIT;
+}
+
+bool
+indigo_app_profile_edit_valid(const char *display_name, const char *bio)
+{
+    return display_name && bio &&
+           strlen(display_name) < INDIGO_POST_NAME_MAX &&
+           strlen(bio) < INDIGO_PROFILE_BIO_MAX;
+}
+
+void
+indigo_app_set_profile_name(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->profile_edit.display_name,
+                     sizeof app->profile_edit.display_name, text);
+    app->profile_edit.status[0] = '\0';
+    app->profile_edit.status_is_error = false;
+}
+
+void
+indigo_app_set_profile_bio(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->profile_edit.bio, sizeof app->profile_edit.bio, text);
+    app->profile_edit.status[0] = '\0';
+    app->profile_edit.status_is_error = false;
+}
+
+void
+indigo_app_update_profile_edit(indigo_app *app, const indigo_input *input)
+{
+    indigo_profile_edit *e = &app->profile_edit;
+
+    if (input->back && !e->saving) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (e->saving) {
+        return;
+    }
+    if (input->up || input->down) {
+        e->selected = e->selected == 0 ? 1 : 0;
+    }
+    if (input->confirm) {
+        app->request = e->selected == 0 ? INDIGO_REQUEST_EDIT_PROFILE_NAME
+                                        : INDIGO_REQUEST_EDIT_PROFILE_BIO;
+    }
+    if (input->like) {
+        if (indigo_app_profile_edit_valid(e->display_name, e->bio)) {
+            app->request = INDIGO_REQUEST_PROFILE_UPDATE;
+        } else {
+            indigo_copy_utf8(e->status, sizeof e->status,
+                             "That profile is too long to save.");
+            e->status_is_error = true;
+        }
+    }
+}
+
+void
+indigo_app_profile_update_done(indigo_app *app)
+{
+    indigo_profile_edit *e = &app->profile_edit;
+    indigo_profile *p = &app->profile;
+
+    e->saving = false;
+    indigo_copy_utf8(p->display_name, sizeof p->display_name, e->display_name);
+    indigo_copy_utf8(p->bio, sizeof p->bio, e->bio);
+    indigo_copy_utf8(p->status, sizeof p->status, "Profile updated.");
+    p->status_is_error = false;
+    if (app->screen == INDIGO_SCREEN_PROFILE_EDIT) {
+        indigo_app_go_back(app);
+    }
+}
+
+void
+indigo_app_profile_update_failed(indigo_app *app, const char *message)
+{
+    indigo_profile_edit *e = &app->profile_edit;
+
+    e->saving = false;
+    indigo_copy_utf8(e->status, sizeof e->status, message);
+    e->status_is_error = true;
 }
 
 static void

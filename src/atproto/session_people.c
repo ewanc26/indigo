@@ -39,6 +39,29 @@ indigo_session_do_profile(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
+/* The account's own profile is the one write this file performs. Wolfram
+ * validates the record before it sends it; the editor has already bounded the
+ * two fields, so the only failure here is the network or the server. */
+void
+indigo_session_do_profile_update(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_PROFILE_UPDATE_FAILED};
+    wf_agent_profile_update update;
+    wf_status st;
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+    memset(&update, 0, sizeof update);
+    update.display_name = j->display_name;
+    update.description = j->description;
+    st = wf_agent_update_profile(g_session.agent, &update);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "profile", st);
+        return;
+    }
+    ev.kind = INDIGO_SESSION_EVENT_PROFILE_UPDATE_DONE;
+    indigo_session_publish_event(&ev);
+}
+
 /* Followers, following, likes and search all end the same way: the page lands in
  * the one actor array (a fresh list replaces it, a further page appends) and the
  * event carries the count and the next cursor. */
@@ -243,6 +266,20 @@ indigo_session_submit_profile(const char *actor)
     indigo_job j = {.kind = JOB_PROFILE};
 
     snprintf(j.post_uri, sizeof j.post_uri, "%s", actor);
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_profile_update(const char *display_name, const char *bio)
+{
+    indigo_job j = {.kind = JOB_PROFILE_UPDATE};
+
+    if (!display_name || !bio || strlen(display_name) >= sizeof j.display_name ||
+        strlen(bio) >= sizeof j.description) {
+        return false;
+    }
+    snprintf(j.display_name, sizeof j.display_name, "%s", display_name);
+    snprintf(j.description, sizeof j.description, "%s", bio);
     return indigo_session_enqueue(&j);
 }
 

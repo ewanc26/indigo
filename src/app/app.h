@@ -25,6 +25,7 @@ typedef enum {
     INDIGO_SCREEN_HOME,
     INDIGO_SCREEN_THREAD,
     INDIGO_SCREEN_PROFILE,
+    INDIGO_SCREEN_PROFILE_EDIT,
     INDIGO_SCREEN_NOTIFICATIONS,
     INDIGO_SCREEN_MENU,
     INDIGO_SCREEN_COMPOSE,
@@ -120,6 +121,9 @@ typedef enum {
     INDIGO_REQUEST_FEED,
     INDIGO_REQUEST_MUTES,
     INDIGO_REQUEST_BLOCKS,
+    INDIGO_REQUEST_EDIT_PROFILE_NAME,
+    INDIGO_REQUEST_EDIT_PROFILE_BIO,
+    INDIGO_REQUEST_PROFILE_UPDATE,
     INDIGO_REQUEST_SAVE_SETTINGS,
     INDIGO_REQUEST_UPDATE_CHECK,
     INDIGO_REQUEST_UPDATE_INSTALL,
@@ -193,6 +197,9 @@ typedef struct {
     char delete_uri[INDIGO_POST_URI_MAX];
     indigo_menu menu;
     indigo_profile profile;
+    /* The editor's working copy: nothing reaches the profile above until the
+     * write succeeds. */
+    indigo_profile_edit profile_edit;
     indigo_notifications notifications;
     indigo_chat_inbox messages;
     /* The request list as the app shows it, copied from the session on each page. */
@@ -294,6 +301,16 @@ void indigo_app_thread_loaded(indigo_app *app, const indigo_post *posts, unsigne
 void indigo_app_thread_failed(indigo_app *app, const char *message);
 void indigo_app_profile_loaded(indigo_app *app, const indigo_profile *p);
 void indigo_app_profile_failed(indigo_app *app, const char *message);
+/* Editing the signed-in account's own display name and bio. The editor holds
+ * a copy; only a successful write replaces the profile the screen shows. */
+bool indigo_app_profile_is_self(const indigo_app *app);
+void indigo_app_open_profile_edit(indigo_app *app);
+void indigo_app_update_profile_edit(indigo_app *app, const indigo_input *input);
+bool indigo_app_profile_edit_valid(const char *display_name, const char *bio);
+void indigo_app_set_profile_name(indigo_app *app, const char *text);
+void indigo_app_set_profile_bio(indigo_app *app, const char *text);
+void indigo_app_profile_update_done(indigo_app *app);
+void indigo_app_profile_update_failed(indigo_app *app, const char *message);
 void indigo_app_notifications_loaded(indigo_app *app, const indigo_notification *items,
                                      unsigned count, const char *next_cursor);
 void indigo_app_notifications_failed(indigo_app *app, const char *message);

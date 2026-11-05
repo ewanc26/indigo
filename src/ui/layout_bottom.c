@@ -92,6 +92,7 @@ static void
 build_bottom_profile(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_profile *p = &app->profile;
+    const bool self = indigo_app_profile_is_self(app);
     bool ready = p->loaded && !p->loading;
     indigo_rect fb = indigo_layout_button_rect(INDIGO_ACTION_FOLLOW);
 
@@ -99,19 +100,22 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
 
     /* Greyed until the profile has loaded: follow, mute and block all address
-     * the subject by did, which only the profile response carries. */
-    indigo_canvas_rect(c, fb.x, fb.y, fb.w,
-                       fb.h,
-                       ready && !p->follow_busy ? COL_PILL_ACTIVE : COL_PILL);
-    indigo_canvas_text(c, fb.x + 100, fb.y + 12, 0.7f,
-                       ready && !p->follow_busy ? COL_TEXT : COL_TEXT_DIM, "%s",
-                       !p->loaded           ? "Loading..."
-                       : p->follow_busy     ? (p->following ? "Following..." : "Unfollowing...")
-                       : p->following       ? "Following"
-                                             : "Follow");
-
-    indigo_layout_toggle_button(c, INDIGO_ACTION_MUTE, ready, p->mute_busy, "Unmute", "Mute");
-    indigo_layout_toggle_button(c, INDIGO_ACTION_BLOCK, ready, p->block_busy, "Unblock", "Block");
+     * the subject by did, which only the profile response carries. Your own
+     * profile replaces those three with the one action that applies. */
+    indigo_canvas_rect(c, fb.x, fb.y, fb.w, fb.h,
+                       self || (ready && !p->follow_busy) ? COL_PILL_ACTIVE : COL_PILL);
+    if (self) {
+        indigo_canvas_text(c, fb.x + 82, fb.y + 12, 0.7f, COL_TEXT, "Edit profile");
+    } else {
+        indigo_canvas_text(c, fb.x + 100, fb.y + 12, 0.7f,
+                           ready && !p->follow_busy ? COL_TEXT : COL_TEXT_DIM, "%s",
+                           !p->loaded           ? "Loading..."
+                           : p->follow_busy     ? (p->following ? "Following..." : "Unfollowing...")
+                           : p->following       ? "Following"
+                                                 : "Follow");
+        indigo_layout_toggle_button(c, INDIGO_ACTION_MUTE, ready, p->mute_busy, "Unmute", "Mute");
+        indigo_layout_toggle_button(c, INDIGO_ACTION_BLOCK, ready, p->block_busy, "Unblock", "Block");
+    }
 
     /* The counts the profile already holds, as the way into the lists. */
     if (ready) {
@@ -140,6 +144,25 @@ build_bottom_profile(const indigo_app *app, indigo_canvas *c)
     if (p->status[0] && p->loaded) {
         indigo_canvas_text(c, 14, PROFILE_STATUS_Y, 0.6f,
                            p->status_is_error ? COL_ERROR : COL_TEXT_SOFT, "%.44s", p->status);
+    }
+}
+
+static void
+build_bottom_profile_edit(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_profile_edit *e = &app->profile_edit;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Edit profile");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    indigo_layout_action_pill(c, INDIGO_ACTION_EDIT, true, e->saving, COL_PILL_ACTIVE,
+                              "A  Edit");
+    indigo_layout_action_pill(c, INDIGO_ACTION_SAVE_LATER, true, e->saving, COL_PILL_ACTIVE,
+                              "Y  Save");
+    if (e->status[0]) {
+        indigo_canvas_text(c, 14, PROFILE_STATUS_Y, 0.6f,
+                           e->status_is_error ? COL_ERROR : COL_TEXT_SOFT, "%.44s", e->status);
+    } else if (e->saving) {
+        indigo_canvas_text(c, 14, PROFILE_STATUS_Y, 0.6f, COL_TEXT_SOFT, "Saving...");
     }
 }
 
@@ -741,6 +764,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_PROFILE:
         build_bottom_profile(app, c);
+        break;
+    case INDIGO_SCREEN_PROFILE_EDIT:
+        build_bottom_profile_edit(app, c);
         break;
     case INDIGO_SCREEN_NOTIFICATIONS:
         build_bottom_notifications(app, c);

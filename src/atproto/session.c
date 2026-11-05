@@ -93,6 +93,9 @@ worker(void *arg)
         case JOB_PROFILE:
             indigo_session_do_profile(&j);
             break;
+        case JOB_PROFILE_UPDATE:
+            indigo_session_do_profile_update(&j);
+            break;
         case JOB_NOTIFICATIONS:
             indigo_session_do_notifications(&j);
             break;

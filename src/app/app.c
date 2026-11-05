@@ -396,6 +396,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
     case INDIGO_SCREEN_PROFILE:
         indigo_app_update_profile(app, input);
         break;
+    case INDIGO_SCREEN_PROFILE_EDIT:
+        indigo_app_update_profile_edit(app, input);
+        break;
     case INDIGO_SCREEN_NOTIFICATIONS:
         indigo_app_update_notifications(app, input);
         break;

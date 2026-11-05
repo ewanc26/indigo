@@ -14,6 +14,8 @@ as the release notes.
 
 ### Added
 
+- Edit your own display name and bio from your profile: A opens the editor, A again opens the keyboard for the selected field, Y saves and B cancels. The current values are loaded into the editor, both fields are length-checked before a job is made, and the profile behind the editor is replaced only by a successful write. A failure leaves the editor's text and selection alone and shows the reason there. Text only; avatar and banner changes remain follow-up work. ([#112](https://github.com/ewanc26/indigo/issues/112))
+
 - Mute or unmute a conversation from the thread screen's fourth pill. The label changes only after the server confirms, and a failure leaves the open thread, its selection and scroll alone while the reason is shown on the thread. The worker sends the conversation's true root, not the reply that was opened, through Wolfram's `wf_agent_mute_thread`/`wf_agent_unmute_thread`. The protocol has no read for muted threads, so the label reflects mutes made in this run; sign-out clears it. ([#116](https://github.com/ewanc26/indigo/issues/116))
 
 - Groups on the 3DS: ZR on Messages creates one from a name and a comma-separated member list that Wolfram resolves and de-duplicates, and ZR on a group opens its settings to rename it, add or remove members and create or toggle its join link. The link is shown as `https://bsky.app/chat/<code>`. The inbox classifies a group from the conversation's `kind`, and group details are read through Wolfram's typed `getConvo`/`getConvoMembers`.

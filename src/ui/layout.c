@@ -339,6 +339,12 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
     case INDIGO_SCREEN_PROFILE:
         USE(profile_actions);
         break;
+    case INDIGO_SCREEN_PROFILE_EDIT:
+        /* The editor's two rows and its action pills are drawn, but the way
+         * out is the back button and B; there is no touch target for a field
+         * because the keyboard is the only way to change one. */
+        USE(credits_actions);
+        break;
     case INDIGO_SCREEN_NOTIFICATIONS:
         USE(note_actions);
         break;

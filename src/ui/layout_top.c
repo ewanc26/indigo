@@ -37,8 +37,10 @@ static void
 build_top_profile(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_profile *p = &app->profile;
+    const bool self = indigo_app_profile_is_self(app);
 
-    indigo_layout_top_title(c, "Profile", "Y  Follow   X  Mute   R  Block");
+    indigo_layout_top_title(c, "Profile",
+                            self ? "A  Edit profile" : "Y  Follow   X  Mute   R  Block");
     if (!p->loaded) {
         indigo_canvas_text(c, 18, 60, 0.75f, COL_TEXT_SOFT, "%s",
                            p->loading ? "Loading profile..." : "Profile not loaded.");
@@ -57,11 +59,35 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 64, 44, 0.85f, COL_TEXT, "%.26s",
                        p->display_name[0] ? p->display_name : p->handle);
     indigo_canvas_text(c, 64, 72, 0.6f, COL_TEXT_DIM, "@%s%s", p->handle,
-                       p->following ? "   Following" : "");
+                       !self && p->following ? "   Following" : "");
     indigo_layout_top_paragraph(c, 18, 98, 0.6f, COL_TEXT_SOFT, 4, p->bio);
     indigo_canvas_text(c, 18, 196, 0.6f, COL_TEXT, "%u posts", p->posts);
     indigo_canvas_text(c, 128, 196, 0.6f, COL_TEXT, "%u followers", p->followers);
     indigo_canvas_text(c, 262, 196, 0.6f, COL_TEXT, "%u following", p->follows);
+}
+
+static void
+build_top_profile_edit(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_profile_edit *e = &app->profile_edit;
+
+    indigo_layout_top_title(c, "Edit profile", "A  Edit   Y  Save   B  Back");
+    indigo_canvas_rect(c, 12, 46, 376, 52, e->selected == 0 ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, 20, 50, 0.55f, COL_TEXT_SOFT, "Display name");
+    indigo_canvas_text(c, 20, 68, 0.75f, COL_TEXT, "%.40s",
+                       e->display_name[0] ? e->display_name : "(not set)");
+
+    indigo_canvas_rect(c, 12, 106, 376, 92, e->selected == 1 ? COL_PILL_ACTIVE : COL_PILL);
+    indigo_canvas_text(c, 20, 110, 0.55f, COL_TEXT_SOFT, "Bio");
+    if (e->bio[0]) {
+        indigo_layout_top_paragraph(c, 20, 128, 0.6f, COL_TEXT, 3, e->bio);
+    } else {
+        indigo_canvas_text(c, 20, 128, 0.6f, COL_TEXT_DIM, "(not set)");
+    }
+    if (e->status[0]) {
+        indigo_canvas_text(c, 18, 206, 0.6f, e->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+                           "%s", e->status);
+    }
 }
 
 static void
@@ -629,6 +655,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
     switch (app->screen) {
     case INDIGO_SCREEN_PROFILE:
         build_top_profile(app, c);
+        return;
+    case INDIGO_SCREEN_PROFILE_EDIT:
+        build_top_profile_edit(app, c);
         return;
     case INDIGO_SCREEN_NOTIFICATIONS:
         build_top_notifications(app, c);
