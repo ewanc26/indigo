@@ -141,6 +141,28 @@ start_publish(indigo_app *app)
 /* Alt text for the picture just chosen. Cancelling leaves it empty: alt text is
  * encouraged here, not required, and a post is not held up for it. */
 static void
+handle_edit_profile_name(indigo_app *app)
+{
+    char text[INDIGO_POST_NAME_MAX];
+
+    if (indigo_text_edit("Display name", app->profile_edit.display_name, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_profile_name(app, text);
+    }
+}
+
+static void
+handle_edit_profile_bio(indigo_app *app)
+{
+    char text[INDIGO_PROFILE_BIO_MAX];
+
+    if (indigo_text_edit("Bio", app->profile_edit.bio, false, text, sizeof text) ==
+        INDIGO_TEXT_OK) {
+        indigo_app_set_profile_bio(app, text);
+    }
+}
+
+static void
 handle_edit_image_alt(indigo_app *app)
 {
     char text[INDIGO_IMAGE_ALT_MAX];
@@ -276,6 +298,20 @@ handle_requests(indigo_app *app)
     case INDIGO_REQUEST_PROFILE:
         if (!indigo_session_submit_profile(app->request_post_uri)) {
             indigo_app_profile_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_PROFILE_NAME:
+        handle_edit_profile_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_PROFILE_BIO:
+        handle_edit_profile_bio(app);
+        break;
+    case INDIGO_REQUEST_PROFILE_UPDATE:
+        if (indigo_session_submit_profile_update(app->profile_edit.display_name,
+                                                  app->profile_edit.bio)) {
+            app->profile_edit.saving = true;
+        } else {
+            indigo_app_profile_update_failed(app, "Could not start the request.");
         }
         break;
     case INDIGO_REQUEST_NOTIFICATIONS:
@@ -657,6 +693,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_PROFILE_FAILED:
             indigo_app_profile_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_PROFILE_UPDATE_DONE:
+            indigo_app_profile_update_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_PROFILE_UPDATE_FAILED:
+            indigo_app_profile_update_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_NOTIFICATIONS_PAGE: {
             unsigned n;

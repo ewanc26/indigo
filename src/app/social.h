@@ -16,6 +16,17 @@
  * social.h must not depend on search.h. */
 #define INDIGO_PROFILE_DID_MAX 128
 
+/* The editor's working copy. The protocol caps the name at 64 graphemes and
+ * the bio at 256; these are byte bounds that the buffers already use. */
+typedef struct {
+    char display_name[INDIGO_POST_NAME_MAX];
+    char bio[INDIGO_PROFILE_BIO_MAX];
+    unsigned selected;
+    bool saving;
+    char status[INDIGO_POST_NOTE_MAX];
+    bool status_is_error;
+} indigo_profile_edit;
+
 typedef enum {
     INDIGO_NOTE_OTHER = 0,
     INDIGO_NOTE_LIKE,
