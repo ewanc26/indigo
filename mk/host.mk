@@ -71,7 +71,10 @@ test: $(HOST_OUT)/tests
 define WOLFRAM_OBJ_RULE
 $(HOST_OUT)/wf_$(subst /,_,$(1:.c=.o)): $(WOLFRAM_ROOT)/$(1)
 	@mkdir -p $(HOST_OUT)
-	$(HOST_CC) -std=c11 -O1 -g $(HOST_SANITIZE) $(HOST_WOLFRAM_INC) -c -o $$@ $$<
+	@# Wolfram's own build asks for this feature level: glibc hides gmtime_r
+	@# under -std=c11, and Wolfram's moderation.c uses it. -D_DEFAULT_SOURCE
+	@# keeps the BSD extensions Apple's libc needs alongside it.
+	$(HOST_CC) -std=c11 -O1 -g $(HOST_SANITIZE) -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE $(HOST_WOLFRAM_INC) -c -o $$@ $$<
 endef
 $(foreach f,$(HOST_WOLFRAM_FILES),$(eval $(call WOLFRAM_OBJ_RULE,$(f))))
 
