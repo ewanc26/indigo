@@ -657,7 +657,7 @@ test_thread_navigation(void)
     {
         indigo_post list[3] = {posts[1], posts[0], posts[2]};
 
-        indigo_app_thread_loaded(&app, list, 3, 1);
+        indigo_app_thread_loaded(&app, list, 3, 1, posts[1].uri);
     }
     CHECK(app.thread.count == 3);
     CHECK(app.thread.selected == 1);
@@ -675,6 +675,59 @@ test_thread_navigation(void)
     in.back = true;
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_HOME);
+}
+
+static void
+test_thread_mute_state(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_field f;
+    indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "one");
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_THREAD;
+    indigo_copy_utf8(p.handle, sizeof p.handle, "someone.test");
+    indigo_copy_utf8(app.signin.account, sizeof app.signin.account, "me.test");
+    indigo_timeline_append(&app.thread, &p);
+    app.thread_focus = 0;
+    indigo_copy_utf8(app.thread_root, sizeof app.thread_root, p.uri);
+    CHECK(!indigo_app_thread_muted(&app));
+
+    /* The fourth pill is the toggle on someone else's post; a press asks for
+     * the root, and only the root. */
+    {
+        indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_MUTE_THREAD);
+
+        in = (indigo_input) {0};
+        in.touch_pressed = true;
+        in.touch_x = (int) (r.x + r.w / 2);
+        in.touch_y = (int) (r.y + r.h / 2);
+        indigo_app_update(&app, &in);
+    }
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_THREAD_MUTE);
+    CHECK(app.request_thread_mute);
+    CHECK(strcmp(app.request_post_uri, p.uri) == 0);
+
+    /* A failure leaves the open thread, its row and its scroll alone, and is
+     * said where the person is looking. */
+    app.request = INDIGO_REQUEST_NONE;
+    indigo_app_thread_mute_failed(&app, "The service refused.");
+    CHECK(app.screen == INDIGO_SCREEN_THREAD);
+    CHECK(app.thread.selected == 0);
+    CHECK(app.thread.scroll == 0);
+    CHECK(app.thread.count == 1);
+    CHECK(!indigo_app_thread_muted(&app));
+    CHECK(app.thread.status_is_error);
+    CHECK(strcmp(app.thread.status, "The service refused.") == 0);
+
+    /* Success is reflected only when the done event arrives, and only for the
+     * root it addressed. */
+    indigo_app_thread_mute_done(&app, p.uri, true);
+    CHECK(indigo_app_thread_muted(&app));
+    indigo_copy_utf8(app.thread_root, sizeof app.thread_root,
+                     "at://did:plc:me/app.bsky.feed.post/9");
+    CHECK(!indigo_app_thread_muted(&app));
 }
 
 static void
@@ -7319,6 +7372,7 @@ main(void)
     test_buttons_spaced_and_on_screen();
     test_layout_invariants();
     test_thread_navigation();
+    test_thread_mute_state();
     test_delete_post_confirmation();
     test_delete_post_result_removes_stale_rows();
     test_compose_thread_draft();
