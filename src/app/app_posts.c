@@ -188,6 +188,67 @@ indigo_app_update_home(indigo_app *app, const indigo_input *input)
     }
 }
 
+/* The private bookmarks list behaves like the home timeline, except that B
+ * returns to the list it was opened from rather than to the menu. */
+void
+indigo_app_update_bookmarks(indigo_app *app, const indigo_input *input)
+{
+    indigo_timeline *t = &app->bookmarks;
+    const indigo_post *sel = indigo_timeline_selected(t);
+
+    update_list(app, input, t);
+    if (input->confirm && sel) {
+        indigo_app_open_thread(app, sel->uri);
+    }
+    if (input->back) {
+        indigo_app_go_back(app);
+        return;
+    }
+    if (input->refresh) {
+        if (!t->loading && app->request == INDIGO_REQUEST_NONE) {
+            indigo_timeline_begin_fetch(t, true);
+            app->request = INDIGO_REQUEST_BOOKMARKS;
+        }
+    }
+    if (input->zr && indigo_app_open_image(app)) {
+        return;
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        switch (a) {
+        case INDIGO_ACTION_ROW0:
+        case INDIGO_ACTION_ROW1:
+        case INDIGO_ACTION_ROW2:
+        case INDIGO_ACTION_LIKE:
+        case INDIGO_ACTION_REPOST:
+        case INDIGO_ACTION_IMAGE:
+            post_list_touch(app, t, a);
+            break;
+        case INDIGO_ACTION_OPEN:
+            if (sel) {
+                indigo_app_open_thread(app, sel->uri);
+            }
+            break;
+        case INDIGO_ACTION_REFRESH:
+            if (!t->loading && app->request == INDIGO_REQUEST_NONE) {
+                indigo_timeline_begin_fetch(t, true);
+                app->request = INDIGO_REQUEST_BOOKMARKS;
+            }
+            break;
+        case INDIGO_ACTION_BACK:
+            indigo_app_go_back(app);
+            break;
+        default:
+            break;
+        }
+    }
+    if (app->request == INDIGO_REQUEST_NONE && indigo_timeline_wants_page(t)) {
+        indigo_timeline_begin_fetch(t, false);
+        app->request = INDIGO_REQUEST_BOOKMARKS_MORE;
+    }
+}
+
 void
 indigo_app_update_thread(indigo_app *app, const indigo_input *input)
 {

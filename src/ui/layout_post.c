@@ -273,17 +273,27 @@ void
 indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
 {
     bool thread = app->screen == INDIGO_SCREEN_THREAD;
-    const indigo_timeline *t = thread ? &app->thread : &app->timeline;
+    bool bookmarks = app->screen == INDIGO_SCREEN_BOOKMARKS;
+    const indigo_timeline *t = thread      ? &app->thread
+                               : bookmarks ? &app->bookmarks
+                                           : &app->timeline;
     const indigo_post *p = indigo_timeline_selected(t);
 
-    const char *title = thread ? "Thread" : app->feed_uri[0] ? app->feed_name : "Home";
+    const char *title = thread      ? "Thread"
+                        : bookmarks ? "Bookmarks"
+                        : app->feed_uri[0] ? app->feed_name
+                                           : "Home";
     /* Home keeps START in the bar, because START exit must be hinted on Home (the
      * test that checks this is in tests/tests.c). Reload is the Reload pill at
      * the bottom of the screen, so the bar does not need to repeat it. */
-    const char *hint = thread             ? "B  Back   SEL  Profile"
+    const char *hint = thread            ? "B  Back   SEL  Profile"
+                        : bookmarks      ? "B  Back   START  Exit"
                         : app->feed_uri[0] ? "B  Feeds   SEL  Reload"
-                        : "B  Menu   START  Exit";
+                                           : "B  Menu   START  Exit";
     float hint_x = 18.0f + (float) strlen(title) * INDIGO_CHAR_WIDTH * 0.8f + 12.0f;
+    /* "Bookmarks" is wider than the title the bar was measured against, so the
+     * hint needs a larger floor than Home's or the two run together. */
+    const float min_hint_x = bookmarks ? 154.0f : 116.0f;
     /* The hint is drawn at HINT_SCALE, and its end is kept clear of the counter
      * at x=342. Measured in Azahar, the hint runs about 8 px a character at 0.5,
      * wider than the layout's estimate, so the hint is drawn smaller to keep it
@@ -291,10 +301,10 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     float hint_end = 336.0f - (float) strlen(hint) * INDIGO_CHAR_WIDTH * 0.45f;
     unsigned units;
 
-    if (hint_x < 116.0f) {
-        hint_x = 116.0f;
+    if (hint_x < min_hint_x) {
+        hint_x = min_hint_x;
     }
-    if (hint_x > hint_end && hint_end > 116.0f) {
+    if (hint_x > hint_end && hint_end > min_hint_x) {
         hint_x = hint_end;
     }
     /* A name that would still reach the hint is cut, and marked as cut, rather
@@ -324,7 +334,9 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
 
     if (!p) {
         indigo_canvas_text(c, 18, 104, 0.8f, COL_TEXT_SOFT, "%s",
-                           t->loading ? (thread ? "Loading the thread..." : "Loading your timeline...")
+                           t->loading ? (thread      ? "Loading the thread..."
+                                         : bookmarks ? "Loading your bookmarks..."
+                                                     : "Loading your timeline...")
                        : "No posts to show.");
         if (t->status[0]) {
             indigo_canvas_text(c, 18, 136, 0.65f,

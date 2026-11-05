@@ -185,6 +185,15 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_feeds(app);
         break;
+    case INDIGO_MENU_BOOKMARKS:
+        indigo_app_go_back(app);
+        indigo_app_open_bookmarks(app);
+        break;
+    case INDIGO_MENU_BOOKMARK:
+        /* Back to the list first, so the result is said where the post is. */
+        indigo_app_go_back(app);
+        indigo_app_toggle_bookmark(app);
+        break;
     case INDIGO_MENU_MUTED:
         indigo_app_go_back(app);
         indigo_app_open_mutes(app);

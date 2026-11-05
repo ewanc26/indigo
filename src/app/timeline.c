@@ -230,6 +230,19 @@ indigo_timeline_set_like(indigo_timeline *t, const char *post_uri,
 }
 
 bool
+indigo_timeline_set_bookmarked(indigo_timeline *t, const char *post_uri,
+                               bool bookmarked)
+{
+    indigo_post *p = find(t, post_uri);
+
+    if (!p) {
+        return false;
+    }
+    p->bookmarked = bookmarked;
+    return true;
+}
+
+bool
 indigo_timeline_set_repost(indigo_timeline *t, const char *post_uri,
                            const char *repost_uri, bool pending)
 {

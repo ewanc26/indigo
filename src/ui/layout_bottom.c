@@ -25,7 +25,10 @@ static void
 build_bottom_posts(const indigo_app *app, indigo_canvas *c)
 {
     bool thread = app->screen == INDIGO_SCREEN_THREAD;
-    const indigo_timeline *t = thread ? &app->thread : &app->timeline;
+    bool bookmarks = app->screen == INDIGO_SCREEN_BOOKMARKS;
+    const indigo_timeline *t = thread      ? &app->thread
+                               : bookmarks ? &app->bookmarks
+                                           : &app->timeline;
     const indigo_post *sel = indigo_timeline_selected(t);
 
     if (thread && app->confirm_delete) {
@@ -39,7 +42,8 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
         return;
     }
 
-    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, thread ? "Thread" : "Timeline");
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT,
+                       thread ? "Thread" : bookmarks ? "Bookmarks" : "Timeline");
     if (!indigo_layout_image_button(c, app)) {
         indigo_canvas_text(c, 118, 14, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
                            "%.16s", t->loading ? "Loading..." : t->status);
@@ -47,8 +51,8 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     /* The button hints live in the top screen's title bar; a bottom pill is
      * labelled with its action so no back hint appears twice. A feed view's B
      * goes back to the picker, so its button is named for the picker. */
-    indigo_layout_back_button(c, thread ? INDIGO_ACTION_BACK : INDIGO_ACTION_MENU,
-                thread ? "Back" : app->feed_uri[0] ? "Feeds" : "Menu");
+    indigo_layout_back_button(c, thread || bookmarks ? INDIGO_ACTION_BACK : INDIGO_ACTION_MENU,
+                thread || bookmarks ? "Back" : app->feed_uri[0] ? "Feeds" : "Menu");
 
     for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
         unsigned idx = t->scroll + row;
@@ -760,6 +764,7 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_HOME:
     case INDIGO_SCREEN_THREAD:
+    case INDIGO_SCREEN_BOOKMARKS:
         build_bottom_posts(app, c);
         break;
     case INDIGO_SCREEN_PROFILE:
