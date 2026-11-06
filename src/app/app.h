@@ -124,6 +124,7 @@ typedef enum {
     INDIGO_REQUEST_AUTHOR_FEED,
     INDIGO_REQUEST_LISTS,
     INDIGO_REQUEST_LIST_MEMBERS,
+    INDIGO_REQUEST_STARTER_PACK,
     INDIGO_REQUEST_FEEDS,
     INDIGO_REQUEST_FEED,
     INDIGO_REQUEST_MUTES,
@@ -183,6 +184,8 @@ typedef struct {
     char request_actor[INDIGO_POST_NAME_MAX];
     /* Which list INDIGO_REQUEST_LIST_MEMBERS is asking for. */
     char request_list_uri[INDIGO_POST_URI_MAX];
+    /* Which pack INDIGO_REQUEST_STARTER_PACK is asking for. */
+    char request_starter_pack_uri[INDIGO_POST_URI_MAX];
     /* Which feed INDIGO_REQUEST_FEED is asking for, and its name for the
      * timeline title. */
     char request_feed_uri[INDIGO_POST_URI_MAX];
@@ -396,6 +399,13 @@ void indigo_app_next_author_tab(indigo_app *app);
  * the search screen; the members list reuses the actor rows. */
 void indigo_app_open_lists(indigo_app *app);
 void indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name);
+/* A pack link opens on the search screen: members are actor rows and the
+ * included feeds follow them. Creation is deliberately not offered. */
+void indigo_app_open_starter_pack(indigo_app *app, const char *pack_uri);
+void indigo_app_starter_pack_loaded(indigo_app *app, const indigo_starter_pack *pack,
+                                    const indigo_actor *actors, unsigned count,
+                                    const char *next_cursor);
+void indigo_app_starter_pack_failed(indigo_app *app, const char *message);
 void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count,
                              const char *next_cursor);
 /* The account's saved feeds, then one feed's posts on the home screen. The

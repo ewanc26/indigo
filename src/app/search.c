@@ -27,10 +27,53 @@ indigo_search_clear(indigo_search *s)
     s->status_is_error = false;
 }
 
+unsigned
+indigo_search_row_count(const indigo_search *s)
+{
+    if (!s) {
+        return 0;
+    }
+    if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+        return s->count + s->pack.feed_count;
+    }
+    return s->count;
+}
+
+const char *
+indigo_search_selected_feed(const indigo_search *s)
+{
+    unsigned index;
+
+    if (!s || s->kind != INDIGO_SEARCH_STARTER_PACK || s->selected < s->count) {
+        return NULL;
+    }
+    index = s->selected - s->count;
+    return index < s->pack.feed_count ? s->pack.feeds[index] : NULL;
+}
+
+const char *
+indigo_search_row_feed(const indigo_search *s, unsigned row, unsigned rows)
+{
+    unsigned index;
+
+    if (!s || s->kind != INDIGO_SEARCH_STARTER_PACK || row >= rows) {
+        return NULL;
+    }
+    index = s->scroll + row;
+    if (index < s->count) {
+        return NULL;
+    }
+    index -= s->count;
+    return index < s->pack.feed_count ? s->pack.feeds[index] : NULL;
+}
+
 bool
 indigo_search_wants_page(const indigo_search *s)
 {
     if (s->loading || !s->has_more || s->cursor[0] == '\0') {
+        return false;
+    }
+    if (s->kind == INDIGO_SEARCH_STARTER_PACK && s->selected >= s->count) {
         return false;
     }
     /* Full is full: another page would append nothing while holding a cursor
@@ -81,7 +124,7 @@ indigo_search_fail_page(indigo_search *s, const char *message)
 bool
 indigo_search_select(indigo_search *s, unsigned index, unsigned rows)
 {
-    if (index >= s->count || index == s->selected) {
+    if (index >= indigo_search_row_count(s) || index == s->selected) {
         return false;
     }
     s->selected = index;
@@ -93,16 +136,18 @@ bool
 indigo_search_move(indigo_search *s, int delta, unsigned rows)
 {
     long target = (long) s->selected + delta;
+    const unsigned total = indigo_search_row_count(s);
 
-    if (s->count == 0) {
+    if (total == 0) {
         return false;
     }
     if (target < 0) {
         target = 0;
     }
-    if (target >= (long) s->count) {
-        target = (long) s->count - 1;
+    if (target >= (long) total) {
+        target = (long) total - 1;
     }
+    return indigo_search_select(s, (unsigned) target, rows);
     return indigo_search_select(s, (unsigned) target, rows);
 }
 
@@ -174,6 +219,8 @@ indigo_search_title(const indigo_search *s)
         return "Liked by";
     case INDIGO_SEARCH_REPOSTED_BY:
         return "Reposted by";
+    case INDIGO_SEARCH_STARTER_PACK:
+        return s->pack.name[0] ? s->pack.name : "Starter pack";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }

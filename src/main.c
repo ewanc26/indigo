@@ -534,6 +534,13 @@ handle_requests(indigo_app *app)
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_STARTER_PACK:
+        if (!indigo_session_submit_starter_pack(app->request_starter_pack_uri,
+                                                app->search.cursor[0]
+                                                    ? app->search.cursor : NULL)) {
+            indigo_app_starter_pack_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_FEEDS:
         if (!indigo_session_submit_feeds()) {
             indigo_app_search_failed(app, "Could not start the request.");
@@ -863,6 +870,17 @@ handle_events(indigo_app *app)
         }
         case INDIGO_SESSION_EVENT_SEARCH_FAILED:
             indigo_app_search_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_STARTER_PACK_PAGE: {
+            unsigned n;
+            const indigo_actor *actors = indigo_session_search_results(&n);
+
+            indigo_app_starter_pack_loaded(app, indigo_session_starter_pack(),
+                                           actors, n, ev.cursor);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_STARTER_PACK_FAILED:
+            indigo_app_starter_pack_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_POST_SEARCH_PAGE: {
             const indigo_post *posts;

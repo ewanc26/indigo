@@ -580,7 +580,11 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         /* The followers and following lists have no query; the box names whose
          * list this is instead of inviting typing nothing would act on. */
         indigo_canvas_rect(c, q.x, q.y, q.w, q.h, COL_PILL);
-        if (s->kind == INDIGO_SEARCH_LIKED_BY || s->kind == INDIGO_SEARCH_REPOSTED_BY) {
+        if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT,
+                               "Starter pack - %u members",
+                               s->pack.member_count ? s->pack.member_count : s->count);
+        } else if (s->kind == INDIGO_SEARCH_LIKED_BY || s->kind == INDIGO_SEARCH_REPOSTED_BY) {
             indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "%s",
                                s->kind == INDIGO_SEARCH_LIKED_BY
                                    ? "People who liked this post"
@@ -621,6 +625,29 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
                      l->description[0] ? l->description : "No description", NULL);
             continue;
         }
+        if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+            if (idx < s->count) {
+                const indigo_actor *it = indigo_search_row(s, row, INDIGO_SEARCH_ROWS);
+
+                if (!it) {
+                    break;
+                }
+                snprintf(title, sizeof title, "%.30s",
+                         it->display_name[0] ? it->display_name : it->handle);
+                indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                                       idx == s->selected, title, it->handle, it->avatar);
+            } else {
+                const char *feed = indigo_search_row_feed(s, row, INDIGO_SEARCH_ROWS);
+
+                if (!feed) {
+                    break;
+                }
+                snprintf(title, sizeof title, "Feed %u", idx - s->count + 1);
+                indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                                       idx == s->selected, title, feed, NULL);
+            }
+            continue;
+        }
         if (indigo_search_is_posts(s)) {
             const indigo_post *p = indigo_search_row_post(s, row, INDIGO_SEARCH_ROWS);
 
@@ -653,13 +680,25 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
      * author pill: SEL opens a profile there too, and "SEL Open" does not fit
      * a 74px pill in the baked font. Every row kind but the people ones opens
      * its row rather than a profile: a thread, a curated list, a saved feed. */
-    opens = posts || indigo_search_is_lists(s);
-    indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR,
-                opens ? (posts ? indigo_search_selected_post(s) != NULL
-                               : indigo_search_selected_list(s) != NULL)
-                      : indigo_search_selected(s) != NULL,
-                s->loading, COL_PILL_ACTIVE,
-                posts ? "Thread" : opens ? "Open" : "Profile");
+    opens = posts || indigo_search_is_lists(s) ||
+            s->kind == INDIGO_SEARCH_STARTER_PACK;
+    {
+        bool has_selection;
+
+        if (posts) {
+            has_selection = indigo_search_selected_post(s) != NULL;
+        } else if (indigo_search_is_lists(s)) {
+            has_selection = indigo_search_selected_list(s) != NULL;
+        } else if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+            has_selection = indigo_search_selected(s) != NULL ||
+                            indigo_search_selected_feed(s) != NULL;
+        } else {
+            has_selection = indigo_search_selected(s) != NULL;
+        }
+        indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, has_selection,
+                    s->loading, COL_PILL_ACTIVE,
+                    posts ? "Thread" : opens ? "Open" : "Profile");
+    }
 }
 
 /* The top screen carries the addresses; the bottom screen says what the page

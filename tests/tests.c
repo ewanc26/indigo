@@ -5,6 +5,7 @@
 #include "app/timeline.h"
 #include "atproto/errors.h"
 #include "atproto/chat.h"
+#include "atproto/starter_pack.h"
 #include <wolfram/chat_group.h>
 #include <wolfram/chat_typed.h>
 #include "atproto/prefs.h"
@@ -5502,6 +5503,55 @@ test_graph_guards(void)
  * they arrive with the right subject, drop the previous list, and refuse to
  * pretend a query box applies to them. */
 static void
+test_starter_pack_model(void)
+{
+    char out[INDIGO_POST_URI_MAX];
+    indigo_search s;
+    indigo_actor a[2];
+
+    CHECK(indigo_starter_pack_uri_from_link(
+        "at://did:plc:abc/app.bsky.graph.starterpack/3kpack", out, sizeof out));
+    CHECK(strcmp(out, "at://did:plc:abc/app.bsky.graph.starterpack/3kpack") == 0);
+    CHECK(indigo_starter_pack_uri_from_link(
+        "https://bsky.app/starter-pack/alice.example/3kpack?x=1", out, sizeof out));
+    CHECK(strcmp(out, "at://alice.example/app.bsky.graph.starterpack/3kpack") == 0);
+    CHECK(!indigo_starter_pack_uri_from_link(
+        "https://bsky.app/profile/alice.example", out, sizeof out));
+    CHECK(!indigo_starter_pack_uri_from_link(
+        "at://did:plc:abc/app.bsky.feed.post/3kpack", out, sizeof out));
+    CHECK(!indigo_starter_pack_uri_from_link(
+        "https://bsky.app/starter-pack/alice.example/3kpack", out, 8));
+
+    memset(&s, 0, sizeof s);
+    memset(a, 0, sizeof a);
+    s.kind = INDIGO_SEARCH_STARTER_PACK;
+    s.count = 2;
+    indigo_copy_utf8(s.pack.name, sizeof s.pack.name, "Builders");
+    indigo_copy_utf8(s.pack.feeds[0], sizeof s.pack.feeds[0],
+                     "at://did:plc:abc/app.bsky.feed.generator/feed");
+    s.pack.feed_count = 1;
+    CHECK(strcmp(indigo_search_title(&s), "Builders") == 0);
+    CHECK(indigo_search_row_count(&s) == 3);
+    CHECK(indigo_search_move(&s, 1, INDIGO_SEARCH_ROWS));
+    CHECK(s.selected == 1);
+    CHECK(indigo_search_move(&s, 1, INDIGO_SEARCH_ROWS));
+    CHECK(s.selected == 2);
+    CHECK(indigo_search_selected(&s) == NULL);
+    CHECK(indigo_search_selected_feed(&s) == s.pack.feeds[0]);
+    CHECK(indigo_search_row_feed(&s, 2, INDIGO_SEARCH_ROWS) == s.pack.feeds[0]);
+    CHECK(indigo_search_row_feed(&s, 0, INDIGO_SEARCH_ROWS) == NULL);
+
+    /* At a feed row there is no member page to request; moving back to the
+     * last member with a cursor does request one. */
+    s.cursor[0] = 'c';
+    s.has_more = true;
+    s.loading = false;
+    CHECK(!indigo_search_wants_page(&s));
+    s.selected = 1;
+    CHECK(indigo_search_wants_page(&s));
+}
+
+static void
 test_people_lists(void)
 {
     indigo_app app;
@@ -7808,6 +7858,7 @@ main(void)
     test_mute_block_failure_reverts();
     test_block_without_uri();
     test_graph_guards();
+    test_starter_pack_model();
     test_people_lists();
     test_post_search();
     test_author_posts();

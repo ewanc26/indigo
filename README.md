@@ -44,6 +44,8 @@ Unreleased builds also let you report a post or an account from More: choose a s
 
 Unreleased builds add saved composer drafts: Save draft keeps one text post and its reply/quote context in `drafts.dat` (up to eight), Drafts on the More menu lists them, A resumes one into the composer, and Y twice deletes it. They are local, survive restarts and are never sent or queued on their own.
 
+Unreleased builds also open starter packs from a recognized pack link in More. The top screen reads the pack's name, creator, description and counts; the bottom lists its suggested accounts and included feeds. Members page from the pack's list, a member opens their profile, a feed opens on Home, and Back returns to the post. Creating or sharing a pack is not part of this pass.
+
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
 | Check | State |

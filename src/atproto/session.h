@@ -43,6 +43,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_POST_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_LISTS_PAGE,
     INDIGO_SESSION_EVENT_FEEDS_PAGE,
+    INDIGO_SESSION_EVENT_STARTER_PACK_PAGE,
+    INDIGO_SESSION_EVENT_STARTER_PACK_FAILED,
     INDIGO_SESSION_EVENT_FOLLOW_DONE,
     INDIGO_SESSION_EVENT_FOLLOW_FAILED,
     INDIGO_SESSION_EVENT_GRAPH_DONE,
@@ -316,6 +318,12 @@ bool indigo_session_submit_author_feed(const char *actor, int tab, const char *c
  * way. */
 bool indigo_session_submit_lists(const char *cursor);
 bool indigo_session_submit_list_members(const char *list_uri, const char *cursor);
+/* A starter pack and its list's members. The first page fetches both; a
+ * cursor asks only for the next member page. Members land in the actor results
+ * the search screen already reads, and the pack metadata is available from
+ * indigo_session_starter_pack(). */
+bool indigo_session_submit_starter_pack(const char *pack_uri, const char *cursor);
+const indigo_starter_pack *indigo_session_starter_pack(void);
 void indigo_session_post_search_results(const indigo_post **posts, unsigned *count);
 /* The account's curated lists. A list is a third result type, so it has its
  * own array and its own event rather than sharing the actor search's. */

@@ -462,6 +462,20 @@ indigo_session_submit_list_members(const char *list_uri, const char *cursor)
 }
 
 bool
+indigo_session_submit_starter_pack(const char *pack_uri, const char *cursor)
+{
+    (void) pack_uri;
+    (void) cursor;
+    return false;
+}
+
+const indigo_starter_pack *
+indigo_session_starter_pack(void)
+{
+    return NULL;
+}
+
+bool
 indigo_session_submit_feeds(void)
 {
     return false;
