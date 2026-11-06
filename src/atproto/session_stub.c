@@ -134,6 +134,19 @@ indigo_session_submit_thread(const char *uri)
 }
 
 bool
+indigo_session_submit_report(bool account, const char *post_uri,
+                              const char *post_cid, const char *did,
+                              const char *reason_type)
+{
+    (void) account;
+    (void) post_uri;
+    (void) post_cid;
+    (void) did;
+    (void) reason_type;
+    return false;
+}
+
+bool
 indigo_session_submit_profile(const char *actor)
 {
     (void) actor;

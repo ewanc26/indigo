@@ -84,6 +84,7 @@ typedef enum {
     INDIGO_REQUEST_REPOST,
     INDIGO_REQUEST_UNREPOST,
     INDIGO_REQUEST_DELETE_POST,
+    INDIGO_REQUEST_REPORT,
     INDIGO_REQUEST_THREAD_MUTE,
     INDIGO_REQUEST_THREAD,
     INDIGO_REQUEST_PROFILE,
@@ -166,6 +167,11 @@ typedef struct {
     /* The state INDIGO_REQUEST_THREAD_MUTE is asking for. The root travels in
      * request_post_uri. */
     bool request_thread_mute;
+    /* INDIGO_REQUEST_REPORT: the account target, and the reason. A post
+     * target travels in request_post_uri/request_post_cid. */
+    bool request_report_account;
+    char request_report_did[INDIGO_PROFILE_DID_MAX];
+    char request_report_reason[INDIGO_REPORT_REASON_MAX];
     /* The state INDIGO_REQUEST_BOOKMARK is asking for. */
     bool request_bookmark;
     /* The state INDIGO_REQUEST_GRAPH is asking for. */
@@ -456,6 +462,11 @@ bool indigo_app_thread_muted(const indigo_app *app);
 void indigo_app_toggle_thread_mute(indigo_app *app);
 void indigo_app_thread_mute_done(indigo_app *app, const char *root_uri, bool muted);
 void indigo_app_thread_mute_failed(indigo_app *app, const char *message);
+/* A report's result is written to the list the report came from. Success is
+ * only reported after the service confirms it; a failure leaves the rows and
+ * selection alone. */
+void indigo_app_report_done(indigo_app *app);
+void indigo_app_report_failed(indigo_app *app, const char *message);
 void indigo_app_follow_done(indigo_app *app, bool following, const char *follow_uri);
 void indigo_app_follow_failed(indigo_app *app, const char *message);
 /* Mute/unmute and block/unblock. Mute flips optimistically like follow; block

@@ -164,6 +164,33 @@ indigo_app_thread_mute_failed(indigo_app *app, const char *message)
     indigo_timeline_fail_fetch(&app->thread, message);
 }
 
+static void
+report_result(indigo_app *app, const char *message, bool error)
+{
+    indigo_timeline *t = indigo_app_active_list(app);
+
+    indigo_copy_utf8(t->status, sizeof t->status, message ? message : "");
+    t->status_is_error = error;
+}
+
+void
+indigo_app_report_done(indigo_app *app)
+{
+    if (!app) {
+        return;
+    }
+    report_result(app, "Report sent. Thank you.", false);
+}
+
+void
+indigo_app_report_failed(indigo_app *app, const char *message)
+{
+    if (!app) {
+        return;
+    }
+    report_result(app, message, true);
+}
+
 void
 indigo_app_profile_loaded(indigo_app *app, const indigo_profile *p)
 {

@@ -260,6 +260,56 @@ indigo_session_do_graph(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
+void
+indigo_session_do_report(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_REPORT_FAILED};
+    wf_moderation_report_record record;
+    wf_status st;
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+    memset(&record, 0, sizeof record);
+    st = wf_agent_report_typed(g_session.agent,
+                               j->report_account ? j->actor : NULL,
+                               j->report_account ? NULL : j->post_uri,
+                               j->report_account ? NULL : j->post_cid,
+                               j->report_reason, NULL, NULL, NULL, &record);
+    wf_moderation_report_record_free(&record);
+    if (st != WF_OK) {
+        indigo_session_publish_failure(&ev, "report", st);
+        return;
+    }
+    ev.kind = INDIGO_SESSION_EVENT_REPORT_DONE;
+    indigo_session_publish_event(&ev);
+}
+
+bool
+indigo_session_submit_report(bool account, const char *post_uri,
+                              const char *post_cid, const char *did,
+                              const char *reason_type)
+{
+    indigo_job j = {.kind = JOB_REPORT, .report_account = account};
+
+    if (!indigo_report_reason_known(reason_type)) {
+        return false;
+    }
+    if (account) {
+        if (!did || strncmp(did, "did:", 4) != 0) {
+            return false;
+        }
+        indigo_copy_utf8(j.actor, sizeof j.actor, did);
+    } else {
+        if (!post_uri || strncmp(post_uri, "at://", 5) != 0 || !post_cid ||
+            !post_cid[0]) {
+            return false;
+        }
+        indigo_copy_utf8(j.post_uri, sizeof j.post_uri, post_uri);
+        indigo_copy_utf8(j.post_cid, sizeof j.post_cid, post_cid);
+    }
+    indigo_copy_utf8(j.report_reason, sizeof j.report_reason, reason_type);
+    return indigo_session_enqueue(&j);
+}
+
 bool
 indigo_session_submit_profile(const char *actor)
 {

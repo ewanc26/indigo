@@ -28,6 +28,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_THREAD_FAILED,
     INDIGO_SESSION_EVENT_THREAD_MUTE_DONE,
     INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED,
+    INDIGO_SESSION_EVENT_REPORT_DONE,
+    INDIGO_SESSION_EVENT_REPORT_FAILED,
     INDIGO_SESSION_EVENT_PROFILE_LOADED,
     INDIGO_SESSION_EVENT_PROFILE_FAILED,
     INDIGO_SESSION_EVENT_PROFILE_UPDATE_DONE,
@@ -183,6 +185,12 @@ bool indigo_session_submit_thread(const char *uri);
  * (app.bsky.graph.muteThread/unmuteThread). The protocol has no read for
  * which threads are muted, so the app reflects only what this run did. */
 bool indigo_session_submit_thread_mute(const char *root_uri, bool mute);
+
+/* Send a moderation report. Supply exactly one subject: a post URI and CID, or
+ * an account DID. The reason is one of the standard reason types. */
+bool indigo_session_submit_report(bool account, const char *post_uri,
+                                  const char *post_cid, const char *did,
+                                  const char *reason_type);
 /* `actor` is a handle or DID. */
 bool indigo_session_submit_profile(const char *actor);
 /* Replace the signed-in account's own display name and bio. Empty strings are

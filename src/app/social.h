@@ -1,6 +1,7 @@
 #ifndef INDIGO_SOCIAL_H
 #define INDIGO_SOCIAL_H
 
+#include "app/report.h"
 #include "app/timeline.h"
 
 #include <stdbool.h>
@@ -217,7 +218,7 @@ const indigo_notification *indigo_notifications_selected(const indigo_notificati
  * come first, then the app-wide actions. The cap has to hold every app-wide
  * action plus a post's worth of facet targets, or add_item silently drops the
  * last entries and "Close menu" with them. */
-#define INDIGO_MENU_MAX 30
+#define INDIGO_MENU_MAX 32
 #define INDIGO_MENU_ROWS 5
 
 typedef enum {
@@ -230,6 +231,11 @@ typedef enum {
     INDIGO_MENU_FEEDS,
     INDIGO_MENU_BOOKMARKS,
     INDIGO_MENU_BOOKMARK,
+    INDIGO_MENU_REPORT_POST,
+    INDIGO_MENU_REPORT_ACCOUNT,
+    INDIGO_MENU_REPORT_REASON,
+    INDIGO_MENU_REPORT_SEND,
+    INDIGO_MENU_REPORT_CANCEL,
     INDIGO_MENU_MUTED,
     INDIGO_MENU_BLOCKED,
     INDIGO_MENU_QUEUE,
@@ -273,7 +279,13 @@ typedef struct {
     unsigned scroll;
     /* The post the menu was opened on, for the entries that are about it. */
     char post_uri[INDIGO_POST_URI_MAX];
+    char post_cid[INDIGO_POST_CID_MAX];
+    char report_did[INDIGO_PROFILE_DID_MAX];
     bool post_bookmarked;
+    /* Report state, held while the reason and confirmation menus replace the
+     * rows. The target does not move when the items are rebuilt. */
+    bool report_account;
+    char report_reason[INDIGO_REPORT_REASON_MAX];
 } indigo_menu;
 
 /* `post` may be NULL when nothing is selected: the facet targets are then
@@ -288,6 +300,10 @@ void indigo_menu_build_images(indigo_menu *m, const char *images_dir, const char
 /* Open the selected web link in the menu's QR view; false means the URL could
  * not be encoded, but the URL is still retained for display. */
 bool indigo_menu_show_link(indigo_menu *m, const char *url);
+/* Replace the menu with the report's reason picker, or with the final
+ * Send report/Cancel question. False when the target or reason is incomplete. */
+bool indigo_menu_show_report_reasons(indigo_menu *m, bool account);
+bool indigo_menu_show_report_confirm(indigo_menu *m);
 /* Move the selection, keeping it inside the `rows` visible rows. */
 bool indigo_menu_move(indigo_menu *m, int delta, unsigned rows);
 /* The item shown in visible row `row`, or NULL when that row is empty. */

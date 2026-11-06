@@ -194,6 +194,44 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_toggle_bookmark(app);
         break;
+    case INDIGO_MENU_REPORT_POST:
+        (void) indigo_menu_show_report_reasons(&app->menu, false);
+        break;
+    case INDIGO_MENU_REPORT_ACCOUNT:
+        (void) indigo_menu_show_report_reasons(&app->menu, true);
+        break;
+    case INDIGO_MENU_REPORT_REASON:
+        indigo_copy_utf8(app->menu.report_reason, sizeof app->menu.report_reason,
+                         it->payload);
+        if (!indigo_menu_show_report_confirm(&app->menu)) {
+            say(app, "That report reason is not supported.");
+        }
+        break;
+    case INDIGO_MENU_REPORT_SEND:
+        if (app->request != INDIGO_REQUEST_NONE) {
+            break;
+        }
+        app->request_report_account = app->menu.report_account;
+        app->request_report_did[0] = '\0';
+        app->request_post_uri[0] = '\0';
+        app->request_post_cid[0] = '\0';
+        indigo_copy_utf8(app->request_report_reason,
+                         sizeof app->request_report_reason, app->menu.report_reason);
+        if (app->request_report_account) {
+            indigo_copy_utf8(app->request_report_did,
+                             sizeof app->request_report_did, app->menu.report_did);
+        } else {
+            indigo_copy_utf8(app->request_post_uri, sizeof app->request_post_uri,
+                             app->menu.post_uri);
+            indigo_copy_utf8(app->request_post_cid, sizeof app->request_post_cid,
+                             app->menu.post_cid);
+        }
+        indigo_app_go_back(app);
+        app->request = INDIGO_REQUEST_REPORT;
+        break;
+    case INDIGO_MENU_REPORT_CANCEL:
+        indigo_app_go_back(app);
+        break;
     case INDIGO_MENU_MUTED:
         indigo_app_go_back(app);
         indigo_app_open_mutes(app);

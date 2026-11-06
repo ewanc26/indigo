@@ -466,6 +466,14 @@ handle_requests(indigo_app *app)
             indigo_app_delete_failed(app, "Could not start deleting that post.");
         }
         break;
+    case INDIGO_REQUEST_REPORT:
+        if (!indigo_session_submit_report(app->request_report_account,
+                                          app->request_post_uri, app->request_post_cid,
+                                          app->request_report_did,
+                                          app->request_report_reason)) {
+            indigo_app_report_failed(app, "Could not start the report.");
+        }
+        break;
     case INDIGO_REQUEST_EDIT_QUERY:
         handle_edit_query(app);
         break;
@@ -891,6 +899,12 @@ handle_events(indigo_app *app)
             break;
         case INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED:
             indigo_app_thread_mute_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_REPORT_DONE:
+            indigo_app_report_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_REPORT_FAILED:
+            indigo_app_report_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_GRAPH_DONE:
             indigo_app_graph_done(app, ev.graph, ev.record_uri);

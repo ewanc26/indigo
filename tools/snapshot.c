@@ -939,7 +939,23 @@ fill_social(indigo_app *app, const scenario *s)
         }
     } else if (s->screen == INDIGO_SCREEN_MENU) {
         /* The menu is built from the post being read; `select` walks down it. */
-        if (s->timeline == 2) {
+        if (s->timeline >= 5 && s->timeline <= 7) {
+            /* Reports. The fixture's signed-in handle is not the selected
+             * post's author, so both targets are offered. Timeline 6 is the
+             * reason picker, 7 the final Send report/Cancel question. */
+            indigo_menu_build(&app->menu,
+                              indigo_timeline_selected(&app->timeline),
+                              "someone.else");
+            if (s->timeline >= 6) {
+                (void) indigo_menu_show_report_reasons(&app->menu, false);
+            }
+            if (s->timeline == 7) {
+                indigo_copy_utf8(app->menu.report_reason,
+                                 sizeof app->menu.report_reason,
+                                 indigo_report_reason_type(0));
+                (void) indigo_menu_show_report_confirm(&app->menu);
+            }
+        } else if (s->timeline == 2) {
             /* The attachment picker, over a folder made for the purpose. */
             static const char *const files[] = {"heron-by-the-river.jpg", "kitchen-table.png",
                                                 "notes.txt"};
@@ -1026,6 +1042,9 @@ main(int argc, char **argv)
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},
+        {"menu-report", INDIGO_SCREEN_MENU, false, 0, 0, 5, 7, false},
+        {"report-reasons", INDIGO_SCREEN_MENU, false, 0, 0, 6, 0, false},
+        {"report-confirm", INDIGO_SCREEN_MENU, false, 0, 0, 7, 0, false},
         {"compose-reply", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0, false},
         {"compose-empty", INDIGO_SCREEN_COMPOSE, false, 0, 0, 0, 0, false},
         {"compose-image", INDIGO_SCREEN_COMPOSE, false, 0, 0, 2, 0, false},
