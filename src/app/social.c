@@ -1,5 +1,7 @@
 #include "app/social.h"
 
+#include <strings.h>
+
 #include <wolfram/attach.h>
 
 #include <stdio.h>
@@ -323,16 +325,29 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     memset(m, 0, sizeof *m);
     indigo_copy_utf8(m->title, sizeof m->title, "Menu");
     if (post) {
+        const char *own = account && account[0] == '@' ? account + 1 : account;
+        const char *author = post->handle[0] == '@' ? post->handle + 1 : post->handle;
+        const bool is_own = own && own[0] && author && author[0] &&
+                            strcasecmp(own, author) == 0;
+
         for (unsigned i = 0; i < post->facet_count; i++) {
             add_facet(m, post, &post->facets[i]);
         }
         if (post->uri[0]) {
             indigo_copy_utf8(m->post_uri, sizeof m->post_uri, post->uri);
+            indigo_copy_utf8(m->post_cid, sizeof m->post_cid, post->cid);
+            indigo_report_author_did(post->uri, m->report_did, sizeof m->report_did);
             add_item(m, INDIGO_MENU_LIKED_BY, "Who liked this", "");
             add_item(m, INDIGO_MENU_REPOSTED_BY, "Who reposted this", "");
             m->post_bookmarked = post->bookmarked;
             add_item(m, INDIGO_MENU_BOOKMARK,
                      post->bookmarked ? "Remove bookmark" : "Bookmark", "");
+            if (!is_own && m->post_cid[0]) {
+                add_item(m, INDIGO_MENU_REPORT_POST, "Report post", "");
+            }
+            if (!is_own && m->report_did[0]) {
+                add_item(m, INDIGO_MENU_REPORT_ACCOUNT, "Report account", "");
+            }
         }
     }
     add_item(m, INDIGO_MENU_COMPOSE, "New post", "");
@@ -354,6 +369,50 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_UPDATE, "Check for updates", "");
     add_item(m, INDIGO_MENU_SIGN_OUT, "Sign out", "");
     add_item(m, INDIGO_MENU_CLOSE, "Close menu", "");
+}
+
+static bool
+report_target_ready(const indigo_menu *m, bool account)
+{
+    return m && (account ? m->report_did[0] != '\0'
+                         : m->post_uri[0] != '\0' && m->post_cid[0] != '\0');
+}
+
+bool
+indigo_menu_show_report_reasons(indigo_menu *m, bool account)
+{
+    if (!report_target_ready(m, account)) {
+        return false;
+    }
+    m->report_account = account;
+    m->report_reason[0] = '\0';
+    m->count = 0;
+    m->selected = 0;
+    m->scroll = 0;
+    indigo_copy_utf8(m->title, sizeof m->title,
+                     account ? "Report account" : "Report post");
+    for (unsigned i = 0; i < indigo_report_reason_count(); i++) {
+        add_item(m, INDIGO_MENU_REPORT_REASON, indigo_report_reason_label(i),
+                 indigo_report_reason_type(i));
+    }
+    add_item(m, INDIGO_MENU_REPORT_CANCEL, "Cancel", "");
+    return true;
+}
+
+bool
+indigo_menu_show_report_confirm(indigo_menu *m)
+{
+    if (!indigo_report_reason_known(m ? m->report_reason : NULL) ||
+        !report_target_ready(m, m->report_account)) {
+        return false;
+    }
+    m->count = 0;
+    m->selected = 0;
+    m->scroll = 0;
+    indigo_copy_utf8(m->title, sizeof m->title, "Send report?");
+    add_item(m, INDIGO_MENU_REPORT_SEND, "Send report", "");
+    add_item(m, INDIGO_MENU_REPORT_CANCEL, "Cancel", "");
+    return true;
 }
 
 bool

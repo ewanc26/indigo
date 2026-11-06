@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "app/credits.h"
+#include "app/report.h"
 #include "app/signin.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
@@ -3750,7 +3751,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the three entries about the post, then the fourteen
      * app actions. */
-    CHECK(menu.count == 24);
+    CHECK(menu.count == 25);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -3762,8 +3763,8 @@ test_facet_menu(void)
     CHECK(menu.items[4].kind == INDIGO_MENU_REPOSTED_BY);
     CHECK(menu.items[5].kind == INDIGO_MENU_BOOKMARK);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
-    CHECK(menu.items[6].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[23].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[7].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[24].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -3789,8 +3790,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 24);
-    CHECK(app.menu.items[23].kind == INDIGO_MENU_CLOSE);
+    CHECK(app.menu.count == 25);
+    CHECK(app.menu.items[24].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -3859,6 +3860,75 @@ test_liked_by_from_the_menu(void)
 }
 
 static void
+test_report_flow(void)
+{
+    indigo_menu menu;
+    indigo_post p = make_post("at://did:plc:alice/app.bsky.feed.post/3k", "hello");
+    char did[INDIGO_PROFILE_DID_MAX];
+    int report_post = -1, report_account = -1;
+
+    /* The reasons are the standard type NSIDs, and an unknown string is not
+     * accepted as one. */
+    CHECK(indigo_report_reason_count() == 6);
+    CHECK(strcmp(indigo_report_reason_type(0),
+                 "com.atproto.moderation.defs#reasonSpam") == 0);
+    CHECK(strcmp(indigo_report_reason_type(5),
+                 "com.atproto.moderation.defs#reasonOther") == 0);
+    CHECK(indigo_report_reason_known(indigo_report_reason_type(2)));
+    CHECK(!indigo_report_reason_known("com.atproto.moderation.defs#reasonBogus"));
+    CHECK(!indigo_report_reason_known(NULL));
+
+    /* A post's authority is the account report's DID. */
+    CHECK(indigo_report_author_did(p.uri, did, sizeof did));
+    CHECK(strcmp(did, "did:plc:alice") == 0);
+    did[0] = '\0';
+    CHECK(!indigo_report_author_did("https://example.com/x", did, sizeof did));
+    CHECK(!indigo_report_author_did("at://alice.example/x", did, sizeof did));
+    CHECK(did[0] == '\0');
+
+    /* A post by someone else offers both report targets. */
+    p.handle[0] = '\0';
+    indigo_copy_utf8(p.handle, sizeof p.handle, "alice.example");
+    indigo_menu_build(&menu, &p, "me.example");
+    CHECK(menu.count == 23);
+    for (unsigned i = 0; i < menu.count; i++) {
+        if (menu.items[i].kind == INDIGO_MENU_REPORT_POST) {
+            report_post = (int) i;
+        }
+        if (menu.items[i].kind == INDIGO_MENU_REPORT_ACCOUNT) {
+            report_account = (int) i;
+        }
+    }
+    CHECK(report_post >= 0 && report_account == report_post + 1);
+    CHECK(strcmp(menu.post_uri, p.uri) == 0);
+    CHECK(strcmp(menu.post_cid, p.cid) == 0);
+    CHECK(strcmp(menu.report_did, "did:plc:alice") == 0);
+
+    /* The reason picker replaces the rows without losing the target, and the
+     * confirmation names the action before anything is sent. */
+    CHECK(indigo_menu_show_report_reasons(&menu, false));
+    CHECK(menu.count == 7);
+    CHECK(menu.items[0].kind == INDIGO_MENU_REPORT_REASON);
+    CHECK(menu.items[6].kind == INDIGO_MENU_REPORT_CANCEL);
+    indigo_copy_utf8(menu.report_reason, sizeof menu.report_reason,
+                     menu.items[0].payload);
+    CHECK(indigo_menu_show_report_confirm(&menu));
+    CHECK(menu.count == 2);
+    CHECK(menu.items[0].kind == INDIGO_MENU_REPORT_SEND);
+    CHECK(menu.items[1].kind == INDIGO_MENU_REPORT_CANCEL);
+    CHECK(strcmp(menu.title, "Send report?") == 0);
+
+    /* Your own post has neither report entry. */
+    indigo_copy_utf8(p.handle, sizeof p.handle, "me.example");
+    indigo_menu_build(&menu, &p, "me.example");
+    CHECK(menu.count == 21);
+    for (unsigned i = 0; i < menu.count; i++) {
+        CHECK(menu.items[i].kind != INDIGO_MENU_REPORT_POST);
+        CHECK(menu.items[i].kind != INDIGO_MENU_REPORT_ACCOUNT);
+    }
+}
+
+static void
 test_facet_menu_edges(void)
 {
     indigo_menu menu;
@@ -3869,16 +3939,16 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 21);
+    CHECK(menu.count == 22);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
-    CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
+    CHECK(menu.items[4].kind == INDIGO_MENU_COMPOSE);
 
     /* Byte ranges past the end of the text are ignored, not read out of
      * bounds. */
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 21);
+    CHECK(menu.count == 22);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
@@ -3909,7 +3979,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets, the three post actions, and every app action. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 21);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 22);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -7718,6 +7788,7 @@ main(void)
     test_canvas_spans();
     test_home_requests();
     test_facet_menu();
+    test_report_flow();
     test_facet_menu_edges();
     test_liked_by_from_the_menu();
     test_menu_rows_on_screen();
