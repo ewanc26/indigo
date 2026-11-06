@@ -10,3 +10,6 @@ build-host/
 compile_commands.json
 src/util/buildinfo_gen.h
 .DS_Store
+
+# Agent tooling scratch, including nested worktrees
+.letta/
