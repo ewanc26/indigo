@@ -1,6 +1,7 @@
 /* What the platform glue calls when a request finishes, and the calls that open the lists and screens a request fills. */
 
 #include "app/app_internal.h"
+#include "atproto/session.h"
 
 #include <strings.h>
 #include <wolfram/profile_tab.h>
@@ -490,6 +491,60 @@ indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *
     indigo_copy_utf8(s->subject, sizeof s->subject, name && name[0] ? name : "Members");
     indigo_copy_utf8(app->request_list_uri, sizeof app->request_list_uri, list_uri);
     app->request = INDIGO_REQUEST_LIST_MEMBERS;
+}
+
+void
+indigo_app_open_starter_pack(indigo_app *app, const char *pack_uri)
+{
+    indigo_search *s = &app->search;
+    char canonical[INDIGO_POST_URI_MAX];
+
+    if (app->request != INDIGO_REQUEST_NONE ||
+        !indigo_starter_pack_uri_from_link(pack_uri, canonical, sizeof canonical)) {
+        return;
+    }
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    s->kind = INDIGO_SEARCH_STARTER_PACK;
+    indigo_search_begin_page(s, false);
+    memset(&s->pack, 0, sizeof s->pack);
+    indigo_copy_utf8(s->subject, sizeof s->subject, canonical);
+    indigo_copy_utf8(app->request_starter_pack_uri,
+                     sizeof app->request_starter_pack_uri, canonical);
+    app->request = INDIGO_REQUEST_STARTER_PACK;
+}
+
+void
+indigo_app_starter_pack_loaded(indigo_app *app, const indigo_starter_pack *pack,
+                               const indigo_actor *actors, unsigned count,
+                               const char *next_cursor)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind != INDIGO_SEARCH_STARTER_PACK || !pack) {
+        return;
+    }
+    s->pack = *pack;
+    for (unsigned i = 0; actors && i < count && s->count < INDIGO_SEARCH_MAX; i++) {
+        s->results.actors[s->count++] = actors[i];
+    }
+    indigo_search_finish_page(s, count, next_cursor);
+    if (s->count == 0 && s->pack.feed_count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status,
+                         "This starter pack has no available members or feeds.");
+        s->status_is_error = false;
+    }
+}
+
+void
+indigo_app_starter_pack_failed(indigo_app *app, const char *message)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind != INDIGO_SEARCH_STARTER_PACK) {
+        return;
+    }
+    indigo_search_fail_page(s, message);
 }
 
 void
