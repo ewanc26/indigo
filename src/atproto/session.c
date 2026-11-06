@@ -162,6 +162,9 @@ worker(void *arg)
         case JOB_GRAPH:
             indigo_session_do_graph(&j);
             break;
+        case JOB_REPORT:
+            indigo_session_do_report(&j);
+            break;
         case JOB_PEOPLE:
             indigo_session_do_people(&j);
             break;

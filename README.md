@@ -40,13 +40,15 @@ On top of **0.5.0**'s full-size image viewer (the `Image` button, or ZR on a New
 
 And **0.4.0**'s browser-based OAuth sign-in through a hosted pairing node -- the PDS handles the password and MFA, and Indigo never sees either -- post images, link cards, an alt-text setting, timelines with paging, threads, profiles, notifications, compose with replies and quotes, text-only threads of up to eight posts, QR link sharing, likes and reposts, private bookmarks with their own paged screen, actor and post search, curated lists, saved custom feeds, mute and block, muting a conversation from its thread screen, and editing your own display name and bio.
 
+Unreleased builds also let you report a post or an account from More: choose a standard reason, then confirm with Send report; Cancel or B sends nothing, and the success line waits for the service's answer. The action is absent on your own posts and account.
+
 Unreleased builds add saved composer drafts: Save draft keeps one text post and its reply/quote context in `drafts.dat` (up to eight), Drafts on the More menu lists them, A resumes one into the composer, and Y twice deletes it. They are local, survive restarts and are never sent or queued on their own.
 
 Each release is a tag on this repository with the `.3dsx` attached. The changelog is in [CHANGELOG.md](CHANGELOG.md), the design decisions and their reasons in [AGENTS.md](AGENTS.md), and open work in the [issue tracker](https://github.com/ewanc26/indigo/issues).
 
 | Check | State |
 |---|---|
-| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host: 5362 checks, 0 failures, with AddressSanitizer and UBSan, and a warnings-as-errors sweep over every host-portable source. `make test` raises its own stack limit, because the suite peaks well past the default shell's 8MB |
+| Host unit tests, warnings-as-errors sweep, snapshot renderer | verified on the host: 5430 checks, 0 failures, with AddressSanitizer and UBSan, and a warnings-as-errors sweep over every host-portable source. `make test` raises its own stack limit, because the suite peaks well past the default shell's 8MB |
 | TLS to the real service with the bundled CA roots | emulator-verified in Azahar: handshake to `https://bsky.social` succeeds and the server's rejection of a bogus login shows as "Wrong handle or app password." ([screenshot](docs/screenshots/m2-azahar-signin-error.png)) |
 | Sign-in to a custom PDS (eurosky.social), session save, resume on restart, sign-out | emulator-verified in Azahar: signed in, session saved, relaunch resumed it without credentials, Sign out deleted the session file and returned to the sign-in screen ([signed out](docs/screenshots/m3-emulator-signed-out.png)) |
 | On-screen keyboard (swkbd) entry | **not verified** in the emulator (credentials were supplied by the dev autofill file) |

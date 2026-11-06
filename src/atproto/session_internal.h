@@ -46,6 +46,7 @@
 #include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/list_typed.h>
+#include <wolfram/moderation_report_typed.h>
 #include <wolfram/moderation_typed.h>
 #include <wolfram/oauth_pairing.h>
 #include <wolfram/post_display.h>
@@ -69,6 +70,7 @@ typedef enum {
     JOB_DELETE_POST,
     JOB_THREAD,
     JOB_THREAD_MUTE,
+    JOB_REPORT,
     JOB_PROFILE,
     JOB_PROFILE_UPDATE,
     JOB_NOTIFICATIONS,
@@ -150,6 +152,10 @@ typedef struct {
     bool link_disable;
     /* JOB_THREAD_MUTE: mute when true, unmute when false. */
     bool mute;
+    /* JOB_REPORT: the account target's DID is in `actor`; a post target uses
+     * `post_uri`/`post_cid`. `report_account` says which one to send. */
+    bool report_account;
+    char report_reason[INDIGO_REPORT_REASON_MAX];
     /* JOB_BOOKMARK: create when true, delete when false. */
     bool bookmark;
     /* True when this job asks for the next page of the last search rather
@@ -302,6 +308,7 @@ void indigo_session_do_timeline(const indigo_job *j);
 /* session_people.c */
 void indigo_session_do_follow(const indigo_job *j);
 void indigo_session_do_graph(const indigo_job *j);
+void indigo_session_do_report(const indigo_job *j);
 void indigo_session_do_people(const indigo_job *j);
 void indigo_session_do_profile(const indigo_job *j);
 void indigo_session_do_profile_update(const indigo_job *j);
