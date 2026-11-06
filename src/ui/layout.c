@@ -127,6 +127,13 @@ indigo_layout_button_rect(indigo_action action)
                               MENU_W, MENU_H};
     case INDIGO_ACTION_EDIT:
         return s_edit_button;
+    case INDIGO_ACTION_LIST_NEW:
+    case INDIGO_ACTION_LIST_ADD:
+    case INDIGO_ACTION_LIST_SAVE:
+        return s_pill[0];
+    case INDIGO_ACTION_LIST_EDIT:
+    case INDIGO_ACTION_LIST_REMOVE:
+        return s_pill[1];
     case INDIGO_ACTION_FIELD_QUERY:
         return s_query_button;
     case INDIGO_ACTION_FOLLOW:
@@ -320,7 +327,10 @@ indigo_layout_hit_settings(indigo_screen screen, bool large_targets, int touch_x
         INDIGO_ACTION_REFRESH, INDIGO_ACTION_BACK};
     static const indigo_action search_actions[] = {
         INDIGO_ACTION_FIELD_QUERY, INDIGO_ACTION_ROW0, INDIGO_ACTION_ROW1,
-        INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK, INDIGO_ACTION_IMAGE};
+        INDIGO_ACTION_ROW2, INDIGO_ACTION_AUTHOR, INDIGO_ACTION_BACK,
+        INDIGO_ACTION_IMAGE, INDIGO_ACTION_LIST_NEW, INDIGO_ACTION_LIST_EDIT,
+        INDIGO_ACTION_LIST_SAVE, INDIGO_ACTION_LIST_ADD,
+        INDIGO_ACTION_LIST_REMOVE};
     /* The viewer has nothing to choose between: it is one picture, and the way
      * out is the same way every screen has one. */
     static const indigo_action image_actions[] = {INDIGO_ACTION_BACK};

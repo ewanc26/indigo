@@ -20,6 +20,11 @@
 /* did:plc: identifiers are short, but a custom-domain did is whatever the
  * domain's PLC record allows, so leave room rather than truncating one. */
 #define INDIGO_SEARCH_DID_MAX 128
+#define INDIGO_LIST_PURPOSE_MAX 64
+#define INDIGO_LIST_SUBJECT_MAX 256
+
+#define INDIGO_LIST_PURPOSE_CURATE "app.bsky.graph.defs#curatelist"
+#define INDIGO_LIST_PURPOSE_MODERATE "app.bsky.graph.defs#modlist"
 
 /* One result. Wolfram's typed searchActors view carries did, handle,
  * display_name and avatar; opening the profile fetches the full record. */
@@ -36,6 +41,7 @@ typedef struct {
     char name[INDIGO_POST_NAME_MAX];
     char description[INDIGO_POST_NOTE_MAX];
     char uri[INDIGO_POST_URI_MAX];
+    char purpose[INDIGO_LIST_PURPOSE_MAX];
 } indigo_list;
 
 /* One screen serves ten lists. The people lists share the indigo_actor row,
@@ -86,6 +92,23 @@ typedef struct {
     /* Meaningful only for INDIGO_SEARCH_STARTER_PACK. Held here rather than in
      * a screen of its own so paging, errors and Back use the same machinery. */
     indigo_starter_pack pack;
+    /* The list whose members are open, kept apart from `subject` (the name)
+     * so adding and removing know which record to change. */
+    char list_uri[INDIGO_POST_URI_MAX];
+    char list_name[INDIGO_POST_NAME_MAX];
+    /* The inline list editor's working copy. */
+    bool list_editing;
+    bool list_creating;
+    bool list_saving;
+    int list_field;
+    char edit_name[INDIGO_POST_NAME_MAX];
+    char edit_description[INDIGO_POST_NOTE_MAX];
+    char edit_purpose[INDIGO_LIST_PURPOSE_MAX];
+    bool list_adding;
+    char add_subject[INDIGO_LIST_SUBJECT_MAX];
+    int list_remove_confirm;
+    char list_status[INDIGO_POST_NOTE_MAX];
+    bool list_status_error;
     unsigned count;
     unsigned selected;
     unsigned scroll;
@@ -135,6 +158,11 @@ void indigo_search_finish_page(indigo_search *s, unsigned added, const char *nex
 void indigo_search_fail_page(indigo_search *s, const char *message);
 /* The screen title for this list, and whether the header box takes typing. */
 const char *indigo_search_title(const indigo_search *s);
+/* Purpose label/cycle and editor validation; pure and host-tested. */
+const char *indigo_list_purpose_label(const char *purpose);
+const char *indigo_list_purpose_next(const char *purpose);
+bool indigo_search_list_edit_valid(const char *name, const char *description,
+                                   const char *purpose);
 bool indigo_search_is_typed(const indigo_search *s);
 bool indigo_search_is_posts(const indigo_search *s);
 bool indigo_search_is_lists(const indigo_search *s);

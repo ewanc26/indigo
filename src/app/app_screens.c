@@ -395,11 +395,95 @@ open_search_selection(indigo_app *app)
     }
 }
 
+/* Removing a member is a two-press action: the first X arms the selected
+ * row, the second deletes its listitem record. */
+static void
+remove_list_member(indigo_app *app)
+{
+    indigo_search *s = &app->search;
+
+    if (s->selected >= s->count) {
+        return;
+    }
+    if (s->list_remove_confirm != (int) s->selected) {
+        s->list_remove_confirm = (int) s->selected;
+        indigo_copy_utf8(s->list_status, sizeof s->list_status,
+                         "Press X again to remove this account.");
+        s->list_status_error = true;
+        return;
+    }
+    s->list_remove_confirm = -1;
+    app->request = INDIGO_REQUEST_LIST_REMOVE;
+}
+
+static void
+update_list_editor(indigo_app *app, const indigo_input *input)
+{
+    indigo_search *s = &app->search;
+
+    if (s->list_saving) {
+        return;
+    }
+    if (input->touch_pressed) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        if (a == INDIGO_ACTION_BACK || a == INDIGO_ACTION_LIST_EDIT) {
+            s->list_editing = false;
+            s->list_status[0] = '\0';
+            s->list_status_error = false;
+            return;
+        }
+        if (a == INDIGO_ACTION_LIST_SAVE && app->request == INDIGO_REQUEST_NONE) {
+            app->request = INDIGO_REQUEST_LIST_SAVE;
+            return;
+        }
+    }
+    if (input->back) {
+        s->list_editing = false;
+        s->list_status[0] = '\0';
+        s->list_status_error = false;
+        return;
+    }
+    if (input->up || input->down) {
+        s->list_field = (s->list_field + 1) % 3;
+        return;
+    }
+    if (s->list_field == 2 && (input->page_up || input->page_down)) {
+        indigo_copy_utf8(s->edit_purpose, sizeof s->edit_purpose,
+                         indigo_list_purpose_next(s->edit_purpose));
+        return;
+    }
+    if (input->confirm) {
+        if (s->list_field == 2) {
+            indigo_copy_utf8(s->edit_purpose, sizeof s->edit_purpose,
+                             indigo_list_purpose_next(s->edit_purpose));
+        } else if (app->request == INDIGO_REQUEST_NONE) {
+            app->request = s->list_field == 0 ? INDIGO_REQUEST_EDIT_LIST_NAME
+                                               : INDIGO_REQUEST_EDIT_LIST_DESC;
+        }
+        return;
+    }
+    if (input->like && app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_LIST_SAVE;
+        return;
+    }
+    if (input->touch_pressed &&
+        indigo_layout_hit_app(app, input->touch_x, input->touch_y) ==
+            INDIGO_ACTION_LIST_SAVE && app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_LIST_SAVE;
+    }
+}
+
 void
 indigo_app_update_search(indigo_app *app, const indigo_input *input)
 {
     indigo_search *s = &app->search;
     int drag = indigo_app_drag_rows(app, input);
+
+    if (s->list_editing) {
+        update_list_editor(app, input);
+        return;
+    }
 
     if (input->up) {
         indigo_search_move(s, -1, INDIGO_SEARCH_ROWS);
@@ -417,8 +501,33 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
         indigo_search_move(s, drag, INDIGO_SEARCH_ROWS);
     }
     if (input->back) {
+        if (s->list_remove_confirm >= 0) {
+            s->list_remove_confirm = -1;
+            s->list_status[0] = '\0';
+            return;
+        }
         indigo_app_go_back(app);
         return;
+    }
+    if (s->kind == INDIGO_SEARCH_LISTS) {
+        if (input->like) {
+            indigo_app_list_edit_begin(app, false);
+            return;
+        }
+        if (input->repost) {
+            indigo_app_list_edit_begin(app, true);
+            return;
+        }
+    }
+    if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
+        if (input->like && app->request == INDIGO_REQUEST_NONE) {
+            app->request = INDIGO_REQUEST_EDIT_LIST_SUBJECT;
+            return;
+        }
+        if (input->repost) {
+            remove_list_member(app);
+            return;
+        }
     }
     /* Typing the query and running it are one action: the keyboard blocks, so
      * making the person confirm again on a list screen would be a wasted
@@ -454,6 +563,32 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_ACTION_AUTHOR:
             open_search_selection(app);
+            break;
+        case INDIGO_ACTION_LIST_NEW:
+            if (s->kind == INDIGO_SEARCH_LISTS) {
+                indigo_app_list_edit_begin(app, true);
+            }
+            break;
+        case INDIGO_ACTION_LIST_EDIT:
+            if (s->kind == INDIGO_SEARCH_LISTS) {
+                indigo_app_list_edit_begin(app, false);
+            }
+            break;
+        case INDIGO_ACTION_LIST_SAVE:
+            if (s->list_editing && app->request == INDIGO_REQUEST_NONE) {
+                app->request = INDIGO_REQUEST_LIST_SAVE;
+            }
+            break;
+        case INDIGO_ACTION_LIST_ADD:
+            if (s->kind == INDIGO_SEARCH_LIST_MEMBERS &&
+                app->request == INDIGO_REQUEST_NONE) {
+                app->request = INDIGO_REQUEST_EDIT_LIST_SUBJECT;
+            }
+            break;
+        case INDIGO_ACTION_LIST_REMOVE:
+            if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
+                remove_list_member(app);
+            }
             break;
         case INDIGO_ACTION_IMAGE:
             /* Only a post result has an image, and opening one from an actor

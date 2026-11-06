@@ -21,6 +21,8 @@ indigo_search_clear(indigo_search *s)
     s->scroll = 0;
     s->loading = false;
     s->searched = false;
+    s->list_editing = false;
+    s->list_remove_confirm = -1;
     s->cursor[0] = '\0';
     s->has_more = false;
     s->status[0] = '\0';
@@ -247,6 +249,35 @@ is_list_rows(const indigo_search *s)
 {
     return s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_LIST_MEMBERS
         || s->kind == INDIGO_SEARCH_FEEDS;
+}
+
+const char *
+indigo_list_purpose_label(const char *purpose)
+{
+    return purpose && strcmp(purpose, INDIGO_LIST_PURPOSE_MODERATE) == 0
+               ? "Moderation" : "Curation";
+}
+
+const char *
+indigo_list_purpose_next(const char *purpose)
+{
+    return purpose && strcmp(purpose, INDIGO_LIST_PURPOSE_MODERATE) == 0
+               ? INDIGO_LIST_PURPOSE_CURATE : INDIGO_LIST_PURPOSE_MODERATE;
+}
+
+bool
+indigo_search_list_edit_valid(const char *name, const char *description,
+                               const char *purpose)
+{
+    if (!name || !description || !purpose || !name[0]) {
+        return false;
+    }
+    if (strlen(name) >= INDIGO_POST_NAME_MAX ||
+        strlen(description) >= INDIGO_POST_NOTE_MAX) {
+        return false;
+    }
+    return strcmp(purpose, INDIGO_LIST_PURPOSE_CURATE) == 0 ||
+           strcmp(purpose, INDIGO_LIST_PURPOSE_MODERATE) == 0;
 }
 
 bool

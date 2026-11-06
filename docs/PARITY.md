@@ -57,7 +57,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Link-card previews | yes | implemented | host only |
 | Actor search, post search | yes | implemented, paged | host |
 | Custom feeds | yes | implemented: the account's saved feeds, one feed on Home | host |
-| Lists and members | read-only | implemented, read-only | host |
+| Lists and members | implemented, create/edit and members | implemented, create/edit and members | host |
 | Starter packs | read/use | implemented, read/use | host | A recognized starter-pack link in the More menu opens the pack on the search screen: metadata on top, suggested accounts and included feeds on the bottom. Members page through the pack's underlying list; a member opens their profile, a feed opens on Home, and Back returns to the post. Creating or sharing a pack is deferred. Host tests cover link normalization, row bounds and feed selection; snapshots `starter-pack` and `starter-pack-feed` cover both displays. No emulator or hardware run. |
 | Mute and block, with lists | yes | implemented | host |
 | Report a post or account | yes | implemented | host | The More menu offers Report post and Report account on someone else's content, then the standard reason types and a final Send report/Cancel question. The report carries exactly one subject: the post's AT-URI and CID, or the author's DID extracted from that URI. Success is shown only after Wolfram's `wf_agent_report_typed` returns; a failed or cancelled report sends nothing. Host tests cover the reason table, target extraction, own-post hiding and the menu states; snapshots cover the menu, reason picker and confirmation. No emulator or hardware run. |

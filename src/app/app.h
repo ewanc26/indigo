@@ -124,6 +124,12 @@ typedef enum {
     INDIGO_REQUEST_AUTHOR_FEED,
     INDIGO_REQUEST_LISTS,
     INDIGO_REQUEST_LIST_MEMBERS,
+    INDIGO_REQUEST_EDIT_LIST_NAME,
+    INDIGO_REQUEST_EDIT_LIST_DESC,
+    INDIGO_REQUEST_EDIT_LIST_SUBJECT,
+    INDIGO_REQUEST_LIST_SAVE,
+    INDIGO_REQUEST_LIST_ADD,
+    INDIGO_REQUEST_LIST_REMOVE,
     INDIGO_REQUEST_STARTER_PACK,
     INDIGO_REQUEST_FEEDS,
     INDIGO_REQUEST_FEED,
@@ -408,6 +414,16 @@ void indigo_app_starter_pack_loaded(indigo_app *app, const indigo_starter_pack *
 void indigo_app_starter_pack_failed(indigo_app *app, const char *message);
 void indigo_app_lists_loaded(indigo_app *app, const indigo_list *lists, unsigned count,
                              const char *next_cursor);
+/* The inline list editor and member writes. The keyboard glue in main.c calls
+ * the setters; the search screen only asks for them. */
+void indigo_app_list_edit_begin(indigo_app *app, bool creating);
+void indigo_app_list_set_name(indigo_app *app, const char *text);
+void indigo_app_list_set_description(indigo_app *app, const char *text);
+void indigo_app_list_set_add_subject(indigo_app *app, const char *text);
+/* Validates the working copy and leaves it ready for main.c to submit. */
+bool indigo_app_list_save(indigo_app *app);
+void indigo_app_list_write_done(indigo_app *app, const char *message);
+void indigo_app_list_write_failed(indigo_app *app, const char *message);
 /* The account's saved feeds, then one feed's posts on the home screen. The
  * picker reuses the search screen with the list rows; the feed itself reuses
  * the timeline, so Back lands on the picker again. */

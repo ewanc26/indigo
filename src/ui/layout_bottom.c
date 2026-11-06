@@ -569,6 +569,15 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
     bool opens;
     indigo_rect q = indigo_layout_button_rect(INDIGO_ACTION_FIELD_QUERY);
 
+    if (s->list_editing) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_SAVE, !s->list_saving,
+                                  s->list_saving, COL_PILL_ACTIVE, "Save");
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_EDIT, true, false,
+                                  COL_PILL_ACTIVE, "Cancel");
+        indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+        return;
+    }
+
     indigo_canvas_rect(c, q.x, q.y, q.w, q.h, s->query[0] ? COL_PILL_ACTIVE : COL_PILL);
     if (indigo_search_is_typed(s)) {
         const char *hint = posts ? "Tap to type words" : "Tap to type a name";
@@ -698,6 +707,19 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, has_selection,
                     s->loading, COL_PILL_ACTIVE,
                     posts ? "Thread" : opens ? "Open" : "Profile");
+    }
+    if (s->kind == INDIGO_SEARCH_LISTS) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_NEW, true, s->loading,
+                                  COL_PILL_ACTIVE, "New");
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_EDIT,
+                                  indigo_search_selected_list(s) != NULL, s->loading,
+                                  COL_PILL_ACTIVE, "Edit");
+    } else if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_ADD, true, s->loading,
+                                  COL_PILL_ACTIVE, "Add");
+        indigo_layout_action_pill(c, INDIGO_ACTION_LIST_REMOVE,
+                                  indigo_search_selected(s) != NULL && !s->loading,
+                                  s->loading, COL_PILL_ACTIVE, "Remove");
     }
 }
 
