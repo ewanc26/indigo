@@ -405,13 +405,27 @@ nothing to act on yet: Indigo draws no animation.
 
 ### Drafts
 
-`store/draft_store` keeps the unsent compose text in `draft.dat`: a versioned,
-length-prefixed file with an `end` marker, so a truncated write is detected
-rather than loaded as half a post. `main.c` restores it into the compose buffer
-at startup (the existing "Draft kept from earlier." note then tells the person)
-and saves whenever the text changes; an empty draft removes the file. A damaged
-file is moved to `.bad`, never deleted. Nothing is ever sent without the person
-pressing send. Only the text is persisted, not what it was replying to.
+There are two different draft stores, on purpose.
+
+`store/draft_store` keeps the one unsent compose text in `draft.dat`: a
+versioned, length-prefixed file with an `end` marker, so a truncated write is
+detected rather than loaded as half a post. `main.c` restores it into the
+compose buffer at startup (the existing "Draft kept from earlier." note then
+tells the person) and saves whenever the text changes; an empty draft removes
+the file. It holds text only, not reply/quote context.
+
+`store/drafts_store` keeps the list reached by Save draft and the Drafts entry
+on the More menu, in `drafts.dat`. It holds up to eight records of text plus
+the reply gate and the reply/quote target and root, so resuming puts the
+composer back where it was. The file is versioned, tab-separated, escaped and
+ended with an `end` marker; writes go through `indigo_file_write_atomic`, and a
+damaged file is moved to `.bad` before the list starts empty. Resuming removes
+that one record and returns it to the composer, so saving or posting it later
+does not leave a duplicate. Images and multi-post threads are refused rather
+than partially stored.
+
+Neither store can publish or queue on its own: only Post or Save later does
+that, and only after the person presses it.
 
 ### Timeline cache
 

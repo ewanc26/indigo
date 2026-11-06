@@ -375,6 +375,51 @@ build_bottom_queue(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_bottom_drafts(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_saved_drafts *list = &app->drafts;
+    unsigned page = (app->draft_selected / INDIGO_TIMELINE_ROWS) * INDIGO_TIMELINE_ROWS;
+
+    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "Drafts");
+    indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
+    if (list->count == 0) {
+        indigo_canvas_text(c, 14, 70, 0.6f, COL_TEXT_SOFT, "Nothing is saved.");
+        indigo_canvas_text(c, 14, 86, 0.6f, COL_TEXT_SOFT,
+                           "Use Save draft on the compose screen.");
+    }
+    for (unsigned row = 0; row < INDIGO_TIMELINE_ROWS; row++) {
+        unsigned idx = page + row;
+        const indigo_saved_draft *d = indigo_saved_drafts_get(list, idx);
+        indigo_line line;
+        char title[96];
+        char body[96];
+        int cut = 0;
+
+        if (!d) {
+            break;
+        }
+        if (indigo_wrap(d->text, 34, &line, 1, &cut) == 0) {
+            line = (indigo_line) {0, 0};
+        }
+        snprintf(title, sizeof title, "%u. %.*s%s", idx + 1, (int) line.len,
+                 d->text + line.start, cut ? "..." : "");
+        if (!d->has_target) {
+            snprintf(body, sizeof body, "New post");
+        } else if (d->mode == INDIGO_COMPOSE_REPLY) {
+            snprintf(body, sizeof body, "Reply to @%.40s", d->target_handle);
+        } else {
+            snprintf(body, sizeof body, "Quote of @%.40s", d->target_handle);
+        }
+        indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                               idx == app->draft_selected, title, body, NULL);
+    }
+    indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, list->count > 0, false, COL_PILL_ACTIVE,
+                              "A Resume");
+    indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, list->count > 0, false, COL_PILL_ACTIVE,
+                              app->draft_delete_armed ? "Confirm" : "Y Delete");
+}
+
+static void
 build_bottom_menu(const indigo_app *app, indigo_canvas *c)
 {
     char position[32];
@@ -476,14 +521,26 @@ build_bottom_compose(const indigo_app *app, indigo_canvas *c)
      * screen already names it, and the longest wording has to fit this width. */
     if (indigo_compose_can_gate(d)) {
         indigo_canvas_rect(c, t.x, t.y, t.w, t.h, COL_PILL_ACTIVE);
-        indigo_canvas_text(c, t.x + 14, t.y + 9, 0.6f, COL_TEXT, "%s - Y switch",
+        indigo_canvas_text(c, t.x + 10, t.y + 9, 0.55f, COL_TEXT, "Y  %s",
                            indigo_compose_gate_short(d));
     } else {
         indigo_canvas_rect(c, t.x, t.y, t.w, t.h, can_toggle ? COL_PILL_ACTIVE : COL_PILL);
-        indigo_canvas_text(c, t.x + 14, t.y + 9, 0.6f, can_toggle ? COL_TEXT : COL_TEXT_DIM, "%s",
-                           !d->has_target                        ? "Plain post"
-                           : d->mode == INDIGO_COMPOSE_QUOTE ? "Quoting - Y switch to reply"
-                                                              : "Replying - Y switch to quote");
+        indigo_canvas_text(c, t.x + 10, t.y + 9, 0.6f, can_toggle ? COL_TEXT : COL_TEXT_DIM, "%s",
+                           !d->has_target                        ? "Y  Plain post"
+                           : d->mode == INDIGO_COMPOSE_QUOTE ? "Y  Quoting"
+                                                              : "Y  Replying");
+    }
+
+    /* Drafts are local and separate from Save later's queue. Only one text post
+     * is stored for now; an image or thread is refused rather than truncated. */
+    {
+        indigo_rect sd = indigo_layout_button_rect(INDIGO_ACTION_SAVE_DRAFT);
+        bool can_draft = d->text[0] != '\0' && d->thread_count == 0 &&
+                         d->image[0] == '\0' && !d->sending;
+
+        indigo_canvas_rect(c, sd.x, sd.y, sd.w, sd.h, can_draft ? COL_PILL_ACTIVE : COL_PILL);
+        indigo_canvas_text(c, sd.x + 26, sd.y + 9, 0.6f,
+                           can_draft ? COL_TEXT : COL_TEXT_DIM, "Save draft");
     }
 
     indigo_canvas_rect(c, s.x, s.y, s.w, s.h, indigo_compose_ready(d) ? COL_PILL_ACTIVE : COL_PILL);
@@ -793,6 +850,9 @@ indigo_layout_build_bottom(const indigo_app *app, const indigo_input *input, ind
         break;
     case INDIGO_SCREEN_QUEUE:
         build_bottom_queue(app, c);
+        break;
+    case INDIGO_SCREEN_DRAFTS:
+        build_bottom_drafts(app, c);
         break;
     case INDIGO_SCREEN_MENU:
         build_bottom_menu(app, c);

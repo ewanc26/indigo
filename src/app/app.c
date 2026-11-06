@@ -20,6 +20,7 @@ indigo_app_init(indigo_app *app)
     indigo_timeline_init(&app->timeline);
     indigo_timeline_init(&app->bookmarks);
     indigo_timeline_init(&app->thread);
+    indigo_saved_drafts_init(&app->drafts);
     /* The memset above leaves text_scale at 0, which is not a valid scale. */
     indigo_settings_defaults(&app->settings);
     indigo_copy_utf8(app->images_dir, sizeof app->images_dir, INDIGO_IMAGES_DIR);
@@ -467,6 +468,9 @@ indigo_app_update(indigo_app *app, const indigo_input *input)
         break;
     case INDIGO_SCREEN_QUEUE:
         indigo_app_update_queue(app, input);
+        break;
+    case INDIGO_SCREEN_DRAFTS:
+        indigo_app_update_drafts(app, input);
         break;
     case INDIGO_SCREEN_BOOKMARKS:
         indigo_app_update_bookmarks(app, input);
