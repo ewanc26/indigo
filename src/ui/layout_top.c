@@ -356,6 +356,35 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
     bool posts = indigo_search_is_posts(s);
     bool lists = indigo_search_is_lists(s);
 
+    if (s->list_editing) {
+        indigo_layout_top_title(c, s->list_creating ? "New list" : "Edit list",
+                                "A  Edit   L/R  Purpose");
+        indigo_canvas_text(c, 18, 44, 0.55f,
+                           s->list_field == 0 ? COL_TEXT : COL_TEXT_DIM, "Name");
+        indigo_canvas_text(c, 18, 60, 0.75f, COL_TEXT, "%.42s",
+                           s->edit_name[0] ? s->edit_name : "(not set)");
+        indigo_canvas_text(c, 18, 84, 0.55f,
+                           s->list_field == 1 ? COL_TEXT : COL_TEXT_DIM,
+                           "Description");
+        if (s->edit_description[0]) {
+            indigo_layout_top_paragraph(c, 18, 100, 0.58f, COL_TEXT, 3,
+                                        s->edit_description);
+        } else {
+            indigo_canvas_text(c, 18, 100, 0.58f, COL_TEXT_DIM, "(not set)");
+        }
+        indigo_canvas_text(c, 18, 164, 0.55f,
+                           s->list_field == 2 ? COL_TEXT : COL_TEXT_DIM,
+                           "Purpose");
+        indigo_canvas_text(c, 18, 180, 0.7f, COL_TEXT, "%s",
+                           indigo_list_purpose_label(s->edit_purpose));
+        if (s->list_status[0]) {
+            indigo_canvas_text(c, 18, 214, 0.55f,
+                               s->list_status_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%.56s", s->list_status);
+        }
+        return;
+    }
+
     /* SEL opens whatever the row is: a profile for a person, a thread for a
      * post, a member list for a curated list. All read as "Open" here, so the
      * hint is stated once. The lists have nothing to type, so the A hint is
@@ -431,6 +460,11 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         }
         indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
         indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open members");
+        if (s->list_status[0]) {
+            indigo_canvas_text(c, 18, 228, 0.5f,
+                               s->list_status_error ? COL_ERROR : COL_TEXT_DIM,
+                               "%.60s", s->list_status);
+        }
         return;
     }
     if (lists && s->kind == INDIGO_SEARCH_FEEDS) {
@@ -458,6 +492,11 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 18, 82, 0.65f, COL_TEXT_DIM, "@%s", sel->handle);
     indigo_canvas_text(c, 18, 112, 0.55f, COL_TEXT_DIM, "%.44s", sel->did);
     indigo_canvas_text(c, 18, 140, 0.6f, COL_TEXT_SOFT, "SEL  Open profile");
+    if (s->kind == INDIGO_SEARCH_LIST_MEMBERS && s->list_status[0]) {
+        indigo_canvas_text(c, 18, 214, 0.55f,
+                           s->list_status_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%.60s", s->list_status);
+    }
 }
 
 static void

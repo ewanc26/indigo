@@ -163,6 +163,39 @@ handle_edit_profile_bio(indigo_app *app)
 }
 
 static void
+handle_edit_list_name(indigo_app *app)
+{
+    char text[INDIGO_POST_NAME_MAX];
+
+    if (indigo_text_edit("List name", app->search.edit_name, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_name(app, text);
+    }
+}
+
+static void
+handle_edit_list_description(indigo_app *app)
+{
+    char text[INDIGO_POST_NOTE_MAX];
+
+    if (indigo_text_edit("List description", app->search.edit_description, false,
+                         text, sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_description(app, text);
+    }
+}
+
+static void
+handle_edit_list_subject(indigo_app *app)
+{
+    char text[INDIGO_LIST_SUBJECT_MAX];
+
+    if (indigo_text_edit("Handle or DID", app->search.add_subject, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_add_subject(app, text);
+    }
+}
+
+static void
 handle_edit_image_alt(indigo_app *app)
 {
     char text[INDIGO_IMAGE_ALT_MAX];
@@ -528,12 +561,80 @@ handle_requests(indigo_app *app)
         }
         break;
     case INDIGO_REQUEST_LIST_MEMBERS:
-        if (!indigo_session_submit_list_members(app->request_list_uri,
+        if (!indigo_session_submit_list_members(app->search.list_uri[0]
+                                                    ? app->search.list_uri
+                                                    : app->request_list_uri,
                                                 app->search.cursor[0] ? app->search.cursor
                                                                        : NULL)) {
             indigo_app_search_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_EDIT_LIST_NAME:
+        handle_edit_list_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_LIST_DESC:
+        handle_edit_list_description(app);
+        break;
+    case INDIGO_REQUEST_EDIT_LIST_SUBJECT:
+        handle_edit_list_subject(app);
+        if (app->search.add_subject[0]) {
+            app->request = INDIGO_REQUEST_LIST_ADD;
+        }
+        break;
+    case INDIGO_REQUEST_LIST_SAVE:
+        if (indigo_app_list_save(app)) {
+            bool started = app->search.list_creating
+                               ? indigo_session_submit_list_create(
+                                     app->search.edit_name,
+                                     app->search.edit_description,
+                                     app->search.edit_purpose)
+                               : indigo_session_submit_list_update(
+                                     app->search.list_uri,
+                                     app->search.edit_name,
+                                     app->search.edit_description,
+                                     app->search.edit_purpose);
+
+            if (started) {
+                app->search.list_saving = true;
+                indigo_copy_utf8(app->search.list_status,
+                                 sizeof app->search.list_status,
+                                 "Saving list...");
+                app->search.list_status_error = false;
+            } else {
+                indigo_app_list_write_failed(app, "Could not start saving the list.");
+            }
+        }
+        break;
+    case INDIGO_REQUEST_LIST_ADD:
+        if (app->search.add_subject[0]) {
+            if (indigo_session_submit_list_add_member(app->search.list_uri,
+                                                      app->search.add_subject)) {
+                app->search.list_saving = true;
+                indigo_copy_utf8(app->search.list_status,
+                                 sizeof app->search.list_status,
+                                 "Adding account...");
+                app->search.list_status_error = false;
+            } else {
+                indigo_app_list_write_failed(app, "Could not start adding that account.");
+            }
+        }
+        break;
+    case INDIGO_REQUEST_LIST_REMOVE: {
+        const char *item_uri = indigo_session_list_member_uri(app->search.selected);
+
+        if (!item_uri[0]) {
+            indigo_app_list_write_failed(app, "That member has no removable record.");
+        } else if (indigo_session_submit_list_remove_member(item_uri)) {
+            app->search.list_saving = true;
+            indigo_copy_utf8(app->search.list_status,
+                             sizeof app->search.list_status,
+                             "Removing account...");
+            app->search.list_status_error = false;
+        } else {
+            indigo_app_list_write_failed(app, "Could not start removing that account.");
+        }
+        break;
+    }
     case INDIGO_REQUEST_STARTER_PACK:
         if (!indigo_session_submit_starter_pack(app->request_starter_pack_uri,
                                                 app->search.cursor[0]
@@ -898,6 +999,13 @@ handle_events(indigo_app *app)
             indigo_app_lists_loaded(app, lists, ln, ev.cursor);
             break;
         }
+        case INDIGO_SESSION_EVENT_LIST_WRITE_DONE:
+            indigo_app_list_write_done(app, ev.message);
+            break;
+        case INDIGO_SESSION_EVENT_LIST_WRITE_FAILED:
+            indigo_app_list_write_failed(app, ev.message[0] ? ev.message
+                                                            : indigo_failure_message(ev.failure));
+            break;
         case INDIGO_SESSION_EVENT_FEEDS_PAGE: {
             const indigo_list *feeds;
             unsigned fn;

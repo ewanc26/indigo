@@ -462,6 +462,49 @@ indigo_session_submit_list_members(const char *list_uri, const char *cursor)
 }
 
 bool
+indigo_session_submit_list_create(const char *name, const char *description,
+                                   const char *purpose)
+{
+    (void) name;
+    (void) description;
+    (void) purpose;
+    return false;
+}
+
+bool
+indigo_session_submit_list_update(const char *list_uri, const char *name,
+                                   const char *description, const char *purpose)
+{
+    (void) list_uri;
+    (void) name;
+    (void) description;
+    (void) purpose;
+    return false;
+}
+
+bool
+indigo_session_submit_list_add_member(const char *list_uri, const char *subject)
+{
+    (void) list_uri;
+    (void) subject;
+    return false;
+}
+
+bool
+indigo_session_submit_list_remove_member(const char *list_item_uri)
+{
+    (void) list_item_uri;
+    return false;
+}
+
+const char *
+indigo_session_list_member_uri(unsigned index)
+{
+    (void) index;
+    return "";
+}
+
+bool
 indigo_session_submit_starter_pack(const char *pack_uri, const char *cursor)
 {
     (void) pack_uri;

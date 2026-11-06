@@ -1319,6 +1319,83 @@ test_lists_and_moderation(const char *data_dir)
     CHECK(count == 1);
     CHECK(e2e_pds_hits(pds, "app.bsky.graph.getList") == 4);
 
+    /* Create sends the record the screen built. */
+    e2e_pds_route(pds, "com.atproto.repo.createRecord", 200,
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/new\","
+                  "\"cid\":\"c1\"}");
+    CHECK(indigo_session_submit_list_create("Friends", "People I know",
+                                            INDIGO_LIST_PURPOSE_CURATE));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LIST_WRITE_DONE, &ev));
+    CHECK_STR(ev.message, "List created.");
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.createRecord") == 1);
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.createRecord",
+                                   "\"name\":\"Friends\""));
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.createRecord",
+                                   "\"purpose\":\"app.bsky.graph.defs#curatelist\""));
+
+    /* Editing reads the whole record first, so createdAt and any field this
+     * client does not know about survive the put. */
+    e2e_pds_route(pds, "com.atproto.repo.getRecord", 200,
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\","
+                  "\"cid\":\"c2\",\"value\":{\"$type\":\"app.bsky.graph.list\","
+                  "\"name\":\"Old\",\"description\":\"old text\","
+                  "\"purpose\":\"app.bsky.graph.defs#curatelist\","
+                  "\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"extra\":\"keep\"}}");
+    e2e_pds_route(pds, "com.atproto.repo.putRecord", 200,
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.list/1\","
+                  "\"cid\":\"c3\"}");
+    CHECK(indigo_session_submit_list_update(
+        "at://did:plc:abc/app.bsky.graph.list/1", "Close friends", "",
+        INDIGO_LIST_PURPOSE_CURATE));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LIST_WRITE_DONE, &ev));
+    CHECK_STR(ev.message, "List updated.");
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.getRecord") == 1);
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.putRecord") == 1);
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.putRecord",
+                                   "\"name\":\"Close friends\""));
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.putRecord",
+                                   "\"createdAt\":\"2026-10-01T10:00:00.000Z\""));
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.putRecord",
+                                   "\"extra\":\"keep\""));
+
+    /* A handle is resolved before the listitem is created. */
+    e2e_pds_route(pds, "com.atproto.identity.resolveHandle", 200,
+                  "{\"did\":\"did:plc:bob\"}");
+    e2e_pds_route(pds, "com.atproto.repo.createRecord", 200,
+                  "{\"uri\":\"at://did:plc:abc/app.bsky.graph.listitem/9\","
+                  "\"cid\":\"c4\"}");
+    CHECK(indigo_session_submit_list_add_member(
+        "at://did:plc:abc/app.bsky.graph.list/1", "bob.test"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LIST_WRITE_DONE, &ev));
+    CHECK_STR(ev.message, "Added to the list.");
+    CHECK(e2e_pds_hits(pds, "com.atproto.identity.resolveHandle") == 1);
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.createRecord") == 2);
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.createRecord",
+                                   "\"subject\":\"did:plc:bob\""));
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.createRecord",
+                                   "\"list\":\"at://did:plc:abc/app.bsky.graph.list/1\""));
+
+    /* Removing deletes the listitem by its own record key. */
+    e2e_pds_route(pds, "com.atproto.repo.deleteRecord", 200, "{}");
+    CHECK(indigo_session_submit_list_remove_member(
+        "at://did:plc:abc/app.bsky.graph.listitem/1"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LIST_WRITE_DONE, &ev));
+    CHECK_STR(ev.message, "Removed from the list.");
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.deleteRecord") == 1);
+    CHECK(e2e_pds_request_contains(pds, "com.atproto.repo.deleteRecord",
+                                   "\"rkey\":\"1\""));
+
+    /* A failed save reports the failure instead of claiming the edit. */
+    e2e_pds_route(pds, "com.atproto.repo.putRecord", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");
+    CHECK(indigo_session_submit_list_update(
+        "at://did:plc:abc/app.bsky.graph.list/1", "Again", "",
+        INDIGO_LIST_PURPOSE_CURATE));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LIST_WRITE_FAILED, &ev));
+    CHECK(ev.failure != WF_FAIL_NONE);
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.getRecord") == 2);
+    CHECK(e2e_pds_hits(pds, "com.atproto.repo.putRecord") == 2);
+
     /* The muted and blocked accounts come through the same rows and event as
      * every other list of people. */
     CHECK(indigo_session_submit_mutes(NULL));

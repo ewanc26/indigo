@@ -46,7 +46,10 @@
 #include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
 #include <wolfram/graph_social_typed.h>
+#include <wolfram/graph_write.h>
+#include <wolfram/identity_typed.h>
 #include <wolfram/list_typed.h>
+#include <wolfram/repo_typed.h>
 #include <wolfram/moderation_report_typed.h>
 #include <wolfram/moderation_typed.h>
 #include <wolfram/oauth_pairing.h>
@@ -100,6 +103,10 @@ typedef enum {
     JOB_AUTHOR_FEED,
     JOB_LISTS,
     JOB_LIST_MEMBERS,
+    JOB_LIST_CREATE,
+    JOB_LIST_UPDATE,
+    JOB_LIST_ADD_MEMBER,
+    JOB_LIST_REMOVE_MEMBER,
     JOB_STARTER_PACK,
     JOB_FEEDS,
     JOB_FEED,
@@ -140,6 +147,12 @@ typedef struct {
     /* JOB_AUTHOR_FEED's wf_profile_tab. */
     int tab;
     char list_uri[INDIGO_POST_URI_MAX];
+    char list_name[INDIGO_POST_NAME_MAX];
+    char list_description[INDIGO_POST_NOTE_MAX];
+    char list_purpose[INDIGO_LIST_PURPOSE_MAX];
+    char list_item_uri[INDIGO_POST_URI_MAX];
+    /* A handle or DID being added to a list. */
+    char list_subject[INDIGO_CHAT_TARGET_MAX];
     /* JOB_STARTER_PACK's pack URI. The member list URI is held in the published
      * starter_pack state so a paging job can use it without another lookup. */
     char starter_pack_uri[INDIGO_POST_URI_MAX];
@@ -229,6 +242,8 @@ typedef struct {
  * list is a third type, and the screen needs the previous list to stay valid
  * until the next result arrives. */
     indigo_list lists[INDIGO_SEARCH_MAX];
+    /* The listitem record behind each member row, so X can remove one. */
+    char list_member_uris[INDIGO_SEARCH_MAX][INDIGO_POST_URI_MAX];
     indigo_starter_pack starter_pack;
 /* The account's saved feeds: list-shaped rows, so the same type, but their
  * own array so browsing feeds never disturbs a curated-lists view. */
@@ -324,6 +339,7 @@ void indigo_session_publish_actor_page(const indigo_job *j, wf_agent_actor_list 
 /* session_lists.c */
 void indigo_session_do_feeds(const indigo_job *j);
 void indigo_session_do_list_members(const indigo_job *j);
+void indigo_session_do_list_write(const indigo_job *j);
 void indigo_session_do_starter_pack(const indigo_job *j);
 void indigo_session_do_lists(const indigo_job *j);
 void indigo_session_do_moderation_list(const indigo_job *j);

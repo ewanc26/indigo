@@ -42,6 +42,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_SEARCH_FAILED,
     INDIGO_SESSION_EVENT_POST_SEARCH_PAGE,
     INDIGO_SESSION_EVENT_LISTS_PAGE,
+    INDIGO_SESSION_EVENT_LIST_WRITE_DONE,
+    INDIGO_SESSION_EVENT_LIST_WRITE_FAILED,
     INDIGO_SESSION_EVENT_FEEDS_PAGE,
     INDIGO_SESSION_EVENT_STARTER_PACK_PAGE,
     INDIGO_SESSION_EVENT_STARTER_PACK_FAILED,
@@ -318,6 +320,17 @@ bool indigo_session_submit_author_feed(const char *actor, int tab, const char *c
  * way. */
 bool indigo_session_submit_lists(const char *cursor);
 bool indigo_session_submit_list_members(const char *list_uri, const char *cursor);
+/* Create or replace a list's name, description and purpose. */
+bool indigo_session_submit_list_create(const char *name, const char *description,
+                                       const char *purpose);
+bool indigo_session_submit_list_update(const char *list_uri, const char *name,
+                                       const char *description,
+                                       const char *purpose);
+/* Add a handle/DID, or remove the listitem record at `list_item_uri`. */
+bool indigo_session_submit_list_add_member(const char *list_uri, const char *subject);
+bool indigo_session_submit_list_remove_member(const char *list_item_uri);
+/* The listitem URI for a member row, or "" when it has none. */
+const char *indigo_session_list_member_uri(unsigned index);
 /* A starter pack and its list's members. The first page fetches both; a
  * cursor asks only for the next member page. Members land in the actor results
  * the search screen already reads, and the pack metadata is available from

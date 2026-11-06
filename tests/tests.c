@@ -5778,6 +5778,62 @@ test_pinned_post(void)
  * members, a member row opens a profile -- and that opening a second list
  * drops the first's members rather than relabelling them. */
 static void
+test_list_management(void)
+{
+    indigo_app app;
+    indigo_field f;
+    indigo_list list;
+
+    CHECK(strcmp(indigo_list_purpose_label(INDIGO_LIST_PURPOSE_CURATE),
+                 "Curation") == 0);
+    CHECK(strcmp(indigo_list_purpose_label(INDIGO_LIST_PURPOSE_MODERATE),
+                 "Moderation") == 0);
+    CHECK(strcmp(indigo_list_purpose_next(INDIGO_LIST_PURPOSE_CURATE),
+                 INDIGO_LIST_PURPOSE_MODERATE) == 0);
+    CHECK(indigo_search_list_edit_valid("Friends", "People I know",
+                                        INDIGO_LIST_PURPOSE_CURATE));
+    CHECK(indigo_search_list_edit_valid("Quiet", "",
+                                        INDIGO_LIST_PURPOSE_MODERATE));
+    CHECK(!indigo_search_list_edit_valid("", "", INDIGO_LIST_PURPOSE_CURATE));
+    CHECK(!indigo_search_list_edit_valid("Friends", "", "wrong"));
+
+    indigo_app_init(&app);
+    indigo_app_sign_in_succeeded(&app, "ewancroft.uk");
+    (void) indigo_app_take_request(&app, &f);
+    indigo_app_open_lists(&app);
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_LISTS);
+    memset(&list, 0, sizeof list);
+    snprintf(list.name, sizeof list.name, "Rivers");
+    snprintf(list.description, sizeof list.description, "Walkers");
+    snprintf(list.uri, sizeof list.uri,
+             "at://did:plc:me/app.bsky.graph.list/rivers");
+    snprintf(list.purpose, sizeof list.purpose, INDIGO_LIST_PURPOSE_MODERATE);
+    indigo_app_lists_loaded(&app, &list, 1, "");
+
+    /* Y opens the editor on the selected list and keeps its purpose. */
+    indigo_app_update(&app, &(indigo_input) {.like = true});
+    CHECK(app.search.list_editing);
+    CHECK(!app.search.list_creating);
+    CHECK(strcmp(app.search.edit_name, "Rivers") == 0);
+    CHECK(strcmp(app.search.edit_purpose, INDIGO_LIST_PURPOSE_MODERATE) == 0);
+
+    /* Left/right on the purpose field cycles; A on Name asks for the keyboard. */
+    indigo_app_update(&app, &(indigo_input) {.down = true});
+    indigo_app_update(&app, &(indigo_input) {.down = true});
+    indigo_app_update(&app, &(indigo_input) {.page_down = true});
+    CHECK(strcmp(app.search.edit_purpose, INDIGO_LIST_PURPOSE_CURATE) == 0);
+    app.search.list_field = 0;
+    indigo_app_update(&app, &(indigo_input) {.confirm = true});
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_EDIT_LIST_NAME);
+
+    /* Saving stages a request; main.c performs the write. */
+    indigo_app_list_set_name(&app, "Rivers and roads");
+    indigo_app_update(&app, &(indigo_input) {.like = true});
+    CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_LIST_SAVE);
+    CHECK(indigo_app_list_save(&app));
+}
+
+static void
 test_lists(void)
 {
     indigo_app app;
@@ -7864,6 +7920,7 @@ main(void)
     test_author_posts();
     test_pinned_post();
     test_lists();
+    test_list_management();
     test_feeds();
     test_prefs();
     test_text_stays_on_screen();
