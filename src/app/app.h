@@ -9,6 +9,7 @@
 #include "app/search.h"
 #include "app/social.h"
 #include "app/timeline.h"
+#include "store/drafts_store.h"
 #include "store/settings_codec.h"
 #include "update/updater.h"
 
@@ -39,6 +40,7 @@ typedef enum {
     INDIGO_SCREEN_CHAT_JOIN_REQUESTS,
     INDIGO_SCREEN_CHAT_GROUP,
     INDIGO_SCREEN_QUEUE,
+    INDIGO_SCREEN_DRAFTS,
     INDIGO_SCREEN_BOOKMARKS,
     INDIGO_SCREEN_CREDITS,
     /* Not a screen: the number of entries above. */
@@ -252,6 +254,13 @@ typedef struct {
     indigo_queued_post queue_inflight;
     char queue_status[INDIGO_POST_NOTE_MAX];
     bool queue_status_is_error;
+    /* Saved composer drafts. They are local, separate from the queue above, and
+     * saving one never starts a publish. */
+    indigo_saved_drafts drafts;
+    unsigned draft_selected;
+    bool draft_delete_armed;
+    char draft_status[INDIGO_POST_NOTE_MAX];
+    bool draft_status_is_error;
     indigo_compose compose;
     /* Where the attach picker looks; INDIGO_IMAGES_DIR and INDIGO_CAMERA_DIR
      * unless a test points them elsewhere. */
@@ -404,6 +413,13 @@ void indigo_app_queue_send(indigo_app *app, unsigned index);
 void indigo_app_update_queue(indigo_app *app, const indigo_input *input);
 bool indigo_app_queue_publish_done(indigo_app *app);
 bool indigo_app_queue_publish_failed(indigo_app *app, const char *message);
+
+/* Saved composer drafts (app_drafts.c). This list never publishes: a draft is
+ * resumed into the compose screen and removed only when it is posted or
+ * deliberately deleted. */
+void indigo_app_open_drafts(indigo_app *app);
+void indigo_app_save_compose_draft(indigo_app *app);
+void indigo_app_update_drafts(indigo_app *app, const indigo_input *input);
 
 /* The update screen. `describe` is the build's git-describe stamp and
  * `can_swap` whether it was launched from a .3dsx on the SD card; call once,

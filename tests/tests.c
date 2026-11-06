@@ -936,7 +936,7 @@ test_new_post_reply_gate(void)
     /* The pill under the draft is that same control, by touch. */
     in = (indigo_input) {0};
     in.touch_pressed = true;
-    in.touch_x = 160;
+    in.touch_x = 80;
     in.touch_y = 162;
     indigo_app_update(&app, &in);
     CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_FOLLOWED_MENTIONED);
@@ -2253,7 +2253,7 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 17);
+    CHECK(app.menu.count == 18);
     CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
@@ -2262,15 +2262,16 @@ test_signin_flow(void)
     CHECK(app.menu.items[8].kind == INDIGO_MENU_MUTED);
     CHECK(app.menu.items[9].kind == INDIGO_MENU_BLOCKED);
     CHECK(app.menu.items[10].kind == INDIGO_MENU_QUEUE);
-    CHECK(app.menu.items[12].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[13].kind == INDIGO_MENU_CREDITS);
-    CHECK(app.menu.items[14].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[15].kind == INDIGO_MENU_SIGN_OUT);
-    CHECK(strcmp(app.menu.items[11].label, "My profile") == 0);
+    CHECK(app.menu.items[11].kind == INDIGO_MENU_DRAFTS);
+    CHECK(app.menu.items[13].kind == INDIGO_MENU_SETTINGS);
+    CHECK(app.menu.items[14].kind == INDIGO_MENU_CREDITS);
+    CHECK(app.menu.items[15].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[16].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(strcmp(app.menu.items[12].label, "My profile") == 0);
 
-    /* Sign out is the sixteenth item, so it sits below the window until the
+    /* Sign out is the seventeenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 15; i++) {
+    for (unsigned i = 0; i < 16; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -2692,6 +2693,134 @@ test_queue_store(void)
         CHECK(fopen(path, "rb") == NULL);
         remove("build-host/queue-test.dat.bad");
     }
+}
+
+/* Saved drafts are a list, not the single autosave draft: they round-trip
+ * text and reply/quote context, never enter the send queue, and resume by
+ * taking their one copy out of the list. */
+static void
+test_saved_drafts(void)
+{
+    static indigo_saved_drafts in, out;
+    static char buf[262144];
+    size_t len = 0;
+    indigo_saved_draft d, bad_draft;
+    indigo_app app;
+    indigo_input input = {0};
+
+    indigo_saved_drafts_init(&in);
+    memset(&d, 0, sizeof d);
+    indigo_copy_utf8(d.text, sizeof d.text, "a draft\nwith a tab\tand \\ slash");
+    d.saved_at = 123;
+    d.mode = INDIGO_COMPOSE_POST;
+    CHECK(indigo_saved_drafts_add(&in, &d));
+    memset(&d, 0, sizeof d);
+    indigo_copy_utf8(d.text, sizeof d.text, "reply text");
+    d.saved_at = 456;
+    d.mode = INDIGO_COMPOSE_REPLY;
+    d.reply_gate = INDIGO_REPLY_GATE_NOBODY;
+    d.has_target = true;
+    indigo_copy_utf8(d.target_uri, sizeof d.target_uri, "at://a/post/1");
+    indigo_copy_utf8(d.target_cid, sizeof d.target_cid, "cid1");
+    indigo_copy_utf8(d.target_handle, sizeof d.target_handle, "alice.test");
+    indigo_copy_utf8(d.root_uri, sizeof d.root_uri, "at://a/post/root");
+    indigo_copy_utf8(d.root_cid, sizeof d.root_cid, "rootcid");
+    CHECK(indigo_saved_drafts_add(&in, &d));
+    CHECK(in.count == 2);
+    CHECK(strcmp(indigo_saved_drafts_get(&in, 1)->target_handle, "alice.test") == 0);
+
+    /* A reply without its root is not a restorable draft. */
+    bad_draft = d;
+    bad_draft.root_uri[0] = '\0';
+    CHECK(!indigo_saved_draft_valid(&bad_draft));
+    CHECK(!indigo_saved_drafts_add(&in, &bad_draft));
+    CHECK(in.count == 2);
+    CHECK(indigo_saved_drafts_get(&in, 9) == NULL);
+
+    CHECK(indigo_drafts_encode(&in, buf, sizeof buf, &len) == INDIGO_CODEC_OK);
+    CHECK(indigo_drafts_decode(buf, len, &out) == INDIGO_CODEC_OK);
+    CHECK(out.count == 2);
+    CHECK(strcmp(out.items[0].text, in.items[0].text) == 0);
+    CHECK(out.items[0].saved_at == 123);
+    CHECK(out.items[1].reply_gate == INDIGO_REPLY_GATE_NOBODY);
+    CHECK(strcmp(out.items[1].root_cid, "rootcid") == 0);
+
+    CHECK(indigo_drafts_decode(buf, len - 4, &out) == INDIGO_CODEC_INCOMPLETE);
+    CHECK(out.count == 0);
+    CHECK(indigo_drafts_decode("indigo-drafts 2\n", 15, &out) ==
+          INDIGO_CODEC_BAD_VERSION);
+    CHECK(indigo_drafts_decode("not a draft", 11, &out) == INDIGO_CODEC_CORRUPT);
+
+    /* Through the filesystem: missing is empty, a truncated file is set aside. */
+    {
+        const char *path = "build-host/drafts-test.dat";
+        FILE *f;
+
+        mkdir("build-host", 0777);
+        remove(path);
+        remove("build-host/drafts-test.dat.bad");
+        CHECK(indigo_drafts_store_load(path, &out) == INDIGO_STORE_MISSING);
+        CHECK(out.count == 0);
+        CHECK(indigo_drafts_store_save(path, &in) == INDIGO_STORE_OK);
+        CHECK(indigo_drafts_store_load(path, &out) == INDIGO_STORE_OK);
+        CHECK(out.count == 2);
+        f = fopen(path, "wb");
+        CHECK(f != NULL);
+        if (f) {
+            fputs("indigo-drafts 1\n123\t0", f);
+            fclose(f);
+        }
+        CHECK(indigo_drafts_store_load(path, &out) == INDIGO_STORE_UNREADABLE);
+        CHECK(out.count == 0);
+        CHECK(fopen(path, "rb") == NULL);
+        remove("build-host/drafts-test.dat.bad");
+    }
+
+    /* The compose path saves locally, leaves the queue alone, clears the text
+     * only after the write, and restores reply context when resumed. The host
+     * test makes the fixed SDMC folder so the same path the console uses can
+     * be exercised without a card. */
+    CHECK(system("rm -rf sdmc: && mkdir -p sdmc:/3ds/indigo") == 0);
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_COMPOSE;
+    app.compose.mode = INDIGO_COMPOSE_REPLY;
+    app.compose.has_target = true;
+    indigo_copy_utf8(app.compose.text, sizeof app.compose.text, "reply text");
+    indigo_copy_utf8(app.compose.target.uri, sizeof app.compose.target.uri, "at://a/post/1");
+    indigo_copy_utf8(app.compose.target.cid, sizeof app.compose.target.cid, "cid1");
+    indigo_copy_utf8(app.compose.target.handle, sizeof app.compose.target.handle,
+                     "alice.test");
+    indigo_copy_utf8(app.compose.root_uri, sizeof app.compose.root_uri, "at://a/post/root");
+    indigo_copy_utf8(app.compose.root_cid, sizeof app.compose.root_cid, "rootcid");
+    app.compose.reply_gate = INDIGO_REPLY_GATE_NOBODY;
+    indigo_app_save_compose_draft(&app);
+    CHECK(app.drafts.count == 1);
+    CHECK(app.queue.count == 0);
+    CHECK(app.request == INDIGO_REQUEST_NONE);
+    CHECK(app.compose.text[0] == '\0');
+    CHECK(app.compose.status[0] != '\0');
+
+    app.screen = INDIGO_SCREEN_DRAFTS;
+    app.draft_selected = 0;
+    input = (indigo_input) {0};
+    input.confirm = true;
+    indigo_app_update_drafts(&app, &input);
+    CHECK(app.screen == INDIGO_SCREEN_COMPOSE);
+    CHECK(app.drafts.count == 0);
+    CHECK(strcmp(app.compose.text, "reply text") == 0);
+    CHECK(app.compose.mode == INDIGO_COMPOSE_REPLY);
+    CHECK(app.compose.has_target);
+    CHECK(strcmp(app.compose.target.handle, "alice.test") == 0);
+    CHECK(strcmp(app.compose.root_cid, "rootcid") == 0);
+    CHECK(app.compose.reply_gate == INDIGO_REPLY_GATE_NOBODY);
+
+    /* An image or thread is refused rather than silently dropped. */
+    app.compose.image[0] = 'x';
+    app.compose.image[1] = '\0';
+    indigo_app_save_compose_draft(&app);
+    CHECK(app.drafts.count == 0);
+    CHECK(app.compose.status_is_error);
+    CHECK(system("rm -rf sdmc:") == 0);
 }
 
 /* The Queued posts send path, without a network: a send takes the post out of
@@ -3621,7 +3750,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the three entries about the post, then the fourteen
      * app actions. */
-    CHECK(menu.count == 23);
+    CHECK(menu.count == 24);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -3634,7 +3763,7 @@ test_facet_menu(void)
     CHECK(menu.items[5].kind == INDIGO_MENU_BOOKMARK);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[6].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[22].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[23].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -3660,8 +3789,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 23);
-    CHECK(app.menu.items[22].kind == INDIGO_MENU_CLOSE);
+    CHECK(app.menu.count == 24);
+    CHECK(app.menu.items[23].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -3740,7 +3869,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 20);
+    CHECK(menu.count == 21);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[3].kind == INDIGO_MENU_COMPOSE);
 
@@ -3749,12 +3878,12 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 20);
+    CHECK(menu.count == 21);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 17);
-    CHECK(strcmp(menu.items[11].label, "Your profile") == 0);
+    CHECK(menu.count == 18);
+    CHECK(strcmp(menu.items[12].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
     /* More items than rows: the selection scrolls and stays in the window. */
@@ -3779,8 +3908,8 @@ test_facet_menu_edges(void)
         indigo_copy_utf8(big.text, sizeof big.text, text);
 
         indigo_menu_build(&menu, &big, "me.example.com");
-        /* Eight facets plus the thirteen app actions, and no more than the cap. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 16);
+        /* Eight facets, the three post actions, and every app action. */
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 21);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -7569,6 +7698,7 @@ main(void)
     test_settings_store();
     test_post_queue();
     test_queue_store();
+    test_saved_drafts();
     test_queue_send_path();
     test_cache_codec();
     test_timeline_cache();

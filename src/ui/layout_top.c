@@ -139,6 +139,38 @@ build_top_queue(const indigo_app *app, indigo_canvas *c)
 }
 
 static void
+build_top_drafts(const indigo_app *app, indigo_canvas *c)
+{
+    const indigo_saved_draft *d =
+        indigo_saved_drafts_get(&app->drafts, app->draft_selected);
+    char context[INDIGO_POST_NOTE_MAX];
+
+    indigo_layout_top_title(c, "Drafts", "B  Back   A  Resume   Y  Delete");
+    if (!d) {
+        indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "No saved drafts.");
+        indigo_canvas_text(c, 18, 118, 0.6f, COL_TEXT_DIM,
+                           "Use Save draft on the compose screen.");
+    } else {
+        indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u",
+                           app->draft_selected + 1, app->drafts.count);
+        indigo_layout_top_paragraph(c, 18, 54, 0.7f, COL_TEXT, 5, d->text);
+        if (!d->has_target) {
+            snprintf(context, sizeof context, "New post");
+        } else if (d->mode == INDIGO_COMPOSE_REPLY) {
+            snprintf(context, sizeof context, "Reply to @%.40s", d->target_handle);
+        } else {
+            snprintf(context, sizeof context, "Quote of @%.40s", d->target_handle);
+        }
+        indigo_canvas_text(c, 18, 176, 0.6f, COL_TEXT_SOFT, "%s", context);
+    }
+    if (app->draft_status[0]) {
+        indigo_canvas_text(c, 18, 204, 0.55f,
+                           app->draft_status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                           "%.54s", app->draft_status);
+    }
+}
+
+static void
 build_top_requests(const indigo_app *app, indigo_canvas *c)
 {
     const indigo_chat_inbox *r = &app->requests;
@@ -671,6 +703,9 @@ indigo_layout_build_top(const indigo_app *app, indigo_canvas *c)
         return;
     case INDIGO_SCREEN_QUEUE:
         build_top_queue(app, c);
+        return;
+    case INDIGO_SCREEN_DRAFTS:
+        build_top_drafts(app, c);
         return;
     case INDIGO_SCREEN_CHAT_THREAD:
         build_top_chat_thread(app, c);

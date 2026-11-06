@@ -57,5 +57,6 @@ void indigo_app_update_menu(indigo_app *app, const indigo_input *input);
 void indigo_app_update_search(indigo_app *app, const indigo_input *input);
 void indigo_app_update_settings(indigo_app *app, const indigo_input *input);
 void indigo_app_update_update(indigo_app *app, const indigo_input *input);
+void indigo_app_update_drafts(indigo_app *app, const indigo_input *input);
 
 #endif

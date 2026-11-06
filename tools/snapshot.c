@@ -699,6 +699,32 @@ fill_social(indigo_app *app, const scenario *s)
             indigo_queue_add(&app->queue, "Second post, waiting until I am online.", 1700000600);
         }
         app->queue_selected = 0;
+    } else if (s->screen == INDIGO_SCREEN_DRAFTS) {
+        if (s->timeline == 1) {
+            indigo_saved_draft d;
+
+            memset(&d, 0, sizeof d);
+            indigo_copy_utf8(d.text, sizeof d.text,
+                             "A thought I want to finish later, when I have more room.");
+            d.saved_at = 1700001000;
+            d.mode = INDIGO_COMPOSE_POST;
+            (void) indigo_saved_drafts_add(&app->drafts, &d);
+            memset(&d, 0, sizeof d);
+            indigo_copy_utf8(d.text, sizeof d.text,
+                             "A reply I started, with the thread still here.");
+            d.saved_at = 1700001600;
+            d.mode = INDIGO_COMPOSE_REPLY;
+            d.has_target = true;
+            indigo_copy_utf8(d.target_uri, sizeof d.target_uri, app->timeline.posts[0].uri);
+            indigo_copy_utf8(d.target_cid, sizeof d.target_cid, app->timeline.posts[0].cid);
+            indigo_copy_utf8(d.target_handle, sizeof d.target_handle,
+                             app->timeline.posts[0].handle);
+            indigo_copy_utf8(d.target_text, sizeof d.target_text, app->timeline.posts[0].text);
+            indigo_copy_utf8(d.root_uri, sizeof d.root_uri, app->timeline.posts[0].uri);
+            indigo_copy_utf8(d.root_cid, sizeof d.root_cid, app->timeline.posts[0].cid);
+            (void) indigo_saved_drafts_add(&app->drafts, &d);
+        }
+        app->draft_selected = 0;
     } else if (s->screen == INDIGO_SCREEN_SEARCH) {
         indigo_search *q = &app->search;
         indigo_actor a[3];
@@ -860,7 +886,20 @@ fill_social(indigo_app *app, const scenario *s)
     } else if (s->screen == INDIGO_SCREEN_COMPOSE) {
         indigo_compose *c = &app->compose;
 
-        if (s->timeline == 1) {
+        if (strstr(s->name, "drafts-resumed")) {
+            /* Resumed from the Drafts screen: text and reply context are back
+             * in the composer, and the list no longer holds this copy. The
+             * populated timeline fixture supplies the same target the list
+             * scenario used. */
+            c->mode = INDIGO_COMPOSE_REPLY;
+            c->has_target = true;
+            c->target = app->timeline.posts[0];
+            indigo_copy_utf8(c->root_uri, sizeof c->root_uri, c->target.uri);
+            indigo_copy_utf8(c->root_cid, sizeof c->root_cid, c->target.cid);
+            indigo_copy_utf8(c->text, sizeof c->text,
+                             "A reply I started, with the thread still here.");
+            indigo_copy_utf8(c->status, sizeof c->status, "Draft resumed.");
+        } else if (s->timeline == 1) {
             c->mode = INDIGO_COMPOSE_REPLY;
             c->has_target = true;
             c->target = app->timeline.posts[0];
@@ -981,6 +1020,9 @@ main(int argc, char **argv)
         {"chat-thread-group", INDIGO_SCREEN_CHAT_THREAD, false, 0, 0, 0, 0, false},
         {"queue-empty", INDIGO_SCREEN_QUEUE, false, 0, 0, 0, 0, false},
         {"queue", INDIGO_SCREEN_QUEUE, false, 0, 0, 1, 0, false},
+        {"drafts-empty", INDIGO_SCREEN_DRAFTS, false, 0, 0, 0, 0, false},
+        {"drafts", INDIGO_SCREEN_DRAFTS, false, 0, 0, 1, 0, false},
+        {"drafts-resumed", INDIGO_SCREEN_COMPOSE, false, 0, 0, 1, 0, false},
         {"menu", INDIGO_SCREEN_MENU, false, 0, 0, 0, 0, false},
         {"menu-facets", INDIGO_SCREEN_MENU, false, 0, 0, 1, 0, false},
         {"menu-facets-scrolled", INDIGO_SCREEN_MENU, false, 0, 0, 1, 5, false},
