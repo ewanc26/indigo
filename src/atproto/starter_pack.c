@@ -1,6 +1,7 @@
 #include "atproto/starter_pack.h"
 
 #include <cJSON.h>
+#include <wolfram/atproto_lex.h>
 #include <wolfram/graph_social_typed.h>
 
 #include <stdio.h>
@@ -18,7 +19,8 @@ bool
 indigo_starter_pack_uri_from_link(const char *link, char *out, size_t out_size)
 {
     static const char AT_PREFIX[] = "at://";
-    static const char COLLECTION[] = "app.bsky.graph.starterpack";
+    static const char COLLECTION[] =
+        WF_LEX_APP_BSKY_GRAPH_STARTERPACK_NSID;
     static const char HTTPS_PREFIX[] = "https://bsky.app/starter-pack/";
     static const char HTTP_PREFIX[] = "http://bsky.app/starter-pack/";
     const char *authority;
@@ -80,8 +82,8 @@ indigo_starter_pack_uri_from_link(const char *link, char *out, size_t out_size)
     if (rkey_end <= authority_end + 1 || strchr(authority_end + 1, '/')) {
         return false;
     }
-    written = snprintf(out, out_size, "at://%.*s/app.bsky.graph.starterpack/%.*s",
-                       (int) (authority_end - path), path,
+    written = snprintf(out, out_size, "at://%.*s/%s/%.*s",
+                       (int) (authority_end - path), path, COLLECTION,
                        (int) (rkey_end - (authority_end + 1)), authority_end + 1);
     return written > 0 && (size_t) written < out_size;
 }
