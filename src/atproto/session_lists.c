@@ -2,6 +2,8 @@
 
 #include "atproto/session_internal.h"
 
+#include <wolfram/atproto_lex.h>
+
 #if defined(INDIGO_SESSION_REAL)
 
 /* The account's curated lists. getLists is paged; the cursor is dropped like
@@ -51,6 +53,8 @@ indigo_session_do_lists(const indigo_job *j)
         indigo_copy_utf8(o->name, sizeof o->name, l->name);
         indigo_copy_utf8(o->description, sizeof o->description,
                          l->description ? l->description : "");
+        indigo_copy_utf8(o->purpose, sizeof o->purpose,
+                         l->purpose ? l->purpose : INDIGO_LIST_PURPOSE_CURATE);
         g_session.list_count++;
     }
     ev.kind = INDIGO_SESSION_EVENT_LISTS_PAGE;
@@ -81,10 +85,17 @@ indigo_session_do_list_members(const indigo_job *j)
     }
 
     INDIGO_SESSION_PAGE_RESET(j->paging);
+    if (!j->paging) {
+        memset(g_session.list_member_uris, 0, sizeof g_session.list_member_uris);
+    }
     for (size_t i = 0; i < list.item_count && g_session.actor_count < INDIGO_SEARCH_MAX; i++) {
         const wf_agent_profile_view *a = &list.items[i].subject;
+        const unsigned row = g_session.actor_count;
 
-        if (indigo_session_fill_actor(a, &g_session.actors[g_session.actor_count])) {
+        if (indigo_session_fill_actor(a, &g_session.actors[row])) {
+            indigo_copy_utf8(g_session.list_member_uris[row],
+                             sizeof g_session.list_member_uris[row],
+                             list.items[i].uri ? list.items[i].uri : "");
             g_session.actor_count++;
         }
     }
@@ -93,6 +104,147 @@ indigo_session_do_list_members(const indigo_job *j)
     indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
     wf_agent_list_item_list_free(&list);
     indigo_log_info("list members '%s': %u", j->list_uri, g_session.actor_count);
+    indigo_session_publish_event(&ev);
+}
+
+/* Create, edit, add or remove one list record. The four writes share this
+ * runner because they share the failure and success shapes; only the Wolfram
+ * call in the middle differs. */
+void
+indigo_session_do_list_write(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_LIST_WRITE_FAILED};
+    wf_status st;
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+
+    if (j->kind == JOB_LIST_CREATE) {
+        wf_agent_post_result created;
+
+        if (!j->list_name[0] || !j->list_purpose[0]) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message, "A list needs a name.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        memset(&created, 0, sizeof created);
+        st = wf_agent_graph_create_list(g_session.agent, j->list_purpose,
+                                        j->list_name,
+                                        j->list_description[0]
+                                            ? j->list_description : NULL,
+                                        &created);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "create list", st);
+            return;
+        }
+        wf_agent_post_result_free(&created);
+        indigo_copy_utf8(ev.message, sizeof ev.message, "List created.");
+    } else if (j->kind == JOB_LIST_UPDATE) {
+        wf_repo_record record;
+        wf_agent_post_result updated;
+        const char *slash = strrchr(j->list_uri, '/');
+        char *json;
+
+        if (!j->list_name[0] || !slash || !slash[1]) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             "That list cannot be edited.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        memset(&record, 0, sizeof record);
+        st = wf_agent_get_record_typed(g_session.agent,
+                                       wf_agent_get_did(g_session.agent),
+                                       WF_LEX_APP_BSKY_GRAPH_LIST_NSID, slash + 1, NULL,
+                                       &record);
+        if (st != WF_OK || !record.value || !cJSON_IsObject(record.value)) {
+            wf_repo_record_free(&record);
+            indigo_session_publish_failure(&ev, "read list", st);
+            return;
+        }
+        cJSON_DeleteItemFromObjectCaseSensitive(record.value, "name");
+        cJSON_DeleteItemFromObjectCaseSensitive(record.value, "description");
+        cJSON_DeleteItemFromObjectCaseSensitive(record.value, "purpose");
+        cJSON_AddStringToObject(record.value, "name", j->list_name);
+        if (j->list_description[0]) {
+            cJSON_AddStringToObject(record.value, "description",
+                                    j->list_description);
+        }
+        cJSON_AddStringToObject(record.value, "purpose", j->list_purpose);
+        json = cJSON_PrintUnformatted(record.value);
+        if (!json) {
+            wf_repo_record_free(&record);
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             "Could not build the list record.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        memset(&updated, 0, sizeof updated);
+        st = wf_agent_graph_update_list(g_session.agent, slash + 1, json, &updated);
+        cJSON_free(json);
+        wf_repo_record_free(&record);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "save list", st);
+            return;
+        }
+        wf_agent_post_result_free(&updated);
+        indigo_copy_utf8(ev.message, sizeof ev.message, "List updated.");
+    } else if (j->kind == JOB_LIST_ADD_MEMBER) {
+        wf_agent_post_result item;
+        char subject[INDIGO_LIST_SUBJECT_MAX];
+        char *resolved = NULL;
+
+        indigo_copy_utf8(subject, sizeof subject, j->list_subject);
+        if (subject[0] == '@') {
+            memmove(subject, subject + 1, strlen(subject));
+        }
+        if (!subject[0] || !j->list_uri[0]) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             "Choose a list and an account.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        if (strncmp(subject, "did:", 4) != 0) {
+            st = wf_agent_resolve_handle(g_session.agent, subject, &resolved);
+            if (st != WF_OK || !resolved || !resolved[0]) {
+                free(resolved);
+                ev.failure = WF_FAIL_OTHER;
+                indigo_copy_utf8(ev.message, sizeof ev.message,
+                                 "Could not find that account.");
+                indigo_session_publish_event(&ev);
+                return;
+            }
+            indigo_copy_utf8(subject, sizeof subject, resolved);
+            free(resolved);
+        }
+        memset(&item, 0, sizeof item);
+        st = wf_agent_graph_create_list_item(g_session.agent, j->list_uri,
+                                             subject, &item);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "add list member", st);
+            return;
+        }
+        wf_agent_post_result_free(&item);
+        indigo_copy_utf8(ev.message, sizeof ev.message, "Added to the list.");
+    } else {
+        if (!j->list_item_uri[0]) {
+            ev.failure = WF_FAIL_OTHER;
+            indigo_copy_utf8(ev.message, sizeof ev.message,
+                             "That member has no record to remove.");
+            indigo_session_publish_event(&ev);
+            return;
+        }
+        st = wf_agent_graph_delete_list_item(g_session.agent, j->list_item_uri);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "remove list member", st);
+            return;
+        }
+        indigo_copy_utf8(ev.message, sizeof ev.message, "Removed from the list.");
+    }
+
+    ev.kind = INDIGO_SESSION_EVENT_LIST_WRITE_DONE;
     indigo_session_publish_event(&ev);
 }
 
@@ -263,6 +415,86 @@ indigo_session_submit_list_members(const char *list_uri, const char *cursor)
     j.paging = j.cursor[0] != '\0';
     indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
     return indigo_session_enqueue(&j);
+}
+
+static bool
+submit_list_write(indigo_job_kind kind, const char *list_uri, const char *name,
+                  const char *description, const char *purpose,
+                  const char *subject, const char *item_uri)
+{
+    indigo_job j = {.kind = kind};
+
+    if (list_uri) {
+        indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
+    }
+    if (name) {
+        indigo_copy_utf8(j.list_name, sizeof j.list_name, name);
+    }
+    if (description) {
+        indigo_copy_utf8(j.list_description, sizeof j.list_description, description);
+    }
+    if (purpose) {
+        indigo_copy_utf8(j.list_purpose, sizeof j.list_purpose, purpose);
+    }
+    if (subject) {
+        indigo_copy_utf8(j.list_subject, sizeof j.list_subject, subject);
+    }
+    if (item_uri) {
+        indigo_copy_utf8(j.list_item_uri, sizeof j.list_item_uri, item_uri);
+    }
+    return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_list_create(const char *name, const char *description,
+                                  const char *purpose)
+{
+    if (!name || !name[0]) {
+        return false;
+    }
+    return submit_list_write(JOB_LIST_CREATE, NULL, name, description,
+                             purpose && purpose[0] ? purpose
+                                                   : INDIGO_LIST_PURPOSE_CURATE,
+                             NULL, NULL);
+}
+
+bool
+indigo_session_submit_list_update(const char *list_uri, const char *name,
+                                  const char *description, const char *purpose)
+{
+    if (!list_uri || !list_uri[0] || !name || !name[0]) {
+        return false;
+    }
+    return submit_list_write(JOB_LIST_UPDATE, list_uri, name, description,
+                             purpose && purpose[0] ? purpose
+                                                   : INDIGO_LIST_PURPOSE_CURATE,
+                             NULL, NULL);
+}
+
+bool
+indigo_session_submit_list_add_member(const char *list_uri, const char *subject)
+{
+    if (!list_uri || !list_uri[0] || !subject || !subject[0]) {
+        return false;
+    }
+    return submit_list_write(JOB_LIST_ADD_MEMBER, list_uri, NULL, NULL, NULL,
+                             subject, NULL);
+}
+
+bool
+indigo_session_submit_list_remove_member(const char *list_item_uri)
+{
+    if (!list_item_uri || !list_item_uri[0]) {
+        return false;
+    }
+    return submit_list_write(JOB_LIST_REMOVE_MEMBER, NULL, NULL, NULL, NULL,
+                             NULL, list_item_uri);
+}
+
+const char *
+indigo_session_list_member_uri(unsigned index)
+{
+    return index < g_session.actor_count ? g_session.list_member_uris[index] : "";
 }
 
 bool

@@ -751,6 +751,26 @@ fill_social(indigo_app *app, const scenario *s)
             }
             return;
         }
+        if (s->timeline == 14) {
+            /* The inline list editor, with a working copy that has not been
+             * written yet. */
+            indigo_list ls[2];
+
+            q->kind = INDIGO_SEARCH_LISTS;
+            memset(ls, 0, sizeof ls);
+            snprintf(ls[0].name, sizeof ls[0].name, "Rivers");
+            snprintf(ls[0].description, sizeof ls[0].description,
+                     "People who walk the Welsh borders.");
+            snprintf(ls[0].uri, sizeof ls[0].uri,
+                     "at://did:plc:me/app.bsky.graph.list/riverfolk");
+            snprintf(ls[0].purpose, sizeof ls[0].purpose, INDIGO_LIST_PURPOSE_CURATE);
+            indigo_app_lists_loaded(app, ls, 1, "");
+            indigo_app_list_edit_begin(app, false);
+            indigo_app_list_set_name(app, "Rivers and old stones");
+            indigo_app_list_set_description(app,
+                "Walkers, readers and people who know which lane the old stones are on.");
+            return;
+        }
         if (s->timeline == 9 || s->timeline == 10) {
             /* Curated lists, then one list's members. The members reuse the
              * actor rows; the lists have their own. */
@@ -1087,6 +1107,7 @@ main(int argc, char **argv)
         {"post-search-empty", INDIGO_SCREEN_SEARCH, false, 0, 0, 7, 0, false},
         {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0, false},
         {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0, false},
+        {"list-edit", INDIGO_SCREEN_SEARCH, false, 0, 0, 14, 0, false},
         {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0, false},
         {"starter-pack", INDIGO_SCREEN_SEARCH, false, 0, 0, 13, 0, false},
         {"starter-pack-feed", INDIGO_SCREEN_SEARCH, false, 0, 0, 13, 2, false},

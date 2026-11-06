@@ -388,15 +388,126 @@ void indigo_app_next_author_tab(indigo_app *app) {
 void
 indigo_app_open_lists(indigo_app *app)
 {
+    indigo_search *s = &app->search;
+
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
-    app->search.kind = INDIGO_SEARCH_LISTS;
+    s->kind = INDIGO_SEARCH_LISTS;
+    s->list_editing = false;
+    s->list_creating = false;
+    s->list_saving = false;
+    s->list_adding = false;
+    s->list_remove_confirm = -1;
+    s->list_uri[0] = '\0';
+    s->list_name[0] = '\0';
+    s->list_status[0] = '\0';
+    s->list_status_error = false;
     /* A fresh fetch replaces the held lists too: they were the members'
      * Back target, and a new fetch makes them stale. */
-    indigo_search_begin_page(&app->search, false);
-    memset(app->search.held_lists, 0, sizeof app->search.held_lists);
-    app->search.held_count = 0;
+    indigo_search_begin_page(s, false);
+    memset(s->held_lists, 0, sizeof s->held_lists);
+    s->held_count = 0;
     app->request = INDIGO_REQUEST_LISTS;
+}
+
+void
+indigo_app_list_edit_begin(indigo_app *app, bool creating)
+{
+    indigo_search *s = &app->search;
+    const indigo_list *l = indigo_search_selected_list(s);
+
+    if (!creating && !l) {
+        return;
+    }
+    s->list_editing = true;
+    s->list_creating = creating;
+    s->list_field = 0;
+    s->list_status[0] = '\0';
+    s->list_status_error = false;
+    if (creating) {
+        s->edit_name[0] = '\0';
+        s->edit_description[0] = '\0';
+        indigo_copy_utf8(s->edit_purpose, sizeof s->edit_purpose,
+                         INDIGO_LIST_PURPOSE_CURATE);
+    } else {
+        indigo_copy_utf8(s->edit_name, sizeof s->edit_name, l->name);
+        indigo_copy_utf8(s->edit_description, sizeof s->edit_description,
+                         l->description);
+        indigo_copy_utf8(s->edit_purpose, sizeof s->edit_purpose,
+                         l->purpose[0] ? l->purpose : INDIGO_LIST_PURPOSE_CURATE);
+        indigo_copy_utf8(s->list_uri, sizeof s->list_uri, l->uri);
+    }
+}
+
+void
+indigo_app_list_set_name(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->search.edit_name, sizeof app->search.edit_name, text);
+}
+
+void
+indigo_app_list_set_description(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->search.edit_description,
+                     sizeof app->search.edit_description, text);
+}
+
+bool
+indigo_app_list_save(indigo_app *app)
+{
+    indigo_search *s = &app->search;
+
+    if (app->request != INDIGO_REQUEST_NONE || s->list_saving) {
+        return false;
+    }
+    if (!indigo_search_list_edit_valid(s->edit_name, s->edit_description,
+                                       s->edit_purpose)) {
+        indigo_copy_utf8(s->list_status, sizeof s->list_status,
+                         "A list needs a name.");
+        s->list_status_error = true;
+        return false;
+    }
+    return true;
+}
+
+void
+indigo_app_list_set_add_subject(indigo_app *app, const char *text)
+{
+    indigo_copy_utf8(app->search.add_subject,
+                     sizeof app->search.add_subject, text);
+}
+
+void
+indigo_app_list_write_done(indigo_app *app, const char *message)
+{
+    indigo_search *s = &app->search;
+
+    s->list_saving = false;
+    s->list_editing = false;
+    s->list_remove_confirm = -1;
+    indigo_copy_utf8(s->list_status, sizeof s->list_status,
+                     message && message[0] ? message : "Done.");
+    s->list_status_error = false;
+    if (s->kind == INDIGO_SEARCH_LIST_MEMBERS && s->list_uri[0]) {
+        indigo_search_begin_page(s, false);
+        app->request = INDIGO_REQUEST_LIST_MEMBERS;
+    } else if (s->kind == INDIGO_SEARCH_LISTS) {
+        indigo_search_begin_page(s, false);
+        memset(s->held_lists, 0, sizeof s->held_lists);
+        s->held_count = 0;
+        app->request = INDIGO_REQUEST_LISTS;
+    }
+}
+
+void
+indigo_app_list_write_failed(indigo_app *app, const char *message)
+{
+    indigo_search *s = &app->search;
+
+    s->list_saving = false;
+    indigo_copy_utf8(s->list_status, sizeof s->list_status,
+                     message && message[0] ? message : "That did not work.");
+    s->list_status_error = true;
 }
 
 void
@@ -487,8 +598,16 @@ indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *
     indigo_app_push_screen(app);
     app->screen = INDIGO_SCREEN_SEARCH;
     s->kind = INDIGO_SEARCH_LIST_MEMBERS;
+    s->list_editing = false;
+    s->list_saving = false;
+    s->list_remove_confirm = -1;
+    s->list_status[0] = '\0';
+    s->list_status_error = false;
     indigo_search_begin_page(s, false);
     indigo_copy_utf8(s->subject, sizeof s->subject, name && name[0] ? name : "Members");
+    indigo_copy_utf8(s->list_uri, sizeof s->list_uri, list_uri);
+    indigo_copy_utf8(s->list_name, sizeof s->list_name,
+                     name && name[0] ? name : "Members");
     indigo_copy_utf8(app->request_list_uri, sizeof app->request_list_uri, list_uri);
     app->request = INDIGO_REQUEST_LIST_MEMBERS;
 }
