@@ -362,6 +362,44 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
      * only offered where the header box takes typing. */
     indigo_layout_top_title(c, indigo_search_title(s),
               indigo_search_is_typed(s) ? "A  Type   SEL  Open" : "SEL  Open");
+    if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+        const char *feed = indigo_search_selected_feed(s);
+
+        if (s->loading && s->count == 0) {
+            indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Loading starter pack...");
+            return;
+        }
+        if (s->pack.creator_handle[0]) {
+            indigo_canvas_text(c, 18, 52, 0.65f, COL_TEXT_DIM, "by @%.34s",
+                               s->pack.creator_handle);
+        }
+        if (s->pack.description[0]) {
+            indigo_layout_top_paragraph(c, 18, 78, 0.58f, COL_TEXT_SOFT, 3,
+                                        s->pack.description);
+        }
+        indigo_canvas_text(c, 18, 168, 0.55f, COL_TEXT_DIM,
+                           "%u members  %u feeds",
+                           s->pack.member_count ? s->pack.member_count : s->count,
+                           s->pack.feed_count);
+        if (s->status[0] && s->count == 0 && s->pack.feed_count == 0) {
+            indigo_canvas_text(c, 18, 196, 0.6f, s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+                               "%.44s", s->status);
+        } else if (feed) {
+            indigo_canvas_text(c, 18, 192, 0.65f, COL_TEXT, "Included feed");
+            indigo_canvas_text(c, 18, 212, 0.5f, COL_TEXT_DIM, "%.48s", feed);
+            indigo_canvas_text(c, 330, 218, 0.5f, COL_TEXT_SOFT, "SEL Open feed");
+        } else if (sel) {
+            indigo_canvas_text(c, 18, 192, 0.65f, COL_TEXT, "%.34s",
+                               sel->display_name[0] ? sel->display_name : sel->handle);
+            indigo_canvas_text(c, 18, 212, 0.55f, COL_TEXT_DIM, "@%.38s", sel->handle);
+            indigo_canvas_text(c, 330, 218, 0.5f, COL_TEXT_SOFT, "SEL Open profile");
+        }
+        if (indigo_search_row_count(s) > 0) {
+            indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u",
+                               s->selected + 1, indigo_search_row_count(s));
+        }
+        return;
+    }
     if (s->loading) {
         indigo_canvas_text(c, 18, 90, 0.75f, COL_TEXT_SOFT, "Searching...");
         return;

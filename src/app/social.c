@@ -1,4 +1,5 @@
 #include "app/social.h"
+#include "atproto/starter_pack.h"
 
 #include <strings.h>
 
@@ -287,6 +288,8 @@ add_facet(indigo_menu *m, const indigo_post *post, const indigo_post_facet *f)
     char raw[INDIGO_POST_TEXT_MAX + 1];
     char text[INDIGO_POST_NAME_MAX * 2];
     char label[INDIGO_POST_NAME_MAX * 2 + 16];
+    char pack_uri[INDIGO_POST_URI_MAX];
+    const char *payload = f->target;
     const char *prefix;
     indigo_menu_kind kind;
     size_t len = strlen(post->text);
@@ -309,14 +312,20 @@ add_facet(indigo_menu *m, const indigo_post *post, const indigo_post_facet *f)
         prefix = "Tag: ";
         break;
     default:
-        kind = INDIGO_MENU_SHOW_LINK;
-        prefix = "Link: ";
+        if (indigo_starter_pack_uri_from_link(f->target, pack_uri, sizeof pack_uri)) {
+            kind = INDIGO_MENU_OPEN_STARTER_PACK;
+            prefix = "Starter pack: ";
+            payload = pack_uri;
+        } else {
+            kind = INDIGO_MENU_SHOW_LINK;
+            prefix = "Link: ";
+        }
         break;
     }
     /* Truncate on a UTF-8 boundary first so the prefix and the label fit. */
     indigo_copy_utf8(text, sizeof text, raw);
     snprintf(label, sizeof label, "%s%s", prefix, text);
-    add_item(m, kind, label, f->target);
+    add_item(m, kind, label, payload);
 }
 
 void

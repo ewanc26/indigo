@@ -141,6 +141,14 @@ menu_choose(indigo_app *app, unsigned item)
     case INDIGO_MENU_SHOW_LINK:
         (void) indigo_menu_show_link(&app->menu, it->payload);
         break;
+    case INDIGO_MENU_OPEN_STARTER_PACK: {
+        char uri[INDIGO_POST_URI_MAX];
+
+        indigo_copy_utf8(uri, sizeof uri, it->payload);
+        indigo_app_go_back(app);
+        indigo_app_open_starter_pack(app, uri);
+        break;
+    }
     case INDIGO_MENU_LIKED_BY:
     case INDIGO_MENU_REPOSTED_BY: {
         char uri[INDIGO_POST_URI_MAX];
@@ -360,6 +368,18 @@ open_search_selection(indigo_app *app)
         if (f) {
             indigo_app_open_feed(app, f->uri, f->name);
         }
+    } else if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
+        const char *feed = indigo_search_selected_feed(s);
+
+        if (feed) {
+            indigo_app_open_feed(app, feed, "Feed");
+        } else {
+            const indigo_actor *a = indigo_search_selected(s);
+
+            if (a) {
+                indigo_app_open_profile(app, a->handle);
+            }
+        }
     } else if (s->kind == INDIGO_SEARCH_LIST_MEMBERS) {
         const indigo_actor *a = indigo_search_selected(s);
 
@@ -475,6 +495,9 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_SEARCH_LIST_MEMBERS:
             request = INDIGO_REQUEST_LIST_MEMBERS;
+            break;
+        case INDIGO_SEARCH_STARTER_PACK:
+            request = INDIGO_REQUEST_STARTER_PACK;
             break;
         case INDIGO_SEARCH_MUTED:
             request = INDIGO_REQUEST_MUTES;

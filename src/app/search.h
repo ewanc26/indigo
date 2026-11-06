@@ -2,6 +2,7 @@
 #define INDIGO_SEARCH_H
 
 #include "app/timeline.h"
+#include "atproto/starter_pack.h"
 
 #include <stdbool.h>
 
@@ -53,6 +54,9 @@ typedef enum {
     /* The people who liked or reposted one post; the subject is its URI. */
     INDIGO_SEARCH_LIKED_BY,
     INDIGO_SEARCH_REPOSTED_BY,
+    /* One starter pack: its members are the search screen's actor rows, and
+     * the pack's feed references follow them as list-shaped rows. */
+    INDIGO_SEARCH_STARTER_PACK,
 } indigo_search_kind;
 
 typedef struct {
@@ -79,6 +83,9 @@ typedef struct {
      * 20 lists * 320 bytes is 6.4KB, the same as the posts already cost. */
     indigo_list held_lists[INDIGO_SEARCH_MAX];
     unsigned held_count;
+    /* Meaningful only for INDIGO_SEARCH_STARTER_PACK. Held here rather than in
+     * a screen of its own so paging, errors and Back use the same machinery. */
+    indigo_starter_pack pack;
     unsigned count;
     unsigned selected;
     unsigned scroll;
@@ -109,6 +116,14 @@ const indigo_post *indigo_search_row_post(const indigo_search *s, unsigned row, 
  * handle or a URI as text; callers pick with indigo_search_is_lists(). */
 const indigo_list *indigo_search_selected_list(const indigo_search *s);
 const indigo_list *indigo_search_row_list(const indigo_search *s, unsigned row, unsigned rows);
+/* Members plus included feeds for a starter pack, or just the rows for every
+ * other kind. */
+unsigned indigo_search_row_count(const indigo_search *s);
+/* The feed row at/after the member rows, or empty when the selection is an
+ * account or the kind is not a starter pack. */
+const char *indigo_search_selected_feed(const indigo_search *s);
+const char *indigo_search_row_feed(const indigo_search *s, unsigned row,
+                                   unsigned rows);
 /* A search needs something to search for and must not already be running. */
 bool indigo_search_can_submit(const indigo_search *s);
 /* A next page is worth starting: not already running, a cursor in hand, and

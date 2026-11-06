@@ -45,6 +45,7 @@
 #include <wolfram/bookmark_typed.h>
 #include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
+#include <wolfram/graph_social_typed.h>
 #include <wolfram/list_typed.h>
 #include <wolfram/moderation_report_typed.h>
 #include <wolfram/moderation_typed.h>
@@ -99,6 +100,7 @@ typedef enum {
     JOB_AUTHOR_FEED,
     JOB_LISTS,
     JOB_LIST_MEMBERS,
+    JOB_STARTER_PACK,
     JOB_FEEDS,
     JOB_FEED,
     JOB_MUTES,
@@ -138,6 +140,9 @@ typedef struct {
     /* JOB_AUTHOR_FEED's wf_profile_tab. */
     int tab;
     char list_uri[INDIGO_POST_URI_MAX];
+    /* JOB_STARTER_PACK's pack URI. The member list URI is held in the published
+     * starter_pack state so a paging job can use it without another lookup. */
+    char starter_pack_uri[INDIGO_POST_URI_MAX];
     /* JOB_FEED's target; the same shape as list_uri, kept separate so the two
      * jobs stay readable. */
     char feed_uri[INDIGO_POST_URI_MAX];
@@ -224,6 +229,7 @@ typedef struct {
  * list is a third type, and the screen needs the previous list to stay valid
  * until the next result arrives. */
     indigo_list lists[INDIGO_SEARCH_MAX];
+    indigo_starter_pack starter_pack;
 /* The account's saved feeds: list-shaped rows, so the same type, but their
  * own array so browsing feeds never disturbs a curated-lists view. */
     indigo_list feeds[INDIGO_SEARCH_MAX];
@@ -318,6 +324,7 @@ void indigo_session_publish_actor_page(const indigo_job *j, wf_agent_actor_list 
 /* session_lists.c */
 void indigo_session_do_feeds(const indigo_job *j);
 void indigo_session_do_list_members(const indigo_job *j);
+void indigo_session_do_starter_pack(const indigo_job *j);
 void indigo_session_do_lists(const indigo_job *j);
 void indigo_session_do_moderation_list(const indigo_job *j);
 

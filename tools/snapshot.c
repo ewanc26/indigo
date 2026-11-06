@@ -786,6 +786,34 @@ fill_social(indigo_app *app, const scenario *s)
             }
             return;
         }
+        if (s->timeline == 13) {
+            /* A starter pack: account rows first, then the included feeds. */
+            q->kind = INDIGO_SEARCH_STARTER_PACK;
+            memset(&q->pack, 0, sizeof q->pack);
+            ((indigo_starter_pack *) &q->pack)->member_count = 2;
+            indigo_copy_utf8(q->pack.uri, sizeof q->pack.uri,
+                             "at://did:plc:me/app.bsky.graph.starterpack/borders");
+            indigo_copy_utf8(q->pack.name, sizeof q->pack.name, "Welsh borders");
+            indigo_copy_utf8(q->pack.creator_handle, sizeof q->pack.creator_handle,
+                             "rhi.example.social");
+            indigo_copy_utf8(q->pack.description, sizeof q->pack.description,
+                             "Walkers, readers and people who know which lane the old stones are on.");
+            indigo_copy_utf8(q->pack.feeds[0], sizeof q->pack.feeds[0],
+                             "at://did:plc:me/app.bsky.feed.generator/borders");
+            indigo_copy_utf8(q->pack.feeds[1], sizeof q->pack.feeds[1],
+                             "at://did:plc:me/app.bsky.feed.generator/quiet");
+            q->pack.feed_count = 2;
+            memset(a, 0, sizeof a);
+            indigo_copy_utf8(a[0].handle, sizeof a[0].handle, "rhi.example.social");
+            indigo_copy_utf8(a[0].display_name, sizeof a[0].display_name, "Rhiannon");
+            indigo_copy_utf8(a[0].did, sizeof a[0].did, "did:plc:rhiannon7wvx2m4qz6kbyt");
+            indigo_copy_utf8(a[1].handle, sizeof a[1].handle, "rhibear.example.social");
+            indigo_copy_utf8(a[1].display_name, sizeof a[1].display_name, "Rhiannon Bear");
+            indigo_copy_utf8(a[1].did, sizeof a[1].did, "did:plc:bear4kq8vz2n7xwm3");
+            indigo_app_starter_pack_loaded(app, &q->pack, a, 2, "");
+            q->selected = s->select < indigo_search_row_count(q) ? s->select : 0;
+            return;
+        }
         if (s->timeline == 8) {
             /* A person's own posts: same rows as a post search, but the header
              * names them and there is no query to type. */
@@ -1060,6 +1088,8 @@ main(int argc, char **argv)
         {"author-posts", INDIGO_SCREEN_SEARCH, false, 0, 0, 8, 0, false},
         {"lists", INDIGO_SCREEN_SEARCH, false, 0, 0, 9, 0, false},
         {"list-members", INDIGO_SCREEN_SEARCH, false, 0, 0, 10, 0, false},
+        {"starter-pack", INDIGO_SCREEN_SEARCH, false, 0, 0, 13, 0, false},
+        {"starter-pack-feed", INDIGO_SCREEN_SEARCH, false, 0, 0, 13, 2, false},
         {"feeds", INDIGO_SCREEN_SEARCH, false, 0, 0, 11, 0, false},
         {"feed-view", INDIGO_SCREEN_HOME, false, 0, 0, 12, 0, false},
         {"settings", INDIGO_SCREEN_SETTINGS, false, 0, 0, 0, 0, false},

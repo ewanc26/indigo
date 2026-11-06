@@ -96,6 +96,76 @@ indigo_session_do_list_members(const indigo_job *j)
     indigo_session_publish_event(&ev);
 }
 
+/* A starter pack is the pack record plus the first page of its underlying
+ * list. A further page reuses the held list URI and asks only for members, so
+ * opening a pack is two requests and paging is one. The pack header survives
+ * a failed member page: the screen can still show what was opened and say the
+ * member list is unavailable. */
+void
+indigo_session_do_starter_pack(const indigo_job *j)
+{
+    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_STARTER_PACK_FAILED};
+    char list_uri[INDIGO_POST_URI_MAX];
+    const char *cursor = INDIGO_SESSION_PAGE_CURSOR(*j);
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+    if (!j->paging) {
+        wf_graph_starter_pack_view pack;
+        wf_status st;
+
+        memset(&pack, 0, sizeof pack);
+        st = wf_agent_get_starter_pack_typed(g_session.agent, j->starter_pack_uri,
+                                             &pack);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "starter pack", st);
+            return;
+        }
+        indigo_starter_pack_fill_from_wolfram(&g_session.starter_pack, &pack);
+        indigo_copy_utf8(list_uri, sizeof list_uri, g_session.starter_pack.list_uri);
+        wf_graph_starter_pack_view_free(&pack);
+    } else {
+        indigo_copy_utf8(list_uri, sizeof list_uri, g_session.starter_pack.list_uri);
+    }
+
+    if (!list_uri[0]) {
+        g_session.actor_count = 0;
+        ev.kind = INDIGO_SESSION_EVENT_STARTER_PACK_PAGE;
+        ev.page_count = 0;
+        ev.cursor[0] = '\0';
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    {
+        wf_agent_list_item_list list;
+        wf_status st;
+
+        memset(&list, 0, sizeof list);
+        st = wf_agent_get_list_typed(g_session.agent, list_uri, INDIGO_SEARCH_PAGE,
+                                     cursor, &list);
+        if (st != WF_OK) {
+            indigo_session_publish_failure(&ev, "starter-pack members", st);
+            return;
+        }
+        if (!j->paging) {
+            g_session.actor_count = 0;
+        }
+        for (size_t i = 0; i < list.item_count && g_session.actor_count < INDIGO_SEARCH_MAX; i++) {
+            if (indigo_session_fill_actor(&list.items[i].subject,
+                                          &g_session.actors[g_session.actor_count])) {
+                g_session.actor_count++;
+            }
+        }
+        ev.kind = INDIGO_SESSION_EVENT_STARTER_PACK_PAGE;
+        ev.page_count = g_session.actor_count;
+        indigo_copy_utf8(ev.cursor, sizeof ev.cursor, list.cursor ? list.cursor : "");
+        wf_agent_list_item_list_free(&list);
+    }
+    indigo_log_info("starter pack '%s': %u members", j->starter_pack_uri,
+                    g_session.actor_count);
+    indigo_session_publish_event(&ev);
+}
+
 /* The accounts this one has muted or blocked. Indigo could mute and block from
  * a profile but had no way to see the result, so a mis-click was invisible
  * until the person failed to appear somewhere else. Both endpoints return the
@@ -193,6 +263,29 @@ indigo_session_submit_list_members(const char *list_uri, const char *cursor)
     j.paging = j.cursor[0] != '\0';
     indigo_copy_utf8(j.list_uri, sizeof j.list_uri, list_uri);
     return indigo_session_enqueue(&j);
+}
+
+bool
+indigo_session_submit_starter_pack(const char *pack_uri, const char *cursor)
+{
+    indigo_job j = {.kind = JOB_STARTER_PACK};
+    char canonical[INDIGO_POST_URI_MAX];
+
+    if (!indigo_starter_pack_uri_from_link(pack_uri, canonical, sizeof canonical)) {
+        return false;
+    }
+    if (cursor) {
+        snprintf(j.cursor, sizeof j.cursor, "%s", cursor);
+    }
+    j.paging = j.cursor[0] != '\0';
+    indigo_copy_utf8(j.starter_pack_uri, sizeof j.starter_pack_uri, canonical);
+    return indigo_session_enqueue(&j);
+}
+
+const indigo_starter_pack *
+indigo_session_starter_pack(void)
+{
+    return &g_session.starter_pack;
 }
 
 bool

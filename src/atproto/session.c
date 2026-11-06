@@ -180,6 +180,9 @@ worker(void *arg)
         case JOB_LIST_MEMBERS:
             indigo_session_do_list_members(&j);
             break;
+        case JOB_STARTER_PACK:
+            indigo_session_do_starter_pack(&j);
+            break;
         case JOB_FEEDS:
             indigo_session_do_feeds(&j);
             break;
