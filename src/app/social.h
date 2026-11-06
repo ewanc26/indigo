@@ -138,6 +138,8 @@ typedef enum {
  * here from a computer. */
 /* Offline posts saved with Save for later, kept across launches. */
 #define INDIGO_QUEUE_PATH "sdmc:/3ds/indigo/queue.dat"
+/* Saved composer drafts, separate from posts waiting to send. */
+#define INDIGO_DRAFTS_PATH "sdmc:/3ds/indigo/drafts.dat"
 #define INDIGO_IMAGES_DIR "sdmc:/3ds/indigo/images"
 /* The 3DS camera's folder. It saves photos as DCIM/<folder>/<image>, so the
  * picker also lists the images one folder down here. */
@@ -215,7 +217,7 @@ const indigo_notification *indigo_notifications_selected(const indigo_notificati
  * come first, then the app-wide actions. The cap has to hold every app-wide
  * action plus a post's worth of facet targets, or add_item silently drops the
  * last entries and "Close menu" with them. */
-#define INDIGO_MENU_MAX 24
+#define INDIGO_MENU_MAX 30
 #define INDIGO_MENU_ROWS 5
 
 typedef enum {
@@ -231,6 +233,7 @@ typedef enum {
     INDIGO_MENU_MUTED,
     INDIGO_MENU_BLOCKED,
     INDIGO_MENU_QUEUE,
+    INDIGO_MENU_DRAFTS,
     INDIGO_MENU_MY_PROFILE,
     INDIGO_MENU_SETTINGS,
     INDIGO_MENU_CREDITS,

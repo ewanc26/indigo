@@ -1004,6 +1004,13 @@ main(int argc, char **argv)
         indigo_log_warn("queue file was unreadable; it was kept as queue.dat.bad");
     }
 
+    /* Saved drafts are a list of their own, separate from the queue and from
+     * the one compose buffer restored above. */
+    if (indigo_drafts_store_load(INDIGO_DRAFTS_PATH, &app.drafts) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("drafts file was unreadable; it was kept as drafts.dat.bad");
+    }
+
     /* The last home timeline, shown while the saved session is resumed. Only
      * with a saved session: the cache belongs to the account that was signed
      * in, and a signed-out device has no account to show it for. A damaged

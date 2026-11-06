@@ -76,6 +76,7 @@ typedef enum {
     INDIGO_ACTION_ATTACH,
     INDIGO_ACTION_THREAD_EXTEND,
     INDIGO_ACTION_SAVE_LATER,
+    INDIGO_ACTION_SAVE_DRAFT,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */
