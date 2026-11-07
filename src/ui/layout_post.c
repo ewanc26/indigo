@@ -310,10 +310,11 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     /* A name that would still reach the hint is cut, and marked as cut, rather
      * than drawn over it. */
     units = (unsigned) ((hint_x - 26.0f) / (INDIGO_CHAR_WIDTH * 0.8f));
-    if (strlen(title) > units) {
-        indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%.*s...", (int) units - 3, title);
-    } else {
-        indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", title);
+    {
+        char fitted[INDIGO_POST_NAME_MAX];
+
+        indigo_fit_text(fitted, sizeof fitted, title, units);
+        indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", fitted);
     }
     /* The bottom pills carry the hints for the list actions (Y, X, A, SEL), so
      * the title bar only states what they cannot: leaving the screen. The one

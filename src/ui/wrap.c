@@ -28,6 +28,72 @@ char_units(const unsigned char *s, unsigned *bytes)
     return cp >= 0x2E80 ? 2 : 1;
 }
 
+/*
+ * Copy `text` into `out`, cutting it at a UTF-8 boundary and adding an
+ * ellipsis when it is wider than `max_units`. Unlike wrapping a line and then
+ * appending "...", the ellipsis is included in the width, so the result fits
+ * the container the caller measured.
+ */
+void
+indigo_fit_text(char *out, size_t cap, const char *text, unsigned max_units)
+{
+    const unsigned char *t = (const unsigned char *) (text ? text : "");
+    size_t len = strlen((const char *) t);
+    size_t pos;
+    size_t used = 0;
+    unsigned total = 0;
+    unsigned budget;
+    int ellipsis;
+
+    if (!out || cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+
+    for (pos = 0; pos < len;) {
+        unsigned bytes;
+        unsigned units = char_units(&t[pos], &bytes);
+
+        if (bytes > len - pos) {
+            bytes = 1;
+        }
+        total += units;
+        pos += bytes;
+    }
+
+    ellipsis = total > max_units;
+    if (ellipsis && max_units < 3) {
+        return;
+    }
+    budget = ellipsis ? max_units - 3 : max_units;
+
+    for (pos = 0; pos < len;) {
+        unsigned bytes;
+        unsigned units = char_units(&t[pos], &bytes);
+        size_t room = cap - 1 - used;
+
+        if (bytes > len - pos) {
+            bytes = 1;
+        }
+        if (units > budget || bytes > room || (ellipsis && bytes + 3 > room)) {
+            break;
+        }
+        memcpy(out + used, t + pos, bytes);
+        used += bytes;
+        budget -= units;
+        pos += bytes;
+    }
+    if (ellipsis) {
+        if (used + 3 >= cap) {
+            out[0] = '\0';
+            return;
+        }
+        memcpy(out + used, "...", 3);
+        used += 3;
+    }
+    out[used] = '\0';
+}
+
 unsigned
 indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned max_lines,
             int *truncated)

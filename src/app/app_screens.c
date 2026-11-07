@@ -328,12 +328,21 @@ indigo_app_update_menu(indigo_app *app, const indigo_input *input)
         menu_choose(app, app->menu.selected);
         return;
     }
+    /* A menu row is chosen on release, and only when the touch was a tap. A
+     * drag that starts on a row is scrolling the menu, not opening it; choosing
+     * on touch_pressed made that impossible because the row was gone before the
+     * first move. The header's Back button remains a press target. */
     if (input->touch_pressed) {
         indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
 
         if (a == INDIGO_ACTION_BACK) {
             indigo_app_go_back(app);
-        } else if (a >= INDIGO_ACTION_MENU0 && a <= INDIGO_ACTION_MENU4) {
+        }
+    }
+    if (input->touch_released && !input->touch_dragged) {
+        indigo_action a = indigo_layout_hit_app(app, input->touch_x, input->touch_y);
+
+        if (a >= INDIGO_ACTION_MENU0 && a <= INDIGO_ACTION_MENU4) {
             unsigned row = (unsigned) (a - INDIGO_ACTION_MENU0);
 
             menu_choose(app, app->menu.scroll + row);
@@ -786,16 +795,23 @@ toggle_setting_row(indigo_app *app, unsigned row)
 void
 indigo_app_update_settings(indigo_app *app, const indigo_input *input)
 {
-    if (input->up) {
-        if (app->settings_selected > 0) {
-            app->settings_selected--;
-        }
+    unsigned selected = app->settings_selected < 8 ? app->settings_selected : 0;
+
+    /* The tiles are two columns by four rows. Up and down move a whole row,
+     * left and right move within one, and a press at an edge stays put. */
+    if (input->up && selected >= 2) {
+        selected -= 2;
     }
-    if (input->down) {
-        if (app->settings_selected < 7) {
-            app->settings_selected++;
-        }
+    if (input->down && selected + 2 < 8) {
+        selected += 2;
     }
+    if (input->left && (selected % 2) != 0) {
+        selected--;
+    }
+    if (input->right && (selected % 2) == 0 && selected + 1 < 8) {
+        selected++;
+    }
+    app->settings_selected = selected;
     if (input->back) {
         indigo_app_go_back(app);
         return;

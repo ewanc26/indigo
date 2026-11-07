@@ -537,7 +537,14 @@ build_top_menu(const indigo_app *app, indigo_canvas *c)
     }
     indigo_layout_top_title(c, "Menu", "B  Close");
     indigo_canvas_text(c, 18, 64, 0.7f, COL_TEXT_SOFT, "Signed in as");
-    indigo_canvas_text(c, 18, 90, 0.8f, COL_TEXT, "%s", app->signin.account);
+    {
+        char fitted[INDIGO_HANDLE_MAX];
+        unsigned units = (unsigned) ((INDIGO_TOP_WIDTH - 36) /
+                                     (INDIGO_CHAR_WIDTH * 0.8f));
+
+        indigo_fit_text(fitted, sizeof fitted, app->signin.account, units);
+        indigo_canvas_text(c, 18, 90, 0.8f, COL_TEXT, "%s", fitted);
+    }
     indigo_canvas_text(c, 18, 150, 0.6f, COL_TEXT_DIM, "Wolfram: %s",
                        app->wolfram_linked ? "linked" : "not linked");
     indigo_canvas_text(c, 18, 208, 0.6f, COL_TEXT_DIM, "START  Exit");
@@ -609,28 +616,23 @@ build_top_credits(const indigo_app *app, indigo_canvas *c)
 static void
 build_top_settings(const indigo_app *app, indigo_canvas *c)
 {
-    const indigo_settings *s = &app->settings;
+    unsigned row = app->settings_selected < 8 ? app->settings_selected : 0;
+    char value[64];
+
     indigo_layout_top_title(c, "Settings", "");
+    indigo_layout_setting_value(app, row, value, sizeof value);
 
-    const char *theme_str = s->theme == INDIGO_THEME_LIGHT ? "Light" : "Dark";
-    indigo_canvas_text(c, 18, 40, 0.65f, COL_TEXT, "Theme: %s", theme_str);
-    indigo_canvas_text(c, 18, 60, 0.65f, COL_TEXT, "Text scale: %u%%", s->text_scale);
-    indigo_canvas_text(c, 18, 80, 0.65f, COL_TEXT, "Reduce motion (reserved): %s",
-                       s->reduce_motion ? "On" : "Off");
-    indigo_canvas_text(c, 18, 100, 0.65f, COL_TEXT, "High contrast: %s",
-                       s->high_contrast ? "On" : "Off");
-    indigo_canvas_text(c, 18, 120, 0.65f, COL_TEXT, "Large touch targets: %s",
-                       s->large_targets ? "On" : "Off");
-    indigo_canvas_text(c, 18, 140, 0.65f, COL_TEXT, "Image alt text: %s",
-                       s->alt_text ? "On" : "Off");
-    indigo_canvas_text(c, 18, 160, 0.65f, COL_TEXT, "Diagnostics log: %s",
-                       s->diagnostics ? "On (indigo.log)" : "Off");
+    /* One setting at a time: eight values at 0.65 scale left no room for what
+     * any of them meant. The selected tile gets a heading, its value and a
+     * short explanation, while the bottom screen keeps every option visible. */
+    indigo_canvas_text(c, 18, 44, 0.9f, COL_TEXT, "%s",
+                       indigo_layout_setting_label(row));
+    indigo_canvas_text(c, 18, 78, 0.75f, COL_TEXT, "%s", value);
+    indigo_layout_top_paragraph(c, 18, 110, 0.62f, COL_TEXT_SOFT, 4,
+                                indigo_layout_setting_help(row));
 
-    const char *feed_str = s->default_feed[0] ? s->default_feed : "Following timeline";
-    indigo_canvas_text(c, 18, 180, 0.65f, COL_TEXT, "Startup feed: %.35s", feed_str);
-
-    indigo_canvas_text(c, 18, 206, 0.55f, COL_TEXT_DIM,
-                       "Press A or touch an item below to change.");
+    indigo_canvas_text(c, 18, 198, 0.55f, COL_TEXT_DIM,
+                       "D-pad or tap a tile; A changes it.");
 
     /* The build identity, so a bug report can name the build it came from. All
      * three stamped values, because each answers a different question: the tag
