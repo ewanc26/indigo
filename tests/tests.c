@@ -422,8 +422,46 @@ test_touch_navigation(void)
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
 
-    in.touch_x = (int) (back.x + back.w / 2);
-    in.touch_y = (int) (back.y + back.h / 2);
+    /* The menu has five rows rather than the timeline's three. A drag that
+     * starts on one of them scrolls the menu; the same drag from Close does
+     * not. */
+    {
+        indigo_rect row = indigo_layout_button_rect(INDIGO_ACTION_MENU0);
+
+        in = (indigo_input) {0};
+        in.drag_start_x = (int) (row.x + row.w / 2);
+        in.drag_start_y = (int) (row.y + row.h / 2);
+        in.drag_rows = 2;
+        indigo_app_update(&app, &in);
+        CHECK(app.menu.selected == 2);
+
+        in.drag_start_x = (int) (back.x + back.w / 2);
+        in.drag_start_y = (int) (back.y + back.h / 2);
+        in.drag_rows = 1;
+        indigo_app_update(&app, &in);
+        CHECK(app.menu.selected == 2);
+
+        in.drag_start_x = (int) (row.x + row.w / 2);
+        in.drag_start_y = (int) (row.y + row.h / 2);
+        in.drag_rows = -2;
+        indigo_app_update(&app, &in);
+        CHECK(app.menu.selected == 0);
+    }
+
+    /* Releasing a drag on a row must not also choose it. */
+    {
+        indigo_rect row = indigo_layout_button_rect(INDIGO_ACTION_MENU0);
+
+        in = (indigo_input) {.touch_released = true, .touch_dragged = true};
+        in.touch_x = (int) (row.x + row.w / 2);
+        in.touch_y = (int) (row.y + row.h / 2);
+        indigo_app_update(&app, &in);
+        CHECK(app.screen == INDIGO_SCREEN_MENU);
+        CHECK(app.menu.selected == 0);
+    }
+
+    in = (indigo_input) {.touch_pressed = true, .touch_x = (int) (back.x + back.w / 2),
+                         .touch_y = (int) (back.y + back.h / 2)};
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_HOME);
 
@@ -2280,7 +2318,7 @@ test_signin_flow(void)
     }
     in = (indigo_input) {0};
     r = indigo_layout_button_rect(INDIGO_ACTION_MENU4);
-    in.touch_pressed = true;
+    in.touch_released = true;
     in.touch_x = (int) (r.x + 4);
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
@@ -3277,7 +3315,8 @@ test_light_theme_reaches_the_layout(void)
     indigo_app_open_settings(&app);
     app.settings.theme = INDIGO_THEME_AUTO;
     indigo_layout_build(&app, &in, &top, &bottom);
-    CHECK(text_has(&top, "Theme: Dark"));
+    CHECK(text_has(&top, "Theme"));
+    CHECK(text_has(&top, "Dark"));
     CHECK(!text_has(&top, "Auto"));
 }
 
@@ -3627,6 +3666,43 @@ test_wrap(void)
 
     CHECK(indigo_wrap("", 10, l, 6, &cut) == 0);
     CHECK(indigo_wrap("x", 0, l, 6, &cut) == 0);
+}
+
+static void
+test_fit_text(void)
+{
+    char out[64];
+
+    indigo_fit_text(out, sizeof out, "hello brave", 8);
+    CHECK(strcmp(out, "hello...") == 0);
+
+    /* The ellipsis is part of the width, unlike appending one to a wrapped
+     * line, so a fitted label never runs past the container it was sized for. */
+    indigo_fit_text(out, sizeof out, "abc", 3);
+    CHECK(strcmp(out, "abc") == 0);
+    indigo_fit_text(out, sizeof out, "abcd", 3);
+    CHECK(strcmp(out, "...") == 0);
+    indigo_fit_text(out, sizeof out, "abc", 2);
+    CHECK(out[0] == '\0');
+
+    /* Cut only between UTF-8 characters. */
+    indigo_fit_text(out, sizeof out, "abcd\xC3\xA9", 4);
+    CHECK(strcmp(out, "a...") == 0);
+    indigo_fit_text(out, sizeof out, "\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9", 3);
+    CHECK(strcmp(out, "...") == 0);
+
+    /* Wide characters count as two units, as they do when wrapping. */
+    indigo_fit_text(out, sizeof out,
+                    "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", 5);
+    CHECK(strcmp(out, "\xE6\x97\xA5...") == 0);
+
+    /* A tiny destination still leaves a terminated string. */
+    {
+        char tiny[5];
+
+        indigo_fit_text(tiny, sizeof tiny, "abcdef", 4);
+        CHECK(strcmp(tiny, "a...") == 0);
+    }
 }
 
 static void
@@ -4027,6 +4103,90 @@ test_menu_rows_on_screen(void)
     }
     /* INDIGO_ACTION_MENU4 is the last row the layout knows about. */
     CHECK(INDIGO_ACTION_MENU0 + INDIGO_MENU_ROWS - 1 == INDIGO_ACTION_MENU4);
+}
+
+/* A facet label is made from the post's own text, so it can be much wider than
+ * a menu row. It must be ellipsized inside the row, not clipped at the screen
+ * edge; opening the item still shows the whole target. */
+static void
+test_menu_label_stays_in_its_row(void)
+{
+    static indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    bool found = false;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_MENU;
+    app.menu.count = 1;
+    app.menu.selected = 0;
+    app.menu.scroll = 0;
+    indigo_copy_utf8(app.menu.title, sizeof app.menu.title, "Menu");
+    app.menu.items[0].kind = INDIGO_MENU_SHOW_LINK;
+    indigo_copy_utf8(app.menu.items[0].label, sizeof app.menu.items[0].label,
+                     "Link: en.wikipedia.org/wiki/Liger");
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    for (unsigned i = 0; i < bottom.count; i++) {
+        const indigo_cmd *cmd = &bottom.cmds[i];
+        const char *text;
+        float width;
+
+        if (cmd->kind != INDIGO_CMD_TEXT) {
+            continue;
+        }
+        text = indigo_canvas_cmd_text(&bottom, cmd);
+        if (strncmp(text, "Link:", 5) != 0) {
+            continue;
+        }
+        found = true;
+        width = (float) advance_count(text) * INDIGO_CHAR_WIDTH * cmd->scale;
+        CHECK(cmd->x >= MENU_X + 14);
+        CHECK(cmd->x + width <= MENU_X + MENU_W - 14 + 0.01f);
+        CHECK(strstr(text, "...") != NULL);
+    }
+    CHECK(found);
+}
+
+/* The sign-in fields hold a service URL, handle or password, all of which can
+ * be longer than the row. The visible value has to stay inside its box; the
+ * full value is still what the keyboard edits. */
+static void
+test_field_value_stays_in_its_row(void)
+{
+    static indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_FIELD_HANDLE);
+    bool found = false;
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_SIGNIN;
+    memset(app.signin.handle, 'a', sizeof app.signin.handle - 1);
+    app.signin.handle[sizeof app.signin.handle - 1] = '\0';
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    for (unsigned i = 0; i < bottom.count; i++) {
+        const indigo_cmd *cmd = &bottom.cmds[i];
+        const char *text;
+        float width;
+
+        if (cmd->kind != INDIGO_CMD_TEXT || cmd->x != r.x + 8 ||
+            cmd->y != r.y + 16) {
+            continue;
+        }
+        text = indigo_canvas_cmd_text(&bottom, cmd);
+        if (text[0] != 'a') {
+            continue;
+        }
+        found = true;
+        width = (float) advance_count(text) * INDIGO_CHAR_WIDTH * cmd->scale;
+        CHECK(cmd->x + width <= r.x + r.w - 8 + 0.01f);
+        CHECK(strstr(text, "...") != NULL);
+    }
+    CHECK(found);
 }
 
 /* Which button glyphs a text command mentions. Hints are written either as
@@ -4747,16 +4907,20 @@ test_settings_screen_shows_the_build(void)
         CHECK(INDIGO_BUILD_NUMBER == 0);
         CHECK(text_has(&top, INDIGO_BUILD_DATE));
     }
-    /* Every setting the bottom screen can change is also named on the top
-     * screen. The alt-text row was added to one of them and not the other,
-     * which is the kind of thing that only a test notices. */
+    /* The top screen names only the selected setting; the bottom screen names
+     * all eight. Both have to use the same label for the same row, or a tile
+     * changes something other than what the top screen is describing. */
     static const char *const labels[] = {
         "Theme",       "Text scale",  "Reduce motion", "High contrast",
-        "Large touch targets", "Image alt text", "Diagnostics log", "Startup feed"};
+        "Large targets", "Image alt text", "Diagnostics log", "Startup feed"};
     for (unsigned i = 0; i < sizeof labels / sizeof labels[0]; i++) {
+        app.settings_selected = i;
+        indigo_layout_build(&app, &in, &top, &bottom);
+        CHECK(!top.overflow);
+        CHECK(!bottom.overflow);
         CHECK(text_has(&top, labels[i]));
+        CHECK(text_has(&bottom, labels[i]));
     }
-    CHECK(text_has(&bottom, "Image alt text"));
 }
 
 static void
@@ -6042,8 +6206,25 @@ test_settings_screen(void)
     CHECK(app.screen == INDIGO_SCREEN_SETTINGS);
     CHECK(app.settings_selected == 0);
 
-    /* Navigate down through settings options. */
+    /* The grid is two columns by four rows: Down moves a whole row, while
+     * Right and Left move between the columns of the current row. */
     in.down = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 2);
+    in = (indigo_input) {0};
+    in.up = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 0);
+    in = (indigo_input) {0};
+    in.right = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 1);
+    in = (indigo_input) {0};
+    in.left = true;
+    indigo_app_update(&app, &in);
+    CHECK(app.settings_selected == 0);
+    in = (indigo_input) {0};
+    in.right = true;
     indigo_app_update(&app, &in);
     CHECK(app.settings_selected == 1);
 
@@ -7891,6 +8072,7 @@ main(void)
     test_bookmarks();
     test_copy_utf8();
     test_wrap();
+    test_fit_text();
     test_canvas_spans();
     test_home_requests();
     test_facet_menu();
@@ -7898,6 +8080,8 @@ main(void)
     test_facet_menu_edges();
     test_liked_by_from_the_menu();
     test_menu_rows_on_screen();
+    test_menu_label_stays_in_its_row();
+    test_field_value_stays_in_its_row();
     test_search_model();
     test_search_selection_scroll();
     test_search_flow();

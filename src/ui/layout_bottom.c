@@ -458,7 +458,15 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
             continue;
         }
         indigo_canvas_rect(c, r.x, r.y, r.w, r.h, active ? COL_PILL_ACTIVE : COL_PILL);
-        indigo_canvas_text(c, r.x + 14, r.y + 8, 0.7f, COL_TEXT, "%s", it->label);
+        {
+            /* A facet label is the post's own text and can be any length. Keep
+             * it inside the row; opening the item shows the full target. */
+            char fitted[INDIGO_POST_NAME_MAX * 2 + 16];
+            unsigned units = (unsigned) ((r.w - 28) / (INDIGO_CHAR_WIDTH * 0.7f));
+
+            indigo_fit_text(fitted, sizeof fitted, it->label, units);
+            indigo_canvas_text(c, r.x + 14, r.y + 8, 0.7f, COL_TEXT, "%s", fitted);
+        }
     }
 }
 
@@ -753,58 +761,21 @@ build_bottom_credits(const indigo_app *app, indigo_canvas *c)
 static void
 build_bottom_settings(const indigo_app *app, indigo_canvas *c)
 {
-    const indigo_settings *s = &app->settings;
     indigo_canvas_text(c, 14, 10, 0.9f, COL_TEXT, "Settings");
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Back");
-
-    static const char *labels[8] = {
-        "Theme", "Text scale", "Reduce motion", "High contrast",
-        "Large targets", "Image alt text", "Diagnostics log", "Startup feed"
-    };
 
     for (unsigned i = 0; i < 8; i++) {
         indigo_action act = (indigo_action) (INDIGO_ACTION_SETTINGS_ROW0 + i);
         indigo_rect r = indigo_layout_button_rect(act);
         bool active = (app->settings_selected == i);
-        char val[64];
+        char value[64];
 
-        switch (i) {
-        case 0:
-            snprintf(val, sizeof val, "%s",
-                     s->theme == INDIGO_THEME_LIGHT ? "Light" : "Dark");
-            break;
-        case 1:
-            snprintf(val, sizeof val, "%u%%", s->text_scale);
-            break;
-        case 2:
-            snprintf(val, sizeof val, "%s", s->reduce_motion ? "On" : "Off");
-            break;
-        case 3:
-            snprintf(val, sizeof val, "%s", s->high_contrast ? "On" : "Off");
-            break;
-        case 4:
-            snprintf(val, sizeof val, "%s", s->large_targets ? "On" : "Off");
-            break;
-        case 5:
-            snprintf(val, sizeof val, "%s", s->alt_text ? "On" : "Off");
-            break;
-        case 6:
-            snprintf(val, sizeof val, "%s", s->diagnostics ? "On" : "Off");
-            break;
-        case 7:
-            if (s->default_feed[0]) {
-                snprintf(val, sizeof val, "Custom feed");
-            } else if (app->feed_uri[0]) {
-                snprintf(val, sizeof val, "Set current");
-            } else {
-                snprintf(val, sizeof val, "Following");
-            }
-            break;
-        }
-
+        indigo_layout_setting_value(app, i, value, sizeof value);
         indigo_canvas_rect(c, r.x, r.y, r.w, r.h, active ? COL_PILL_ACTIVE : COL_PILL);
-        indigo_canvas_text(c, r.x + 8, r.y + 4, 0.6f, COL_TEXT, "%s", labels[i]);
-        indigo_canvas_text(c, r.x + r.w - 100, r.y + 4, 0.6f, COL_TEXT_SOFT, "%s", val);
+        indigo_canvas_text(c, r.x + 8, r.y + 5, 0.55f,
+                           active ? COL_TEXT : COL_TEXT_SOFT, "%s",
+                           indigo_layout_setting_label(i));
+        indigo_canvas_text(c, r.x + 8, r.y + 22, 0.7f, COL_TEXT, "%s", value);
     }
 }
 

@@ -23,6 +23,9 @@ typedef struct indigo_input {
     bool touch_down;
     bool touch_pressed;
     bool touch_released;
+    /* Set with touch_released when the touch travelled past the drag slop. A
+     * screen with rows must not also treat that release as a tap. */
+    bool touch_dragged;
 
     /* Dragging a finger along a list. `drag_rows` is how many whole rows the drag
      * has moved this frame (positive: the finger went up, later rows come into
@@ -36,6 +39,9 @@ typedef struct indigo_input {
      * repeat while held, and the Circle Pad counts as the D-pad. */
     bool up;
     bool down;
+    /* Settings is a two-column grid; these repeat like up and down. */
+    bool left;
+    bool right;
     bool page_up;
     bool page_down;
     bool like;

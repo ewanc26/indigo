@@ -65,7 +65,8 @@ confirm_delete_post(indigo_app *app)
 /* Navigation and like/repost shared by the timeline and thread lists. */
 /* The rows a touch drag has moved a list by this frame: positive when the finger
  * went up, so later rows come into view. Only a drag that began on one of the
- * list's rows counts, so dragging from a button or the header never scrolls. */
+ * screen's list rows counts, so dragging from a button or the header never
+ * scrolls. The timeline and the five-row menu use different action ranges. */
 int
 indigo_app_drag_rows(const indigo_app *app, const indigo_input *input)
 {
@@ -75,10 +76,11 @@ indigo_app_drag_rows(const indigo_app *app, const indigo_input *input)
         return 0;
     }
     a = indigo_layout_hit_app(app, input->drag_start_x, input->drag_start_y);
-    if (a < INDIGO_ACTION_ROW0 || a > INDIGO_ACTION_ROW2) {
-        return 0;
+    if ((a >= INDIGO_ACTION_ROW0 && a <= INDIGO_ACTION_ROW2) ||
+        (a >= INDIGO_ACTION_MENU0 && a <= INDIGO_ACTION_MENU4)) {
+        return input->drag_rows;
     }
-    return input->drag_rows;
+    return 0;
 }
 
 static void

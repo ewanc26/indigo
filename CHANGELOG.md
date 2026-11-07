@@ -10,6 +10,8 @@ as the release notes.
 
 ### Fixed
 
+- Long labels stay inside their controls. Menu rows made from a post's links, mentions or tags are ellipsized at the row edge instead of running under it; sign-in fields, list titles and the title bar use the same UTF-8-safe fitter, whose ellipsis counts towards the width. A wrapped body line also reserves room for its ellipsis, so the last line ends inside the row. The full link address remains on the menu's link screen. Host tests cover the menu row, the sign-in field and multi-byte cuts.
+- The More menu scrolls when its touch list is dragged. The drag gate only recognised the timeline's three row actions, and a menu row was chosen on touch down before the drag could start. Menu rows now choose on release and only when the touch was a tap, so the five-row list scrolls instead of opening whichever item the finger started on. Host tests cover the dragged-release case.
 - A message request you accept now joins the inbox even when the inbox was empty, so the conversation can be opened and is not left in neither list. A group that fails to create says so on the group screen, where you are, instead of writing the error to the inbox's hidden status line. ([#22](https://github.com/ewanc26/indigo/issues/22))
 
 ### Added
@@ -34,6 +36,8 @@ as the release notes.
 
 ### Changed
 
+- Wolfram is pinned to v0.44.2, so the console and emulator builds link the release the checkout and CI already use.
+- Settings is a 2x4 grid of 142x40 tiles instead of eight 22px rows. Up and down move between rows, left and right between columns, and touch still taps the tile under the stylus. The top screen now gives the selected option its full label, current value and a short explanation instead of repeating all eight values; the bottom screen keeps all eight names, and the last tile ends 10px above the screen edge rather than 2px.
 - Wolfram is pinned to v0.43.2. The follower and following lists are populated again, and its public headers end with a newline, so the host sweep builds under `-Wpedantic -Werror` on Clang 16 and older (the new macOS leg). ([wolfram#226](https://github.com/ewanc26/wolfram/pull/226))
 - The release workflow uses Wolfram's shared release check, pinned to v0.44.2, instead of its own copy of the tag, changelog, main-ancestry and `CI gate` rules. It is given the commit the tag names, so a repair dispatch validates that release rather than `main`'s head. ([wolfram#100](https://github.com/ewanc26/wolfram/issues/100))
 

@@ -94,6 +94,80 @@ indigo_layout_utf8_length(const char *s)
 }
 
 const char *
+indigo_layout_setting_label(unsigned row)
+{
+    static const char *const labels[] = {
+        "Theme", "Text scale", "Reduce motion", "High contrast",
+        "Large targets", "Image alt text", "Diagnostics log", "Startup feed"
+    };
+
+    return row < sizeof labels / sizeof labels[0] ? labels[row] : "Setting";
+}
+
+const char *
+indigo_layout_setting_help(unsigned row)
+{
+    static const char *const help[] = {
+        "Light or dark colours on both screens.",
+        "Post text size: 100%, 115% or 130%.",
+        "Reserved for future animation; no effect yet.",
+        "Pure black backgrounds and brighter text.",
+        "Adds a margin around every touch target.",
+        "Shows descriptions where a post image has one.",
+        "Writes indigo.log to the SD card.",
+        "Which feed Home opens after sign-in."
+    };
+
+    return row < sizeof help / sizeof help[0] ? help[row] : "";
+}
+
+void
+indigo_layout_setting_value(const indigo_app *app, unsigned row, char *out, size_t size)
+{
+    const indigo_settings *s = &app->settings;
+
+    if (!out || size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    switch (row) {
+    case 0:
+        snprintf(out, size, "%s", s->theme == INDIGO_THEME_LIGHT ? "Light" : "Dark");
+        break;
+    case 1:
+        snprintf(out, size, "%u%%", s->text_scale);
+        break;
+    case 2:
+        snprintf(out, size, "%s", s->reduce_motion ? "On" : "Off");
+        break;
+    case 3:
+        snprintf(out, size, "%s", s->high_contrast ? "On" : "Off");
+        break;
+    case 4:
+        snprintf(out, size, "%s", s->large_targets ? "On" : "Off");
+        break;
+    case 5:
+        snprintf(out, size, "%s", s->alt_text ? "On" : "Off");
+        break;
+    case 6:
+        snprintf(out, size, "%s", s->diagnostics ? "On" : "Off");
+        break;
+    case 7:
+        if (s->default_feed[0]) {
+            snprintf(out, size, "Custom feed");
+        } else if (app->feed_uri[0]) {
+            snprintf(out, size, "Set current");
+        } else {
+            snprintf(out, size, "Following");
+        }
+        break;
+    default:
+        snprintf(out, size, "-");
+        break;
+    }
+}
+
+const char *
 indigo_layout_compose_title(const indigo_compose *c)
 {
     static char thread_title[32];
@@ -113,13 +187,15 @@ indigo_layout_field_row(indigo_canvas *c, indigo_action action, const indigo_sig
 {
     indigo_rect r = indigo_layout_button_rect(action);
     char shown[64];
+    char fitted[64];
+    unsigned units = (unsigned) ((r.w - 16) / (INDIGO_CHAR_WIDTH * 0.65f));
 
     indigo_signin_display(s, f, shown, sizeof shown);
+    indigo_fit_text(fitted, sizeof fitted, shown[0] ? shown : "Tap to enter", units);
     indigo_canvas_rect(c, r.x, r.y, r.w, r.h, s->focus == f ? COL_PILL_ACTIVE : COL_PILL);
     indigo_canvas_text(c, r.x + 8, r.y + 2, 0.5f, COL_TEXT_SOFT, "%s",
                        indigo_signin_field_label(f));
-    indigo_canvas_text(c, r.x + 8, r.y + 16, 0.65f, COL_TEXT, "%s",
-                       shown[0] ? shown : "Tap to enter");
+    indigo_canvas_text(c, r.x + 8, r.y + 16, 0.65f, COL_TEXT, "%s", fitted);
 }
 
 void
@@ -166,19 +242,22 @@ indigo_layout_list_row(indigo_canvas *c, indigo_action a, bool selected, const c
      * row's right edge. */
     units = (unsigned) ((r.x + ROW_W - 10 - text_x) / (INDIGO_CHAR_WIDTH * 0.55f));
     /* A title longer than the row is cut with an ellipsis at the row's edge,
-     * rather than clipped mid-letter by the canvas. */
+     * rather than clipped mid-letter by the canvas. `indigo_fit_text` counts
+     * the ellipsis in the width and only cuts between UTF-8 characters. */
     {
         unsigned title_units = (unsigned) ((r.x + ROW_W - 10 - text_x) / (INDIGO_CHAR_WIDTH * 0.6f));
-        size_t n = strlen(title);
-        if (n > title_units && title_units > 3) {
-            char shown[INDIGO_POST_NAME_MAX * 2];
-            snprintf(shown, sizeof shown, "%.*s...", (int) (title_units - 3), title);
-            indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", shown);
-        } else {
-            indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", title);
-        }
+        char shown[INDIGO_POST_NAME_MAX * 2];
+
+        indigo_fit_text(shown, sizeof shown, title, title_units);
+        indigo_canvas_text(c, text_x, r.y + 3, 0.6f, COL_TEXT, "%s", shown);
     }
+    /* The wrap does not know the body may need a trailing ellipsis. If it cut
+     * a line, rewrap with room for those three characters so the last one ends
+     * inside the row rather than just past it. */
     if (indigo_wrap(body, units, &line, 1, &cut) == 0) {
+        line = (indigo_line) {0, 0};
+    } else if (cut && units > 3 &&
+               indigo_wrap(body, units - 3, &line, 1, &cut) == 0) {
         line = (indigo_line) {0, 0};
     }
     indigo_canvas_text(c, text_x, r.y + 24, 0.55f, COL_TEXT_SOFT, "%.*s%s", (int) line.len,
