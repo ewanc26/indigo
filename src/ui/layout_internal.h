@@ -67,19 +67,20 @@
 /* 206 + one 0.6-scale text line clears the 240-tall bottom screen. The
  * spacing test below pins that the button rows leave room for it. */
 #define PROFILE_STATUS_Y 206
-/* Settings rows: eight options on the bottom screen.
+/* Settings: eight options in two columns by four rows on the bottom screen.
  *
- * Eight rows of the original 24px with a 27px step reach 257 on a 240-tall
- * screen, so the rows gave up 2px of height and the first row moved up to clear
- * the Back button by the same margin it always had. The 3px gap is unchanged,
- * because the gap is what decides whether a thumb can land on the wrong row.
- * Making the screen scrollable is the answer that compromises none of this, and
- * it is the answer to reach at a ninth row rather than an eighth. */
-#define SETTINGS_ROW_X 14
-#define SETTINGS_ROW_W 292
-#define SETTINGS_ROW_H 22
-#define SETTINGS_ROW_Y0 41
-#define SETTINGS_ROW_STEP 25
+ * A 142x40 tile is the largest that fits four rows below the Back button. The
+ * 8px gaps, in both directions, are what large targets needs: its 4px margin
+ * can grow each tile on every side without two tiles' hit areas overlapping.
+ * The 10px bottom margin belongs to the thumb; at the old 22px rows the last
+ * one sat 2px from the edge. */
+#define SETTINGS_TILE_X 14
+#define SETTINGS_TILE_Y 46
+#define SETTINGS_TILE_W 142
+#define SETTINGS_TILE_H 40
+#define SETTINGS_TILE_DX 150
+#define SETTINGS_TILE_DY 48
+#define SETTINGS_W 292
 
 #define POST_TEXT_SCALE 0.6f
 #define POST_TEXT_X 18
@@ -167,6 +168,9 @@ void indigo_layout_list_row(indigo_canvas *c, indigo_action a, bool selected, co
 void indigo_layout_draw_avatar(indigo_canvas *c, const char *url, float x, float y, float size);
 void indigo_layout_field_row(indigo_canvas *c, indigo_action action, const indigo_signin *s, indigo_field f);
 void indigo_layout_toggle_button(indigo_canvas *c, indigo_action action, bool enabled, bool busy, const char *on_label, const char *off_label);
+const char * indigo_layout_setting_label(unsigned row);
+const char * indigo_layout_setting_help(unsigned row);
+void indigo_layout_setting_value(const indigo_app *app, unsigned row, char *out, size_t size);
 unsigned indigo_layout_utf8_length(const char *s);
 const char * indigo_layout_compose_title(const indigo_compose *c);
 const char * indigo_layout_note_verb(indigo_note_kind k);

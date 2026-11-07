@@ -29,6 +29,8 @@ indigo_input_begin_frame(indigo_input *input)
     /* The Circle Pad counts as the D-pad, and both repeat while held. */
     input->up = (hidKeysDownRepeat() & KEY_UP) != 0;
     input->down = (hidKeysDownRepeat() & KEY_DOWN) != 0;
+    input->left = (hidKeysDownRepeat() & KEY_LEFT) != 0;
+    input->right = (hidKeysDownRepeat() & KEY_RIGHT) != 0;
     /* L and R, or the C-Stick on a New 3DS, a screenful at a time. */
     input->page_up = (input->pressed & (KEY_L | KEY_CSTICK_UP)) != 0;
     input->page_down = (input->pressed & (KEY_R | KEY_CSTICK_DOWN)) != 0;
@@ -63,6 +65,7 @@ indigo_input_poll(indigo_input *input)
     input->touch_released = (input->released & KEY_TOUCH) != 0;
 
     input->drag_rows = 0;
+    input->touch_dragged = false;
     if (input->touch_pressed) {
         wf_drag_begin(&s_drag, input->touch_y);
         input->drag_start_x = input->touch_x;
@@ -71,7 +74,7 @@ indigo_input_poll(indigo_input *input)
         input->drag_rows = wf_drag_move(&s_drag, input->touch_y, INDIGO_LIST_ROW_PX);
     }
     if (input->touch_released) {
-        (void) wf_drag_end(&s_drag);
+        input->touch_dragged = wf_drag_end(&s_drag) != 0;
     }
 }
 

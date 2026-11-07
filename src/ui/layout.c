@@ -76,9 +76,12 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_SETTINGS_ROW5:
     case INDIGO_ACTION_SETTINGS_ROW7:
     case INDIGO_ACTION_SETTINGS_ROW6:
-        return (indigo_rect) {SETTINGS_ROW_X,
-                              SETTINGS_ROW_Y0 + SETTINGS_ROW_STEP * (float) (action - INDIGO_ACTION_SETTINGS_ROW0),
-                              SETTINGS_ROW_W, SETTINGS_ROW_H};
+        return (indigo_rect) {
+            SETTINGS_TILE_X + SETTINGS_TILE_DX *
+                (float) (((unsigned) (action - INDIGO_ACTION_SETTINGS_ROW0)) % 2),
+            SETTINGS_TILE_Y + SETTINGS_TILE_DY *
+                (float) (((unsigned) (action - INDIGO_ACTION_SETTINGS_ROW0)) / 2),
+            SETTINGS_TILE_W, SETTINGS_TILE_H};
     case INDIGO_ACTION_LIKE:
         return s_pill[0];
     case INDIGO_ACTION_REPOST:
@@ -117,7 +120,7 @@ indigo_layout_button_rect(indigo_action action)
     case INDIGO_ACTION_IMAGE:
         return s_image_button;
     case INDIGO_ACTION_UPDATE:
-        return (indigo_rect) {SETTINGS_ROW_X, 150, SETTINGS_ROW_W, 40};
+        return (indigo_rect) {SETTINGS_TILE_X, 150, SETTINGS_W, 40};
     case INDIGO_ACTION_MENU0:
     case INDIGO_ACTION_MENU1:
     case INDIGO_ACTION_MENU2:

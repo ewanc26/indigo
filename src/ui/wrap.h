@@ -23,4 +23,13 @@ typedef struct {
 unsigned indigo_wrap(const char *text, unsigned max_units, indigo_line *lines,
                      unsigned max_lines, int *truncated);
 
+/*
+ * Copy `text` into `out`, truncating to at most `max_units` width units with
+ * a trailing "..." when it does not fit. The ellipsis counts towards the
+ * limit, so this is for one-line labels: the result never runs past the width
+ * the caller measured. Cuts only at a UTF-8 boundary and always NUL-terminates
+ * (an empty string is copied when `max_units` is too small for an ellipsis).
+ */
+void indigo_fit_text(char *out, size_t cap, const char *text, unsigned max_units);
+
 #endif
