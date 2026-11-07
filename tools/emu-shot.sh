@@ -65,10 +65,10 @@ fi
 emu_name="$(basename "$EMU")"
 
 window_geometry() {
-	osascript <<-'EOF' 2>/dev/null || true
+	osascript <<-EOF 2>/dev/null || true
 	tell application "System Events"
-		if not (exists process "PROCESS") then return ""
-		tell process "PROCESS"
+		if not (exists process "$emu_name") then return ""
+		tell process "$emu_name"
 			set ws to every window
 			if (count of ws) is 0 then return ""
 			set p to position of item 1 of ws
@@ -76,7 +76,7 @@ window_geometry() {
 			return ((item 1 of p) as string) & " " & ((item 2 of p) as string) & " " & ((item 1 of s) as string) & " " & ((item 2 of s) as string)
 		end tell
 	end tell
-	EOF
+		EOF
 }
 
 # A stale emulator from a previous run must be gone before launching: `open -a`
@@ -125,7 +125,7 @@ session_locked() {
 		end repeat
 		return out
 	end tell
-	EOF
+		EOF
 	)"
 	with_windows="${with_windows//loginwindow/}"
 	[[ -z "${with_windows// /}" ]]
@@ -142,7 +142,7 @@ wait_for_window() {
 	local i
 	geom=""
 	for ((i = 0; i < timeout; i++)); do
-		geom="$(window_geometry | sed "s/PROCESS/$emu_name/")"
+		geom="$(window_geometry)"
 		[[ -n "$geom" ]] && return 0
 		sleep 1
 	done
