@@ -71,17 +71,127 @@ indigo_canvas_qr(indigo_canvas *canvas, float x, float y, unsigned module_px,
     return true;
 }
 
+/* The text buffer is a byte pool, so a copy is only legal when the terminator
+ * also fits. A full buffer is an overflow, not a silent truncation. */
+static bool
+canvas_text_fits(indigo_canvas *canvas, size_t len)
+{
+    if (canvas->text_len >= INDIGO_CANVAS_TEXT_BYTES ||
+        len >= INDIGO_CANVAS_TEXT_BYTES - canvas->text_len) {
+        if (canvas->text_len < INDIGO_CANVAS_TEXT_BYTES) {
+            canvas->text[canvas->text_len] = '\0';
+        }
+        canvas->overflow = true;
+        return false;
+    }
+    return true;
+}
+
+static bool
+canvas_text_commit(indigo_canvas *canvas, size_t len, float x, float y, float scale,
+                   uint32_t color)
+{
+    indigo_cmd *cmd;
+
+    canvas->text[canvas->text_len + len] = '\0';
+    cmd = indigo_canvas_push(canvas);
+    if (!cmd) {
+        canvas->text[canvas->text_len] = '\0';
+        return false;
+    }
+    *cmd = (indigo_cmd) {
+        .kind = INDIGO_CMD_TEXT,
+        .x = x,
+        .y = y,
+        .scale = scale,
+        .color = color,
+        .text_offset = (uint16_t) canvas->text_len,
+    };
+    canvas->text_len += (unsigned) len + 1;
+    return true;
+}
+
+/* Copy three literal spans into the pool. The fast paths below all resolve to
+ * this, so a label that needs no printf conversion never enters libc's
+ * formatter. */
+static bool
+canvas_text_parts(indigo_canvas *canvas, float x, float y, float scale, uint32_t color,
+                  const char *prefix, size_t prefix_len, const char *value,
+                  size_t value_len, const char *suffix, size_t suffix_len)
+{
+    size_t len = prefix_len + value_len + suffix_len;
+    char *dst;
+
+    if (!canvas_text_fits(canvas, len)) {
+        return false;
+    }
+    dst = canvas->text + canvas->text_len;
+    memcpy(dst, prefix, prefix_len);
+    memcpy(dst + prefix_len, value, value_len);
+    memcpy(dst + prefix_len + value_len, suffix, suffix_len);
+    return canvas_text_commit(canvas, len, x, y, scale, color);
+}
+
 bool
 indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
                    uint32_t color, const char *format, ...)
 {
+    const char *percent;
+    va_list args;
+
     if (canvas->count >= INDIGO_CANVAS_MAX_CMDS) {
         canvas->overflow = true;
         return false;
     }
 
+    percent = strchr(format, '%');
+    if (!percent) {
+        return canvas_text_parts(canvas, x, y, scale, color, format, strlen(format),
+                                 "", 0, "", 0);
+    }
+
+    /* A single %s with literal text either side: "%s", "A  %s", and the
+     * video label are the common labels that were paying for __vfprintf. */
+    if (percent[1] == 's' && strchr(percent + 2, '%') == NULL) {
+        const char *value;
+
+        va_start(args, format);
+        value = va_arg(args, const char *);
+        va_end(args);
+        if (!value) {
+            value = "(null)";
+        }
+        return canvas_text_parts(canvas, x, y, scale, color, format,
+                                 (size_t) (percent - format), value, strlen(value),
+                                 percent + 2, strlen(percent + 2));
+    }
+
+    /* Wrapped lines use this exact shape: precision bytes of the source, then
+     * an optional ellipsis. */
+    if (strcmp(format, "%.*s%s") == 0) {
+        int precision;
+        const char *left;
+        const char *right;
+        size_t left_len = 0;
+
+        va_start(args, format);
+        precision = va_arg(args, int);
+        left = va_arg(args, const char *);
+        right = va_arg(args, const char *);
+        va_end(args);
+        if (precision >= 0 && left && right) {
+            while (left_len < (size_t) precision && left[left_len]) {
+                left_len++;
+            }
+            return canvas_text_parts(canvas, x, y, scale, color, left, left_len,
+                                     right, strlen(right), "", 0);
+        }
+    }
+
+    if (!canvas_text_fits(canvas, 0)) {
+        return false;
+    }
     size_t room = INDIGO_CANVAS_TEXT_BYTES - canvas->text_len;
-    va_list args;
     va_start(args, format);
     int written = vsnprintf(canvas->text + canvas->text_len, room, format, args);
     va_end(args);
@@ -92,18 +202,7 @@ indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
         return false;
     }
 
-    indigo_cmd *cmd = indigo_canvas_push(canvas);
-
-    *cmd = (indigo_cmd) {
-        .kind = INDIGO_CMD_TEXT,
-        .x = x,
-        .y = y,
-        .scale = scale,
-        .color = color,
-        .text_offset = (uint16_t) canvas->text_len,
-    };
-    canvas->text_len += (unsigned) written + 1;
-    return true;
+    return canvas_text_commit(canvas, (size_t) written, x, y, scale, color);
 }
 
 bool
