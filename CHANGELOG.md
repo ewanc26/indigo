@@ -37,6 +37,8 @@ as the release notes.
 
 ### Changed
 
+- Layout resets the display list's counters instead of clearing all 128 commands, 24 image URLs and 4 KiB of text on both screens every frame. Across the 70 host snapshot fixtures, layout falls from 1.27–1.29 µs to 0.90–0.93 µs per screen (about 28%); this is host timing, not a 3DS frame time, and `make bench-layout` repeats it. A regression test checks that a reused canvas has no stale commands, images, spans or QR state. ([#133](https://github.com/ewanc26/indigo/pull/133))
+
 - Text is parsed into citro2d once and reused until the screen changes, instead of reparsing every label and post line each frame. The cache shares the existing 4096-glyph buffer and clears when that budget is reached, so it cannot grow without bound. The 3DS build passes; host snapshots do not exercise citro2d, so this was not timed on a console. ([#133](https://github.com/ewanc26/indigo/pull/133))
 
 - Wolfram is pinned to v0.44.2, so the console and emulator builds link the release the checkout and CI already use. ([#133](https://github.com/ewanc26/indigo/pull/133))

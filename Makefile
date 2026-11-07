@@ -18,7 +18,7 @@ buildinfo:
 	printf '#pragma once\n#define INDIGO_BUILD_COMMIT "%s"\n#define INDIGO_BUILD_NUMBER %s\n#define INDIGO_BUILD_DATE "%s"\n' "$$c" "$$n" "$$d" > $(BUILDINFO).tmp; \
 	if cmp -s $(BUILDINFO).tmp $(BUILDINFO); then rm $(BUILDINFO).tmp; else mv $(BUILDINFO).tmp $(BUILDINFO); echo "buildinfo ... $$n $$c"; fi
 
-HOST_GOALS := test warnings snapshots e2e buildinfo
+HOST_GOALS := test warnings snapshots e2e buildinfo bench-layout layout-bench
 ifneq ($(filter $(HOST_GOALS),$(MAKECMDGOALS)),)
 include mk/host.mk
 else

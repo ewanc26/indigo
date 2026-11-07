@@ -351,6 +351,31 @@ test_canvas_basics(void)
 }
 
 static void
+test_canvas_reinit_resets_state(void)
+{
+    indigo_canvas c;
+    uint8_t modules[21 * 21] = {0};
+
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "stale"));
+    CHECK(indigo_canvas_image(&c, 0, 0, 8, 8, "https://cdn.example/a.jpg", 0));
+    modules[0] = 1;
+    CHECK(indigo_canvas_qr(&c, 10, 20, 2, 21, modules));
+    c.overflow = true;
+
+    indigo_canvas_init(&c, 200, 100);
+    CHECK(c.width == 200 && c.height == 100);
+    CHECK(c.count == 0 && c.text_len == 0);
+    CHECK(c.text[0] == '\0');
+    CHECK(c.image_count == 0 && c.span_count == 0 && c.qr_size == 0);
+    CHECK(!c.overflow);
+
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "fresh"));
+    CHECK(c.count == 1);
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[0]), "fresh") == 0);
+}
+
+static void
 test_canvas_overflow_is_bounded(void)
 {
     indigo_canvas c;
@@ -8117,6 +8142,7 @@ int
 main(void)
 {
     test_canvas_basics();
+    test_canvas_reinit_resets_state();
     test_chat_inbox_counterpart();
     test_chat_requests_label();
     test_chat_target();
