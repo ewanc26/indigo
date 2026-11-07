@@ -39,7 +39,6 @@ void
 indigo_fit_text(char *out, size_t cap, const char *text, unsigned max_units)
 {
     const unsigned char *t = (const unsigned char *) (text ? text : "");
-    size_t len = strlen((const char *) t);
     size_t pos = 0;
     size_t used = 0;
     size_t ellipsis_used = 0;
@@ -55,18 +54,18 @@ indigo_fit_text(char *out, size_t cap, const char *text, unsigned max_units)
 
     /* Copy and count in one walk. The earlier version walked the whole string
      * once to count it and again to copy it; most labels fit, so the first walk
-     * was the only one that needed the tail. */
-    while (pos < len) {
+     * was the only one that needed the tail. The loop stops at the terminator
+     * rather than a strlen, and copies the one to four bytes itself: a memcpy
+     * call per character was most of this function's cost. */
+    while (t[pos]) {
         unsigned bytes;
         unsigned units = char_units(&t[pos], &bytes);
-        size_t room;
+        size_t room = cap - 1 - used;
 
-        if (bytes > len - pos) {
-            bytes = 1;
-        }
-        room = cap - 1 - used;
         if (copying && total + units <= max_units && bytes <= room) {
-            memcpy(out + used, t + pos, bytes);
+            for (unsigned k = 0; k < bytes; k++) {
+                out[used + k] = (char) t[pos + k];
+            }
             used += bytes;
             total += units;
             if (total <= ellipsis_budget) {
@@ -98,7 +97,6 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
             int *truncated)
 {
     const unsigned char *t = (const unsigned char *) text;
-    size_t len = strlen(text);
     size_t pos = 0;
     unsigned n = 0;
 
@@ -107,7 +105,7 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
         return 0;
     }
 
-    while (pos < len) {
+    while (t[pos]) {
         size_t i = pos;
         unsigned units = 0;
         size_t break_at = 0;
@@ -120,7 +118,7 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
             break;
         }
 
-        while (i < len) {
+        while (t[i]) {
             unsigned bytes;
             unsigned u;
 
@@ -128,7 +126,14 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
                 hard = 1;
                 break;
             }
-            u = char_units(&t[i], &bytes);
+            /* Most text is ASCII, where a character is one unit and one
+             * byte, so skip the UTF-8 decoding for it. */
+            if (t[i] < 0x80) {
+                u = 1;
+                bytes = 1;
+            } else {
+                u = char_units(&t[i], &bytes);
+            }
             if (units + u > max_units) {
                 break;
             }
@@ -141,7 +146,7 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
         }
 
         /* Stopped on a space: everything before it fits, so break there. */
-        if (!hard && i < len && t[i] == ' ') {
+        if (!hard && t[i] == ' ') {
             break_at = i;
             have_break = 1;
         }
@@ -151,9 +156,9 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
             pos = i + 1;
             continue;
         }
-        if (i >= len) {
+        if (!t[i]) {
             lines[n++] = (indigo_line) {(unsigned) pos, (unsigned) (i - pos)};
-            pos = len;
+            pos = i;
             break;
         }
         if (have_break && break_at > pos) {
@@ -165,7 +170,7 @@ indigo_wrap(const char *text, unsigned max_units, indigo_line *lines, unsigned m
             lines[n++] = (indigo_line) {(unsigned) pos, (unsigned) (next - pos)};
         }
         pos = next;
-        while (pos < len && t[pos] == ' ') {
+        while (t[pos] == ' ') {
             pos++;
         }
     }
