@@ -159,6 +159,8 @@ indigo_palette indigo_layout_palette(const indigo_settings *s);
 void indigo_layout_set_palette(const indigo_settings *s);
 
 /* layout_widgets.c */
+void indigo_layout_text_fitted(indigo_canvas *c, float x, float y, float scale, uint32_t color, float max_width, const char *text);
+void indigo_layout_handle_fitted(indigo_canvas *c, float x, float y, float scale, uint32_t color, float max_width, const char *handle);
 void indigo_layout_top_title(indigo_canvas *c, const char *title, const char *hint);
 float indigo_layout_paragraph(indigo_canvas *c, float x, float y, float width, float scale, uint32_t color, unsigned max_lines, const char *text);
 float indigo_layout_top_paragraph(indigo_canvas *c, float x, float y, float scale, uint32_t color, unsigned max_lines, const char *text);

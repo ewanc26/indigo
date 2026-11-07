@@ -3705,6 +3705,118 @@ test_fit_text(void)
     }
 }
 
+/* Whether every sequence in `s` is complete. A cut through a CJK name leaves a
+ * lead byte with no continuation bytes, which draws as a replacement glyph. */
+static bool
+utf8_complete(const char *s)
+{
+    const unsigned char *p = (const unsigned char *) s;
+
+    while (*p) {
+        unsigned n;
+
+        if (*p < 0x80) {
+            n = 1;
+        } else if ((*p & 0xE0) == 0xC0) {
+            n = 2;
+        } else if ((*p & 0xF0) == 0xE0) {
+            n = 3;
+        } else if ((*p & 0xF8) == 0xF0) {
+            n = 4;
+        } else {
+            return false;
+        }
+        for (unsigned i = 1; i < n; i++) {
+            if ((p[i] & 0xC0) != 0x80) {
+                return false;
+            }
+        }
+        p += n;
+    }
+    return true;
+}
+
+static const indigo_cmd *
+text_at(const indigo_canvas *c, float x, float y)
+{
+    for (unsigned i = 0; i < c->count; i++) {
+        if (c->cmds[i].kind == INDIGO_CMD_TEXT && c->cmds[i].x == x &&
+            c->cmds[i].y == y) {
+            return &c->cmds[i];
+        }
+    }
+    return NULL;
+}
+
+/* A name measured in bytes is not measured in pixels: thirty wide characters
+ * are ninety bytes and twice the row they were cut for. Every header label
+ * now ends inside the screen, between characters, and says it was cut. */
+static void
+test_long_utf8_labels_fit(void)
+{
+    indigo_app app;
+    indigo_input in = {0};
+    indigo_canvas top;
+    indigo_canvas bottom;
+    indigo_post p = make_post("at://a/app.bsky.feed.post/1", "hello");
+    const char *long_handle =
+        "a-very-long-handle-that-would-run-past-the-screen.example.social";
+    char long_name[160];
+    const indigo_cmd *cmd;
+
+    long_name[0] = '\0';
+    for (unsigned i = 0; i < 30; i++) {
+        strcat(long_name, "\xE6\x97\xA5");
+    }
+
+    indigo_app_init(&app);
+    app.screen = INDIGO_SCREEN_HOME;
+    indigo_copy_utf8(p.display_name, sizeof p.display_name, long_name);
+    indigo_copy_utf8(p.handle, sizeof p.handle, long_handle);
+    indigo_timeline_append(&app.timeline, &p);
+
+    indigo_layout_build(&app, &in, &top, &bottom);
+    CHECK(!top.overflow);
+
+    cmd = text_at(&top, 44, 56);
+    CHECK(cmd != NULL);
+    if (cmd) {
+        const char *shown = indigo_canvas_cmd_text(&top, cmd);
+        const size_t len = strlen(shown);
+
+        CHECK(len > 3 && strcmp(shown + len - 3, "...") == 0);
+        CHECK(utf8_complete(shown));
+        CHECK(cmd->x + advance_count(shown) * INDIGO_CHAR_WIDTH * cmd->scale <=
+              (float) INDIGO_TOP_WIDTH);
+    }
+    cmd = text_at(&top, 44, 80);
+    CHECK(cmd != NULL);
+    if (cmd) {
+        const char *shown = indigo_canvas_cmd_text(&top, cmd);
+        const size_t len = strlen(shown);
+
+        CHECK(len > 3 && strcmp(shown + len - 3, "...") == 0);
+        CHECK(utf8_complete(shown));
+    }
+
+    /* The profile header has its own width, and the same rule. */
+    app.screen = INDIGO_SCREEN_PROFILE;
+    app.profile.loaded = true;
+    indigo_copy_utf8(app.profile.display_name, sizeof app.profile.display_name, long_name);
+    indigo_copy_utf8(app.profile.handle, sizeof app.profile.handle, long_handle);
+    indigo_layout_build(&app, &in, &top, &bottom);
+
+    cmd = text_at(&top, 64, 44);
+    CHECK(cmd != NULL);
+    if (cmd) {
+        const char *shown = indigo_canvas_cmd_text(&top, cmd);
+        const size_t len = strlen(shown);
+
+        CHECK(len > 3 && strcmp(shown + len - 3, "...") == 0);
+        CHECK(utf8_complete(shown));
+    }
+}
+
 static void
 test_canvas_spans(void)
 {
@@ -8073,6 +8185,7 @@ main(void)
     test_copy_utf8();
     test_wrap();
     test_fit_text();
+    test_long_utf8_labels_fit();
     test_canvas_spans();
     test_home_requests();
     test_facet_menu();

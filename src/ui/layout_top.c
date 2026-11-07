@@ -19,16 +19,15 @@ build_top_signin(const indigo_app *app, indigo_canvas *c)
         const char *code = indigo_session_pair_code();
         indigo_canvas_text(c, 18, 166, 0.55f, COL_TEXT_SOFT,
                            "Open on your phone/computer:");
-        indigo_canvas_text(c, 18, 182, 0.45f, COL_TEXT,
-                           "%.120s", url);
+        indigo_layout_text_fitted(c, 18, 182, 0.45f, COL_TEXT, 364.0f, url);
         indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_SOFT,
                            "Pair code: %s", code);
     } else
 #endif
     if (s->status[0]) {
-        indigo_canvas_text(c, 18, 172, 0.65f,
-                           s->status_is_error ? COL_ERROR : COL_TEXT_SOFT, "%s",
-                           s->status);
+        indigo_layout_text_fitted(c, 18, 172, 0.65f,
+                                  s->status_is_error ? COL_ERROR : COL_TEXT_SOFT,
+                                  364.0f, s->status);
     }
     indigo_canvas_text(c, 18, 208, 0.6f, COL_TEXT_DIM, "A  Sign in or edit   START  Exit");
 }
@@ -45,7 +44,7 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
         indigo_canvas_text(c, 18, 60, 0.75f, COL_TEXT_SOFT, "%s",
                            p->loading ? "Loading profile..." : "Profile not loaded.");
         if (p->handle[0]) {
-            indigo_canvas_text(c, 18, 90, 0.6f, COL_TEXT_DIM, "@%s", p->handle);
+            indigo_layout_handle_fitted(c, 18, 90, 0.6f, COL_TEXT_DIM, 364.0f, p->handle);
         }
         if (p->status[0]) {
             indigo_canvas_text(c, 18, 116, 0.6f, p->status_is_error ? COL_ERROR : COL_TEXT_DIM,
@@ -54,12 +53,18 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
         return;
     }
     indigo_layout_draw_avatar(c, p->avatar, 14, 38, PROFILE_AVATAR);
-    /* The display name is cut to 30 characters because a 40px avatar plus the
-     * longest name that still fits is narrower than the full 400px line. */
-    indigo_canvas_text(c, 64, 44, 0.85f, COL_TEXT, "%.26s",
-                       p->display_name[0] ? p->display_name : p->handle);
-    indigo_canvas_text(c, 64, 72, 0.6f, COL_TEXT_DIM, "@%s%s", p->handle,
-                       !self && p->following ? "   Following" : "");
+    /* The name ends inside the screen: a 40px avatar plus a long name is wider
+     * than the 400px line, and `%.26s` assumed one byte was one character, so
+     * a CJK name could be twice the width it was cut for. */
+    indigo_layout_text_fitted(c, 64, 44, 0.85f, COL_TEXT, 328.0f,
+                              p->display_name[0] ? p->display_name : p->handle);
+    {
+        char line[INDIGO_HANDLE_MAX + 16];
+
+        snprintf(line, sizeof line, "@%s%s", p->handle,
+                 !self && p->following ? "   Following" : "");
+        indigo_layout_text_fitted(c, 64, 72, 0.6f, COL_TEXT_DIM, 328.0f, line);
+    }
     indigo_layout_top_paragraph(c, 18, 98, 0.6f, COL_TEXT_SOFT, 4, p->bio);
     indigo_canvas_text(c, 18, 196, 0.6f, COL_TEXT, "%u posts", p->posts);
     indigo_canvas_text(c, 128, 196, 0.6f, COL_TEXT, "%u followers", p->followers);
@@ -74,8 +79,8 @@ build_top_profile_edit(const indigo_app *app, indigo_canvas *c)
     indigo_layout_top_title(c, "Edit profile", "A  Edit   Y  Save   B  Back");
     indigo_canvas_rect(c, 12, 46, 376, 52, e->selected == 0 ? COL_PILL_ACTIVE : COL_PILL);
     indigo_canvas_text(c, 20, 50, 0.55f, COL_TEXT_SOFT, "Display name");
-    indigo_canvas_text(c, 20, 68, 0.75f, COL_TEXT, "%.40s",
-                       e->display_name[0] ? e->display_name : "(not set)");
+    indigo_layout_text_fitted(c, 20, 68, 0.75f, COL_TEXT, 368.0f,
+                              e->display_name[0] ? e->display_name : "(not set)");
 
     indigo_canvas_rect(c, 12, 106, 376, 92, e->selected == 1 ? COL_PILL_ACTIVE : COL_PILL);
     indigo_canvas_text(c, 20, 110, 0.55f, COL_TEXT_SOFT, "Bio");
@@ -108,8 +113,9 @@ build_top_notifications(const indigo_app *app, indigo_canvas *c)
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", n->selected + 1, n->count);
     indigo_layout_draw_avatar(c, sel->avatar, 12, 46, HEAD_AVATAR);
-    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
-    indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "@%s", sel->handle);
+    indigo_layout_text_fitted(c, 44, 48, 0.75f, COL_TEXT, 348.0f,
+                              sel->name[0] ? sel->name : sel->handle);
+    indigo_layout_handle_fitted(c, 44, 74, 0.6f, COL_TEXT_DIM, 348.0f, sel->handle);
     indigo_canvas_text(c, 18, 96, 0.65f, sel->unread ? COL_LINK : COL_TEXT_SOFT, "%s%s",
                        indigo_layout_note_verb(sel->kind), sel->unread ? "  (new)" : "");
     if (sel->text[0]) {
@@ -161,7 +167,7 @@ build_top_drafts(const indigo_app *app, indigo_canvas *c)
         } else {
             snprintf(context, sizeof context, "Quote of @%.40s", d->target_handle);
         }
-        indigo_canvas_text(c, 18, 176, 0.6f, COL_TEXT_SOFT, "%s", context);
+        indigo_layout_text_fitted(c, 18, 176, 0.6f, COL_TEXT_SOFT, 364.0f, context);
     }
     if (app->draft_status[0]) {
         indigo_canvas_text(c, 18, 204, 0.55f,
@@ -188,9 +194,10 @@ build_top_requests(const indigo_app *app, indigo_canvas *c)
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u%s", r->selected + 1, r->count,
                        r->has_more ? "+" : "");
-    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
+    indigo_layout_text_fitted(c, 44, 48, 0.75f, COL_TEXT, 348.0f,
+                              sel->name[0] ? sel->name : sel->handle);
     if (sel->handle[0]) {
-        indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
+        indigo_layout_text_fitted(c, 44, 74, 0.6f, COL_TEXT_DIM, 348.0f, sel->handle);
     }
     if (sel->preview[0]) {
         indigo_layout_top_paragraph(c, 18, 100, 0.6f, COL_TEXT, 4, sel->preview);
@@ -223,9 +230,10 @@ build_top_messages(const indigo_app *app, indigo_canvas *c)
         return;
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", m->selected + 1, m->count);
-    indigo_canvas_text(c, 44, 48, 0.75f, COL_TEXT, "%.28s", sel->name[0] ? sel->name : sel->handle);
+    indigo_layout_text_fitted(c, 44, 48, 0.75f, COL_TEXT, 348.0f,
+                              sel->name[0] ? sel->name : sel->handle);
     if (sel->handle[0]) {
-        indigo_canvas_text(c, 44, 74, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
+        indigo_layout_text_fitted(c, 44, 74, 0.6f, COL_TEXT_DIM, 348.0f, sel->handle);
     }
     indigo_canvas_text(c, 18, 96, 0.65f, sel->unread ? COL_LINK : COL_TEXT_SOFT, "%s",
                        sel->unread ? "New messages" : "Read");
@@ -257,12 +265,18 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
         return;
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", t->selected + 1, t->count);
-    indigo_canvas_text(c, 18, 52, 0.7f, sel->mine ? COL_LINK : COL_TEXT_SOFT, "%s",
-                       sel->mine ? "You" : (t->title[0] ? t->title : "Them"));
+    indigo_layout_text_fitted(c, 18, 52, 0.7f, sel->mine ? COL_LINK : COL_TEXT_SOFT,
+                              364.0f,
+                              sel->mine ? "You" : (t->title[0] ? t->title : "Them"));
     indigo_layout_top_paragraph(c, 18, 84, 0.6f, COL_TEXT, 4, sel->text);
     /* The reply being written, or the last send's result. */
     if (t->reply[0]) {
-        indigo_canvas_text(c, 18, 200, 0.6f, COL_LINK, "Reply: %.60s", t->reply);
+        /* Sized from the reply itself: a chat message is much longer than a
+         * handle, and the fitter decides how much of it is drawn. */
+        char line[sizeof t->reply + 8];
+
+        snprintf(line, sizeof line, "Reply: %s", t->reply);
+        indigo_layout_text_fitted(c, 18, 200, 0.6f, COL_LINK, 364.0f, line);
     }
     if (t->status[0]) {
         indigo_canvas_text(c, 18, 222, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
@@ -291,7 +305,8 @@ build_top_chat_group(const indigo_app *app, indigo_canvas *c)
 
     snprintf(count, sizeof count, "%d member%s", g->total > 0 ? g->total : (int) g->count,
              (g->total == 1 || (g->total == 0 && g->count == 1)) ? "" : "s");
-    indigo_canvas_text(c, 18, 48, 0.8f, COL_TEXT, "%.30s", g->name[0] ? g->name : "Group");
+    indigo_layout_text_fitted(c, 18, 48, 0.8f, COL_TEXT, 364.0f,
+                              g->name[0] ? g->name : "Group");
     indigo_canvas_text(c, 18, 72, 0.6f, COL_TEXT_DIM, "%s", count);
 
     if (g->join_link_url[0]) {
@@ -304,10 +319,11 @@ build_top_chat_group(const indigo_app *app, indigo_canvas *c)
 
     if (sel) {
         indigo_canvas_text(c, 18, 138, 0.55f, COL_TEXT_DIM, "Selected member");
-        indigo_canvas_text(c, 18, 154, 0.7f, COL_TEXT, "%.30s",
-                           sel->name[0] ? sel->name : sel->handle);
+        indigo_layout_text_fitted(c, 18, 154, 0.7f, COL_TEXT, 364.0f,
+                                  sel->name[0] ? sel->name : sel->handle);
         if (sel->handle[0]) {
-            indigo_canvas_text(c, 18, 176, 0.55f, COL_TEXT_DIM, "%s", sel->handle);
+            indigo_layout_text_fitted(c, 18, 176, 0.55f, COL_TEXT_DIM, 364.0f,
+                                      sel->handle);
         }
     }
     if (app->group_status[0]) {
@@ -335,7 +351,8 @@ build_top_chat_join_requests(const indigo_app *app, indigo_canvas *c)
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u%s", l->selected + 1, l->count,
                        l->has_more ? "+" : "");
-    indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s", sel->name[0] ? sel->name : sel->handle);
+    indigo_layout_text_fitted(c, 18, 52, 0.75f, COL_TEXT, 364.0f,
+                              sel->name[0] ? sel->name : sel->handle);
     if (sel->handle[0]) {
         indigo_canvas_text(c, 18, 78, 0.6f, COL_TEXT_DIM, "%s", sel->handle);
     }
@@ -454,11 +471,11 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
     }
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", s->selected + 1, s->count);
     if (lists && s->kind == INDIGO_SEARCH_LISTS) {
-        indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s", lsel->name);
+        indigo_layout_text_fitted(c, 18, 52, 0.85f, COL_TEXT, 364.0f, lsel->name);
         if (lsel->description[0]) {
             indigo_layout_top_paragraph(c, 18, 82, 0.6f, COL_TEXT_SOFT, 3, lsel->description);
         }
-        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
+        indigo_layout_text_fitted(c, 18, 196, 0.55f, COL_TEXT_DIM, 364.0f, lsel->uri);
         indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open members");
         if (s->list_status[0]) {
             indigo_canvas_text(c, 18, 228, 0.5f,
@@ -468,16 +485,16 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         return;
     }
     if (lists && s->kind == INDIGO_SEARCH_FEEDS) {
-        indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s", lsel->name);
+        indigo_layout_text_fitted(c, 18, 52, 0.85f, COL_TEXT, 364.0f, lsel->name);
         indigo_canvas_text(c, 18, 82, 0.6f, COL_TEXT_SOFT, "Custom feed");
-        indigo_canvas_text(c, 18, 196, 0.55f, COL_TEXT_DIM, "%.44s", lsel->uri);
+        indigo_layout_text_fitted(c, 18, 196, 0.55f, COL_TEXT_DIM, 364.0f, lsel->uri);
         indigo_canvas_text(c, 18, 214, 0.6f, COL_TEXT_SOFT, "SEL  Open feed");
         return;
     }
     if (posts) {
-        indigo_canvas_text(c, 18, 52, 0.75f, COL_TEXT, "%.30s",
-                           indigo_layout_author_name(psel));
-        indigo_canvas_text(c, 18, 76, 0.55f, COL_TEXT_DIM, "@%s", psel->handle);
+        indigo_layout_text_fitted(c, 18, 52, 0.75f, COL_TEXT, 364.0f,
+                                  indigo_layout_author_name(psel));
+        indigo_layout_handle_fitted(c, 18, 76, 0.55f, COL_TEXT_DIM, 364.0f, psel->handle);
         indigo_layout_draw_post_body(c, psel, app->settings.alt_text, app->settings.text_scale);
         indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                            psel->reply_count);
@@ -487,10 +504,10 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
                            psel->like_count);
         return;
     }
-    indigo_canvas_text(c, 18, 52, 0.85f, COL_TEXT, "%.30s",
-                       sel->display_name[0] ? sel->display_name : sel->handle);
-    indigo_canvas_text(c, 18, 82, 0.65f, COL_TEXT_DIM, "@%s", sel->handle);
-    indigo_canvas_text(c, 18, 112, 0.55f, COL_TEXT_DIM, "%.44s", sel->did);
+    indigo_layout_text_fitted(c, 18, 52, 0.85f, COL_TEXT, 364.0f,
+                              sel->display_name[0] ? sel->display_name : sel->handle);
+    indigo_layout_handle_fitted(c, 18, 82, 0.65f, COL_TEXT_DIM, 364.0f, sel->handle);
+    indigo_layout_text_fitted(c, 18, 112, 0.55f, COL_TEXT_DIM, 364.0f, sel->did);
     indigo_canvas_text(c, 18, 140, 0.6f, COL_TEXT_SOFT, "SEL  Open profile");
     if (s->kind == INDIGO_SEARCH_LIST_MEMBERS && s->list_status[0]) {
         indigo_canvas_text(c, 18, 214, 0.55f,
@@ -558,9 +575,12 @@ build_top_compose(const indigo_app *app, indigo_canvas *c)
 
     indigo_layout_top_title(c, indigo_layout_compose_title(d), "A  Write   B  Back");
     if (d->has_target) {
-        indigo_canvas_text(c, 18, y, 0.55f, COL_TEXT_DIM, "%s @%s",
-                           d->mode == INDIGO_COMPOSE_QUOTE ? "Quoting" : "Replying to",
-                           d->target.handle);
+        char line[INDIGO_HANDLE_MAX + 24];
+
+        snprintf(line, sizeof line, "%s @%s",
+                 d->mode == INDIGO_COMPOSE_QUOTE ? "Quoting" : "Replying to",
+                 d->target.handle);
+        indigo_layout_text_fitted(c, 18, y, 0.55f, COL_TEXT_DIM, 364.0f, line);
         y = indigo_layout_top_paragraph(c, 18, y + 18, 0.55f, COL_TEXT_DIM, 2, d->target.text) + 8;
     }
     if (d->text[0]) {
