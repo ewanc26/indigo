@@ -284,7 +284,7 @@ bool
 indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
                    uint32_t color, const char *format, ...)
 {
-    const char *percent;
+    const char *percent = format;
     va_list args;
 
     if (canvas->count >= INDIGO_CANVAS_MAX_CMDS) {
@@ -292,10 +292,14 @@ indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
         return false;
     }
 
-    percent = strchr(format, '%');
-    if (!percent) {
-        return canvas_text_parts(canvas, x, y, scale, color, format, strlen(format),
-                                 "", 0, "", 0);
+    /* One walk finds both the first conversion and the literal's length; a
+     * strchr followed by strlen scanned every plain label twice. */
+    while (*percent && *percent != '%') {
+        percent++;
+    }
+    if (!*percent) {
+        return canvas_text_parts(canvas, x, y, scale, color, format,
+                                 (size_t) (percent - format), "", 0, "", 0);
     }
 
     /* A single %s with literal text either side: "%s", "A  %s", and the

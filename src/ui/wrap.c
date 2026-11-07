@@ -59,8 +59,16 @@ indigo_fit_text(char *out, size_t cap, const char *text, unsigned max_units)
      * call per character was most of this function's cost. */
     while (t[pos]) {
         unsigned bytes;
-        unsigned units = char_units(&t[pos], &bytes);
+        unsigned units;
         size_t room = cap - 1 - used;
+
+        /* ASCII is most of a label and always one unit and one byte. */
+        if (t[pos] < 0x80) {
+            bytes = 1;
+            units = 1;
+        } else {
+            units = char_units(&t[pos], &bytes);
+        }
 
         if (copying && total + units <= max_units && bytes <= room) {
             for (unsigned k = 0; k < bytes; k++) {
