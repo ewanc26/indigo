@@ -14,6 +14,37 @@ static C3D_RenderTarget *s_top;
 static C3D_RenderTarget *s_bottom;
 static C2D_TextBuf s_text_buf;
 
+/* Text laid out once and kept until the screen changes.
+ *
+ * C2D_TextParse is the CPU half of drawing text: it decodes UTF-8, looks up
+ * every glyph and copies the result into the text buffer. The layout only
+ * changes when the screen does, so the top and bottom screens were decoding the
+ * same labels and post lines sixty times a second. citro2d's own static-text
+ * examples parse once into a buffer that outlives the frame; this is the same
+ * idea, bounded to one screen's worth of strings and dropped at the next screen
+ * change so it cannot grow without limit.
+ *
+ * A cached C2D_Text is only valid while s_text_buf is not cleared, which is why
+ * a reset clears the entries along with the buffer. The glyph count guards the
+ * 4096-glyph buffer: an evicted entry's glyphs stay behind until the next reset,
+ * so the total consumed is tracked rather than the live entries. */
+#define UI_TEXT_CACHE 128
+#define UI_TEXT_BUF_GLYPHS 4096u
+#define UI_TEXT_BUF_RESERVE 512u
+
+typedef struct {
+    bool used;
+    uint32_t hash;
+    uint32_t last_used;
+    C2D_Text text;
+    char key[INDIGO_CANVAS_SEGMENT_MAX];
+} ui_cached_text;
+
+static ui_cached_text s_cached_text[UI_TEXT_CACHE];
+static unsigned s_cached_glyphs;
+static uint32_t s_cached_clock;
+static int s_cached_screen = -1;
+
 static indigo_canvas s_top_canvas;
 static indigo_canvas s_bottom_canvas;
 
@@ -309,11 +340,93 @@ draw_qr(const indigo_canvas *canvas, const indigo_cmd *cmd)
     }
 }
 
+static uint32_t
+hash_text(const char *s)
+{
+    uint32_t h = 2166136261u;
+
+    while (*s) {
+        h ^= (unsigned char) *s++;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static unsigned
+text_glyphs(const char *s)
+{
+    unsigned n = 0;
+
+    for (; *s; s++) {
+        if (((unsigned char) *s & 0xC0) != 0x80) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static void
+text_cache_reset(void)
+{
+    if (s_text_buf) {
+        C2D_TextBufClear(s_text_buf);
+    }
+    memset(s_cached_text, 0, sizeof s_cached_text);
+    s_cached_glyphs = 0;
+    s_cached_clock = 0;
+}
+
+/* A parsed segment, or NULL when it is too long to be a cache key. */
+static C2D_Text *
+text_cache_get(const char *text)
+{
+    size_t len = strlen(text);
+    ui_cached_text *victim = NULL;
+    uint32_t hash;
+    unsigned glyphs;
+
+    if (len == 0 || len >= INDIGO_CANVAS_SEGMENT_MAX) {
+        return NULL;
+    }
+    hash = hash_text(text);
+
+    for (unsigned i = 0; i < UI_TEXT_CACHE; i++) {
+        ui_cached_text *e = &s_cached_text[i];
+
+        if (!e->used) {
+            if (!victim) {
+                victim = e;
+            }
+            continue;
+        }
+        if (e->hash == hash && strcmp(e->key, text) == 0) {
+            e->last_used = ++s_cached_clock;
+            return &e->text;
+        }
+        if (!victim || e->last_used < victim->last_used) {
+            victim = e;
+        }
+    }
+
+    glyphs = text_glyphs(text);
+    if (s_cached_glyphs + glyphs > UI_TEXT_BUF_GLYPHS - UI_TEXT_BUF_RESERVE) {
+        text_cache_reset();
+        victim = &s_cached_text[0];
+    }
+
+    C2D_TextParse(&victim->text, s_text_buf, text);
+    C2D_TextOptimize(&victim->text);
+    memcpy(victim->key, text, len + 1);
+    victim->hash = hash;
+    victim->last_used = ++s_cached_clock;
+    victim->used = true;
+    s_cached_glyphs += glyphs;
+    return &victim->text;
+}
+
 static void
 replay(const indigo_canvas *canvas)
 {
-    C2D_TextBufClear(s_text_buf);
-
     for (unsigned i = 0; i < canvas->count; i++) {
         const indigo_cmd *cmd = &canvas->cmds[i];
 
@@ -338,7 +451,7 @@ replay(const indigo_canvas *canvas)
         for (unsigned k = 0; k < n; k++) {
             char piece[INDIGO_CANVAS_SEGMENT_MAX];
             unsigned len = segs[k].end - segs[k].start;
-            C2D_Text text;
+            C2D_Text *text;
             float w;
 
             if (len >= sizeof piece) {
@@ -347,11 +460,13 @@ replay(const indigo_canvas *canvas)
             memcpy(piece, full + segs[k].start, len);
             piece[len] = '\0';
 
-            C2D_TextParse(&text, s_text_buf, piece);
-            C2D_TextOptimize(&text);
-            C2D_DrawText(&text, C2D_WithColor, pen, cmd->y, 0.0f, cmd->scale, cmd->scale,
+            text = text_cache_get(piece);
+            if (!text) {
+                continue;
+            }
+            C2D_DrawText(text, C2D_WithColor, pen, cmd->y, 0.0f, cmd->scale, cmd->scale,
                          to_c2d(segs[k].color));
-            C2D_TextGetDimensions(&text, cmd->scale, cmd->scale, &w, NULL);
+            C2D_TextGetDimensions(text, cmd->scale, cmd->scale, &w, NULL);
             pen += w;
         }
     }
@@ -373,7 +488,9 @@ indigo_ui_init(void)
 
     s_top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
     s_bottom = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
-    s_text_buf = C2D_TextBufNew(4096);
+    s_text_buf = C2D_TextBufNew(UI_TEXT_BUF_GLYPHS);
+    s_cached_screen = -1;
+    text_cache_reset();
 
     if (!s_top || !s_bottom || !s_text_buf) {
         indigo_ui_shutdown();
@@ -397,6 +514,10 @@ indigo_ui_draw(const indigo_app *app, const indigo_input *input)
      * this frame rather than one frame later. */
     indigo_media_loader_drain(&s_media);
     viewer_prepare(app);
+    if ((int) app->screen != s_cached_screen) {
+        s_cached_screen = (int) app->screen;
+        text_cache_reset();
+    }
     indigo_layout_build(app, input, &s_top_canvas, &s_bottom_canvas);
     tex_reconcile();
 
@@ -430,6 +551,10 @@ indigo_ui_shutdown(void)
         C2D_TextBufDelete(s_text_buf);
         s_text_buf = NULL;
     }
+    memset(s_cached_text, 0, sizeof s_cached_text);
+    s_cached_glyphs = 0;
+    s_cached_clock = 0;
+    s_cached_screen = -1;
 
     s_top = NULL;
     s_bottom = NULL;
