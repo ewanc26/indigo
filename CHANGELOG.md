@@ -37,6 +37,8 @@ as the release notes.
 
 ### Changed
 
+- Text is parsed into citro2d once and reused until the screen changes, instead of reparsing every label and post line each frame. The cache shares the existing 4096-glyph buffer and clears when that budget is reached, so it cannot grow without bound. The 3DS build passes; host snapshots do not exercise citro2d, so this was not timed on a console. ([#133](https://github.com/ewanc26/indigo/pull/133))
+
 - Wolfram is pinned to v0.44.2, so the console and emulator builds link the release the checkout and CI already use. ([#133](https://github.com/ewanc26/indigo/pull/133))
 - Settings is a 2x4 grid of 142x40 tiles instead of eight 22px rows. Up and down move between rows, left and right between columns, and touch still taps the tile under the stylus. The top screen now gives the selected option its full label, current value and a short explanation instead of repeating all eight values; the bottom screen keeps all eight names, and the last tile ends 10px above the screen edge rather than 2px. ([#133](https://github.com/ewanc26/indigo/pull/133))
 - Wolfram is pinned to v0.43.2. The follower and following lists are populated again, and its public headers end with a newline, so the host sweep builds under `-Wpedantic -Werror` on Clang 16 and older (the new macOS leg). ([wolfram#226](https://github.com/ewanc26/wolfram/pull/226))
