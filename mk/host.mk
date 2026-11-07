@@ -3,6 +3,7 @@
 #   make test       build and run unit tests (warnings are errors, ASan + UBSan)
 #   make warnings   compile every host-portable source with -Werror and extra flags
 #   make snapshots  render layout PNGs into build-host/snapshots
+#   make bench-layout  time layout builds over the snapshot fixtures (host)
 #   make e2e        drive the real session worker and a mock PDS on the host
 
 HOST_CC ?= cc
@@ -37,7 +38,7 @@ HOST_WOLFRAM_OBJS := $(addprefix $(HOST_OUT)/wf_,$(subst /,_,$(HOST_WOLFRAM_FILE
 HOST_SRCS := src/app/app.c src/app/credits.c src/app/report.c src/app/app_posts.c src/app/app_screens.c src/app/app_results.c src/app/app_messages.c src/app/timeline_cache.c src/app/post_queue.c src/app/app_queue.c src/app/app_drafts.c src/store/cache_codec.c src/store/cache_store.c src/store/queue_codec.c src/store/queue_store.c src/store/drafts_store.c src/app/search.c src/app/signin.c src/app/social.c src/atproto/starter_pack.c src/app/timeline.c src/atproto/errors.c src/atproto/prefs.c src/atproto/chat.c src/atproto/video.c src/media/media.c src/store/session_codec.c src/store/session_store.c src/store/settings_codec.c src/store/settings_store.c src/store/draft_store.c src/store/file.c src/gfx/canvas.c src/ui/layout.c src/ui/layout_widgets.c src/ui/layout_post.c src/ui/layout_top.c src/ui/layout_bottom.c src/ui/wrap.c src/util/log.c src/util/clock.c src/update/update.c src/update/updater.c src/update/update_sig.c src/media/cdn_url.c
 HOST_SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
 
-.PHONY: test warnings snapshots e2e
+.PHONY: test warnings snapshots e2e bench-layout layout-bench
 
 # The end-to-end build compiles the real session worker with a stub <3ds.h>
 # from tests/e2e/stubs (see tests/e2e/host_platform.c) and runs it against a
@@ -104,6 +105,21 @@ $(HOST_OUT)/snapshot: tools/snapshot.c tools/snapshot_font.h $(HOST_SRCS) $(HOST
 snapshots: $(HOST_OUT)/snapshot
 	@mkdir -p $(HOST_OUT)/snapshots
 	@$(HOST_OUT)/snapshot $(HOST_OUT)/snapshots
+
+# A separate build directory and no sanitizers: ASan and UBSan distort the
+# per-call cost this is meant to compare. The layout and fixtures are the same
+# translation units the snapshot renderer uses, so a timing change cannot come
+# from a different build. `layout-bench` is the inner target the outer one calls
+# with those overrides; use `bench-layout`.
+bench-layout:
+	@$(MAKE) --no-print-directory layout-bench HOST_OUT=build-bench HOST_SANITIZE=
+	@./build-bench/layout-bench --bench 2000
+
+layout-bench: $(HOST_OUT)/layout-bench
+
+$(HOST_OUT)/layout-bench: tools/snapshot.c tools/snapshot_font.h $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(wildcard src/*/*.h)
+	@mkdir -p $(HOST_OUT)
+	$(HOST_CC) -std=c11 -Wall -Wextra -O2 $(HOST_INC) $(HOST_WOLFRAM_INC) -o $@ tools/snapshot.c $(HOST_SRCS) $(HOST_WOLFRAM_OBJS) $(HOST_CXXLIB) $(HOST_CJSON_LIBS) -lm
 
 # The e2e binary is not part of `make test`: it needs Wolfram built for the
 # host with its full agent/chat surface, not just the sources the unit tests

@@ -7,9 +7,19 @@
 void
 indigo_canvas_init(indigo_canvas *canvas, int width, int height)
 {
-    memset(canvas, 0, sizeof(*canvas));
+    /* Every array is read through a count and every live entry is written
+     * before the count advances, so only the counters need resetting. Clearing
+     * the payload scrubbed 128 commands, 24 image URLs and 4 KiB of text on
+     * both screens every frame, which was 22% of host layout samples. */
     canvas->width = width;
     canvas->height = height;
+    canvas->count = 0;
+    canvas->text_len = 0;
+    canvas->span_count = 0;
+    canvas->image_count = 0;
+    canvas->overflow = false;
+    canvas->qr_size = 0;
+    canvas->text[0] = '\0';
 }
 
 static indigo_cmd *

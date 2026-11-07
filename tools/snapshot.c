@@ -4,6 +4,11 @@
  * widths approximate the 3DS system font; use the emulator for pixel truth.
  *
  *   snapshot <output-dir>
+ *   snapshot --bench [iterations]
+ *
+ * --bench times indigo_layout_build over the same fixtures without rendering,
+ * so a layout change can be compared on one machine. It is host work, not a
+ * frame rate on a 3DS.
  */
 #include "app/app.h"
 #include "gfx/canvas.h"
@@ -17,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #define TEXT_SCALE_BASE 1.25f
 
@@ -1144,10 +1150,27 @@ main(int argc, char **argv)
         {"thread-image-error", INDIGO_SCREEN_THREAD, false, 0, 0, 13, 1, false},
     };
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <output-dir>\n", argv[0]);
+    const bool bench = argc >= 2 && strcmp(argv[1], "--bench") == 0;
+    int iterations = 2000;
+    if (bench && argc > 3) {
+        fprintf(stderr, "usage: %s --bench [iterations]\n", argv[0]);
         return 2;
     }
+    if (bench && argc == 3) {
+        iterations = atoi(argv[2]);
+        if (iterations < 1) {
+            fprintf(stderr, "%s: iterations must be at least 1\n", argv[0]);
+            return 2;
+        }
+    }
+    if (!bench && argc != 2) {
+        fprintf(stderr, "usage: %s <output-dir>\n       %s --bench [iterations]\n",
+                argv[0], argv[0]);
+        return 2;
+    }
+
+    double bench_total_us = 0.0;
+    unsigned bench_scenarios = 0;
 
     for (size_t i = 0; i < sizeof(scenarios) / sizeof(scenarios[0]); i++) {
         const scenario *s = &scenarios[i];
@@ -1180,7 +1203,25 @@ main(int argc, char **argv)
         input.touch_x = s->touch_x;
         input.touch_y = s->touch_y;
 
+        /* The first build is the warm-up: it also fills caches outside the
+         * layout (the media placeholder cache, the font tables) that every
+         * later call would otherwise pay for once. */
         indigo_layout_build(&app, &input, &top_canvas, &bottom_canvas);
+
+        if (bench) {
+            const clock_t start = clock();
+            for (int n = 0; n < iterations; n++) {
+                indigo_layout_build(&app, &input, &top_canvas, &bottom_canvas);
+            }
+            const double us = (double) (clock() - start) * 1000000.0 /
+                              (double) CLOCKS_PER_SEC / (double) iterations;
+            printf("bench %-26s %8.2f us  cmds %3u+%3u  text %u bytes\n",
+                   s->name, us, top_canvas.count, bottom_canvas.count,
+                   top_canvas.text_len + bottom_canvas.text_len);
+            bench_total_us += us;
+            bench_scenarios++;
+            continue;
+        }
 
         if (!has_content(&top_canvas) || !has_content(&bottom_canvas)) {
             fprintf(stderr, "scenario %s: a display is blank\n", s->name);
@@ -1216,6 +1257,11 @@ main(int argc, char **argv)
         free(top.px);
         free(bottom.px);
         free(both.px);
+    }
+
+    if (bench && bench_scenarios > 0) {
+        printf("layout bench: %u screens, %d iterations each, %.2f us/screen average\n",
+               bench_scenarios, iterations, bench_total_us / (double) bench_scenarios);
     }
 
     return 0;
