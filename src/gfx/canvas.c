@@ -126,10 +126,158 @@ canvas_text_parts(indigo_canvas *canvas, float x, float y, float scale, uint32_t
         return false;
     }
     dst = canvas->text + canvas->text_len;
-    memcpy(dst, prefix, prefix_len);
-    memcpy(dst + prefix_len, value, value_len);
-    memcpy(dst + prefix_len + value_len, suffix, suffix_len);
+    /* A matched fast path usually leaves one or two spans empty; skipping a
+     * zero-length memcpy keeps the call out of the common case. */
+    if (prefix_len) {
+        memcpy(dst, prefix, prefix_len);
+    }
+    if (value_len) {
+        memcpy(dst + prefix_len, value, value_len);
+    }
+    if (suffix_len) {
+        memcpy(dst + prefix_len + value_len, suffix, suffix_len);
+    }
     return canvas_text_commit(canvas, len, x, y, scale, color);
+}
+
+/* Decimal width of v, which the small formatter needs before it writes. */
+static size_t
+uint_digits(unsigned v)
+{
+    size_t n = 1;
+
+    while (v >= 10) {
+        v /= 10;
+        n++;
+    }
+    return n;
+}
+
+static char *
+put_uint(char *out, unsigned v)
+{
+    char tmp[10];
+    size_t n = 0;
+
+    do {
+        tmp[n++] = (char) ('0' + v % 10);
+        v /= 10;
+    } while (v);
+    while (n > 0) {
+        *out++ = tmp[--n];
+    }
+    return out;
+}
+
+static char *
+put_int(char *out, int v)
+{
+    unsigned mag;
+
+    if (v < 0) {
+        *out++ = '-';
+        mag = 0u - (unsigned) v;
+    } else {
+        mag = (unsigned) v;
+    }
+    return put_uint(out, mag);
+}
+
+/* The counters and short labels use only %u, %d, %s and %%. Formatting them
+ * here keeps the per-frame layout out of __vfprintf, which was still the
+ * largest single cost after the literal and single-%s paths. A width,
+ * precision or any other conversion declines the whole string, so libc still
+ * decides what those mean. Returns 1 when it wrote the text, 0 when the format
+ * needs libc, and -1 when the pool is full. */
+static int
+canvas_text_small(indigo_canvas *canvas, float x, float y, float scale, uint32_t color,
+                  const char *format, va_list args)
+{
+    va_list count;
+    const char *p;
+    size_t len = 0;
+    char *dst;
+
+    va_copy(count, args);
+    for (p = format; *p; p++) {
+        if (*p != '%') {
+            len++;
+            continue;
+        }
+        switch (*++p) {
+        case '%':
+            len++;
+            break;
+        case 's': {
+            const char *s = va_arg(count, const char *);
+
+            len += strlen(s ? s : "(null)");
+            break;
+        }
+        case 'u':
+            len += uint_digits(va_arg(count, unsigned));
+            break;
+        case 'd': {
+            int v = va_arg(count, int);
+
+            len += (v < 0 ? 1u : 0u) +
+                   uint_digits(v < 0 ? 0u - (unsigned) v : (unsigned) v);
+            break;
+        }
+        default:
+            va_end(count);
+            return 0;
+        }
+    }
+    va_end(count);
+
+    if (!canvas_text_fits(canvas, len)) {
+        return -1;
+    }
+    dst = canvas->text + canvas->text_len;
+    for (p = format; *p;) {
+        const char *start = p;
+
+        while (*p && *p != '%') {
+            p++;
+        }
+        if (p > start) {
+            memcpy(dst, start, (size_t) (p - start));
+            dst += p - start;
+        }
+        if (!*p) {
+            break;
+        }
+        p++;
+        switch (*p) {
+        case '%':
+            *dst++ = '%';
+            p++;
+            break;
+        case 's': {
+            const char *s = va_arg(args, const char *);
+            size_t n;
+
+            if (!s) {
+                s = "(null)";
+            }
+            n = strlen(s);
+            memcpy(dst, s, n);
+            dst += n;
+            p++;
+            break;
+        }
+        case 'u':
+            dst = put_uint(dst, va_arg(args, unsigned));
+            p++;
+            break;
+        default:
+            dst = put_int(dst, va_arg(args, int));
+            p++;
+            break;
+        }
+    }
+    return canvas_text_commit(canvas, len, x, y, scale, color) ? 1 : -1;
 }
 
 bool
@@ -186,6 +334,13 @@ indigo_canvas_text(indigo_canvas *canvas, float x, float y, float scale,
             return canvas_text_parts(canvas, x, y, scale, color, left, left_len,
                                      right, strlen(right), "", 0);
         }
+    }
+
+    va_start(args, format);
+    int small = canvas_text_small(canvas, x, y, scale, color, format, args);
+    va_end(args);
+    if (small != 0) {
+        return small > 0;
     }
 
     if (!canvas_text_fits(canvas, 0)) {
