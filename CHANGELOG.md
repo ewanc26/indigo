@@ -8,6 +8,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-07
+
 ### Fixed
 
 - One-line labels are measured in pixels rather than bytes, so a name, handle or address that is too long ends inside its control instead of running off the screen, and a cut never lands inside a character. The post and profile headers, notifications, messages, groups, search results, drafts, compose's target line, the menu title, the sign-in status and the pairing address use the same fitter as the earlier menu rows, in place of `%.Ns` cuts that counted a CJK character as three bytes: thirty of them are ninety bytes and twice the width those cuts were measured for. Host tests cover a long CJK name in both headers. ([#133](https://github.com/ewanc26/indigo/pull/133))
