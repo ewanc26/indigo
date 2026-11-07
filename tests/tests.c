@@ -366,7 +366,23 @@ test_canvas_text_fast_paths(void)
     CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[3]), "abc!") == 0);
     CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "100%% done"));
     CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[4]), "100% done") == 0);
-    CHECK(c.count == 5);
+    /* The counter shapes are formatted without libc. */
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%u / %u", 3u, 7u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[5]), "3 / 7") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%u replies", 0u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[6]), "0 replies") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%d/%u", -5, 5u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[7]), "-5/5") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%u", 4294967295u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[8]), "4294967295") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%s%s", "a", "b"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[9]), "ab") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%u%%", 115u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[10]), "115%") == 0);
+    /* A width or a precision still means exactly what libc says it means. */
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%.3s|%05u", "abcdef", 42u));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[11]), "abc|00042") == 0);
+    CHECK(c.count == 12);
 }
 
 static void
@@ -414,6 +430,13 @@ test_canvas_overflow_is_bounded(void)
     memset(big, 'x', sizeof(big) - 1);
     big[sizeof(big) - 1] = '\0';
     CHECK(!indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%s", big));
+    CHECK(c.overflow);
+    CHECK(c.count == 0);
+
+    /* The small formatter measures both strings before it writes, so a format
+     * that cannot fit fails without leaving a half-written command behind. */
+    indigo_canvas_init(&c, 10, 10);
+    CHECK(!indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%s%s", big, big));
     CHECK(c.overflow);
     CHECK(c.count == 0);
 }
@@ -3707,6 +3730,10 @@ test_wrap(void)
     /* Never split inside a multi-byte character. */
     n = indigo_wrap("\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9", 3, l, 6, &cut);
     CHECK(n == 2 && l[0].len == 6 && l[1].len == 2);
+
+    /* The ASCII fast path and the decoder must agree where they meet. */
+    n = indigo_wrap("ab \xE6\x97\xA5 cd", 5, l, 6, &cut);
+    CHECK(n == 2 && l[0].len == 6 && l[1].start == 7);
 
     CHECK(indigo_wrap("", 10, l, 6, &cut) == 0);
     CHECK(indigo_wrap("x", 0, l, 6, &cut) == 0);
