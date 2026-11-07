@@ -203,7 +203,7 @@ draw_post_link(indigo_canvas *c, const indigo_post *p)
     /* A two-line title leaves no room for the URI inside the card: drop it rather
      * than draw it across the card's bottom edge. */
     if (y + 12.0f <= EMBED_Y + EMBED_H) {
-        indigo_canvas_text(c, text_x, y, 0.55f, COL_TEXT_DIM, "%.38s", p->embed_uri);
+        indigo_layout_text_fitted(c, text_x, y, 0.55f, COL_TEXT_DIM, text_w, p->embed_uri);
     }
     if (p->embed_thumb[0]) {
         indigo_canvas_image(c, EMBED_X + EMBED_W - (float) (CARD_INSET + CARD_THUMB),
@@ -264,8 +264,8 @@ indigo_layout_draw_post_body(indigo_canvas *c, const indigo_post *p, bool show_a
         return;
     }
     if (p->embed_note[0]) {
-        indigo_canvas_text(c, POST_TEXT_X, POST_NOTE_Y, 0.55f, COL_TEXT_DIM, "%s",
-                           p->embed_note);
+        indigo_layout_text_fitted(c, POST_TEXT_X, POST_NOTE_Y, 0.55f, COL_TEXT_DIM,
+                                  364.0f, p->embed_note);
     }
 }
 
@@ -323,8 +323,9 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
      * reminder of which key reloads it, and this bar has the room the header
      * spent. */
     if (image_button_shown(app) && t->status[0]) {
-        indigo_canvas_text(c, hint_x, 12, 0.5f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%.28s", t->status);
+        indigo_layout_text_fitted(c, hint_x, 12, 0.5f,
+                                  t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                                  336.0f - hint_x, t->status);
     } else {
         indigo_canvas_text(c, hint_x, 12, 0.45f, COL_TEXT_DIM, "%s", hint);
     }
@@ -340,8 +341,9 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
                                                      : "Loading your timeline...")
                        : "No posts to show.");
         if (t->status[0]) {
-            indigo_canvas_text(c, 18, 136, 0.65f,
-                               t->status_is_error ? COL_ERROR : COL_TEXT_DIM, "%s", t->status);
+            indigo_layout_text_fitted(c, 18, 136, 0.65f,
+                                      t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                                      364.0f, t->status);
         }
         return;
     }
@@ -352,7 +354,10 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
                            : t->selected == app->thread_focus ? "The post"
                                                                : "A reply");
     } else if (p->reposted_by[0]) {
-        indigo_canvas_text(c, 18, 34, 0.55f, COL_REPOSTED, "Reposted by %s", p->reposted_by);
+        char line[INDIGO_POST_NAME_MAX + 20];
+
+        snprintf(line, sizeof line, "Reposted by %s", p->reposted_by);
+        indigo_layout_text_fitted(c, 18, 34, 0.55f, COL_REPOSTED, 364.0f, line);
     } else if (p->is_reply) {
         indigo_canvas_text(c, 18, 34, 0.55f, COL_TEXT_DIM, "Reply");
     }
@@ -360,8 +365,9 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     /* The name and handle sit beside the avatar rather than above the text:
      * the text block is a fixed five lines starting at POST_TEXT_Y, and there
      * is no room to give the header a third line. */
-    indigo_canvas_text(c, 44, 56, 0.75f, COL_TEXT, "%s", indigo_layout_author_name(p));
-    indigo_canvas_text(c, 44, 80, 0.55f, COL_TEXT_DIM, "@%s", p->handle);
+    indigo_layout_text_fitted(c, 44, 56, 0.75f, COL_TEXT, 348.0f,
+                              indigo_layout_author_name(p));
+    indigo_layout_handle_fitted(c, 44, 80, 0.55f, COL_TEXT_DIM, 348.0f, p->handle);
     indigo_layout_draw_post_body(c, p, app->settings.alt_text, app->settings.text_scale);
 
     indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
@@ -375,7 +381,8 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     if (t->loading) {
         indigo_canvas_text(c, 330, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "Loading...");
     } else if (t->status[0]) {
-        indigo_canvas_text(c, 190, 36, 0.55f, t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
-                           "%.26s", t->status);
+        indigo_layout_text_fitted(c, 190, 36, 0.55f,
+                                  t->status_is_error ? COL_ERROR : COL_TEXT_DIM,
+                                  INDIGO_TOP_WIDTH - 190.0f - 8.0f, t->status);
     }
 }

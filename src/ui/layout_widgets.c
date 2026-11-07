@@ -18,13 +18,45 @@ indigo_layout_draw_avatar(indigo_canvas *c, const char *url, float x, float y, f
     indigo_canvas_image(c, x, y, size, size, url, indigo_media_placeholder_color(url));
 }
 
+/* Draw one line inside `max_width` pixels, cutting at a UTF-8 boundary with an
+ * ellipsis that counts towards the width. A `%.Ns` in a format string counts
+ * bytes, so a CJK display name is up to three times as wide as the N it was
+ * cut to, and the cut can land halfway through a character. */
+void
+indigo_layout_text_fitted(indigo_canvas *c, float x, float y, float scale, uint32_t color,
+                          float max_width, const char *text)
+{
+    char fitted[320];
+    unsigned units =
+        max_width > 0.0f ? (unsigned) (max_width / (INDIGO_CHAR_WIDTH * scale)) : 0;
+
+    indigo_fit_text(fitted, sizeof fitted, text ? text : "", units);
+    if (fitted[0]) {
+        indigo_canvas_text(c, x, y, scale, color, "%s", fitted);
+    }
+}
+
+/* A handle with its @, fitted the same way. */
+void
+indigo_layout_handle_fitted(indigo_canvas *c, float x, float y, float scale, uint32_t color,
+                            float max_width, const char *handle)
+{
+    char shown[INDIGO_HANDLE_MAX + 2];
+
+    snprintf(shown, sizeof shown, "@%s", handle ? handle : "");
+    indigo_layout_text_fitted(c, x, y, scale, color, max_width, shown);
+}
+
 void
 indigo_layout_top_title(indigo_canvas *c, const char *title, const char *hint)
 {
     indigo_canvas_rect(c, 0, 0, INDIGO_TOP_WIDTH, 32, COL_BAR);
-    indigo_canvas_text(c, 18, 8, 0.8f, COL_TEXT, "%s", title);
-    /* Starts after the longest titles and stops short of the N / M counter at x 330. */
-    indigo_canvas_text(c, 176, 12, 0.5f, COL_TEXT_DIM, "%s", hint);
+    /* The title stops before the hint at x 176, and the hint before the N / M
+     * counter at x 330. Both are fitted rather than assumed short: the search
+     * title carries a name, and a group thread's hint is the longest string
+     * any title bar holds. */
+    indigo_layout_text_fitted(c, 18, 8, 0.8f, COL_TEXT, 150.0f, title);
+    indigo_layout_text_fitted(c, 176, 12, 0.5f, COL_TEXT_DIM, 216.0f, hint);
 }
 
 /* Wrap `text` into the top screen at (x, y); returns the next free y. */

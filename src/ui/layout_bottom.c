@@ -442,7 +442,14 @@ build_bottom_menu(const indigo_app *app, indigo_canvas *c)
         }
         return;
     }
-    indigo_canvas_text(c, 14, 8, 0.75f, COL_TEXT, "%s", app->menu.title);
+    {
+        /* A facet label is the post's own text, so the title is fitted to the
+         * room the Close button leaves rather than trusted to be short. */
+        indigo_rect back = indigo_layout_button_rect(INDIGO_ACTION_BACK);
+
+        indigo_layout_text_fitted(c, 14, 8, 0.75f, COL_TEXT, back.x - 22.0f,
+                                  app->menu.title);
+    }
     indigo_layout_back_button(c, INDIGO_ACTION_BACK, "Close");
 
     snprintf(position, sizeof position, "%u of %u", app->menu.selected + 1, app->menu.count);
