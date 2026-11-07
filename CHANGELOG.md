@@ -37,6 +37,8 @@ as the release notes.
 
 ### Changed
 
+- Canvas labels that are literals, one `%s`, or the `%.*s%s` wrapped-line shape are copied directly instead of entering `vsnprintf`, and fitted labels are counted and copied in one walk instead of two. Across the 70 host snapshot fixtures, layout falls from 0.90–0.92 µs to 0.66–0.68 µs per screen (about 26%) on top of the canvas reset; this is host timing, not a 3DS frame time, and `make bench-layout` repeats it. Tests cover the direct copies, the printf fallback, truncation and the wide-character edge. ([#133](https://github.com/ewanc26/indigo/pull/133))
+
 - Layout resets the display list's counters instead of clearing all 128 commands, 24 image URLs and 4 KiB of text on both screens every frame. Across the 70 host snapshot fixtures, layout falls from 1.27–1.29 µs to 0.90–0.93 µs per screen (about 28%); this is host timing, not a 3DS frame time, and `make bench-layout` repeats it. A regression test checks that a reused canvas has no stale commands, images, spans or QR state. ([#133](https://github.com/ewanc26/indigo/pull/133))
 
 - Text is parsed into citro2d once and reused until the screen changes, instead of reparsing every label and post line each frame. The cache shares the existing 4096-glyph buffer and clears when that budget is reached, so it cannot grow without bound. The 3DS build passes; host snapshots do not exercise citro2d, so this was not timed on a console. ([#133](https://github.com/ewanc26/indigo/pull/133))

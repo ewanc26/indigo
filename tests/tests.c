@@ -351,6 +351,25 @@ test_canvas_basics(void)
 }
 
 static void
+test_canvas_text_fast_paths(void)
+{
+    indigo_canvas c;
+
+    indigo_canvas_init(&c, 100, 50);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "literal"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[0]), "literal") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "A  %s", "label"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[1]), "A  label") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "pre %s post", "mid"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[2]), "pre mid post") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "%.*s%s", 3, "abcdef", "!"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[3]), "abc!") == 0);
+    CHECK(indigo_canvas_text(&c, 0, 0, 1.0f, 0, "100%% done"));
+    CHECK(strcmp(indigo_canvas_cmd_text(&c, &c.cmds[4]), "100% done") == 0);
+    CHECK(c.count == 5);
+}
+
+static void
 test_canvas_reinit_resets_state(void)
 {
     indigo_canvas c;
@@ -3727,6 +3746,13 @@ test_fit_text(void)
 
         indigo_fit_text(tiny, sizeof tiny, "abcdef", 4);
         CHECK(strcmp(tiny, "a...") == 0);
+
+        /* A character that does not fit ends the prefix; a later narrow one
+         * must not jump the gap left by a wide one. */
+        char narrow[4];
+
+        indigo_fit_text(narrow, sizeof narrow, "a\xE6\x97\xA5" "b", 10);
+        CHECK(strcmp(narrow, "a") == 0);
     }
 }
 
@@ -8142,6 +8168,7 @@ int
 main(void)
 {
     test_canvas_basics();
+    test_canvas_text_fast_paths();
     test_canvas_reinit_resets_state();
     test_chat_inbox_counterpart();
     test_chat_requests_label();
