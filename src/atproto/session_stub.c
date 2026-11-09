@@ -525,6 +525,49 @@ indigo_session_submit_feeds(void)
 }
 
 bool
+indigo_session_submit_feed_discovery(const char *cursor)
+{
+    (void) cursor;
+    return false;
+}
+
+bool
+indigo_session_submit_feed_generator(const char *feed_uri)
+{
+    (void) feed_uri;
+    return false;
+}
+
+bool
+indigo_session_submit_saved_feeds_v2(void)
+{
+    return false;
+}
+
+bool
+indigo_session_submit_save_feed(const char *feed_uri, bool pinned)
+{
+    (void) feed_uri;
+    (void) pinned;
+    return false;
+}
+
+bool
+indigo_session_submit_remove_feed(const char *feed_uri)
+{
+    (void) feed_uri;
+    return false;
+}
+
+bool
+indigo_session_submit_pin_feed(const char *feed_uri, bool pinned)
+{
+    (void) feed_uri;
+    (void) pinned;
+    return false;
+}
+
+bool
 indigo_session_submit_mutes(const char *cursor)
 {
     (void) cursor;
@@ -598,6 +641,34 @@ bool
 indigo_session_has_saved(void)
 {
     return false;
+}
+
+/* Feed discovery and management accessors */
+const indigo_feed_discovery_page *
+indigo_session_feed_discovery_results(void)
+{
+    static indigo_feed_discovery_page empty = {0};
+    return &empty;
+}
+
+const indigo_feed_generator *
+indigo_session_feed_generator_result(void)
+{
+    static indigo_feed_generator empty = {0};
+    return &empty;
+}
+
+bool
+indigo_session_feed_generator_valid(void)
+{
+    return false;
+}
+
+const indigo_saved_feeds_v2 *
+indigo_session_saved_feeds_v2_results(void)
+{
+    static indigo_saved_feeds_v2 empty = {0};
+    return &empty;
 }
 
 #endif /* no 3DS, no Wolfram, and not the host end-to-end build */

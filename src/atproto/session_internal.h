@@ -21,6 +21,7 @@
 #include "media/cdn_url.h"
 
 #include "atproto/atproto.h"
+#include "atproto/feeds.h"
 #include "atproto/prefs.h"
 
 #include "store/session_store.h"
@@ -45,6 +46,7 @@
 #include <wolfram/bookmark_typed.h>
 #include <wolfram/chat_group.h>
 #include <wolfram/feed_gen_typed.h>
+#include <wolfram/feedgen_typed.h>
 #include <wolfram/graph_social_typed.h>
 #include <wolfram/graph_write.h>
 #include <wolfram/identity_typed.h>
@@ -58,6 +60,7 @@
 #include <wolfram/profile_tab.h>
 #include <wolfram/saved_feeds.h>
 #include <wolfram/thread_typed.h>
+#include <wolfram/unspecced_trends_typed.h>
 #include <wolfram/threadgate_postgate.h>
 #include <wolfram/time.h>
 
@@ -110,6 +113,12 @@ typedef enum {
     JOB_STARTER_PACK,
     JOB_FEEDS,
     JOB_FEED,
+    JOB_FEED_DISCOVERY,
+    JOB_FEED_GENERATOR,
+    JOB_SAVED_FEEDS_V2,
+    JOB_SAVE_FEED,
+    JOB_REMOVE_FEED,
+    JOB_PIN_FEED,
     JOB_MUTES,
     JOB_BLOCKS,
 } indigo_job_kind;
@@ -343,6 +352,14 @@ void indigo_session_do_list_write(const indigo_job *j);
 void indigo_session_do_starter_pack(const indigo_job *j);
 void indigo_session_do_lists(const indigo_job *j);
 void indigo_session_do_moderation_list(const indigo_job *j);
+
+/* session_feeds.c */
+void indigo_session_do_feed_discovery(const indigo_job *j);
+void indigo_session_do_feed_generator(const indigo_job *j);
+void indigo_session_do_saved_feeds_v2(const indigo_job *j);
+void indigo_session_do_save_feed(const indigo_job *j);
+void indigo_session_do_remove_feed(const indigo_job *j);
+void indigo_session_do_pin_feed(const indigo_job *j);
 
 /* session_write.c */
 void indigo_session_do_publish(const indigo_job *j);

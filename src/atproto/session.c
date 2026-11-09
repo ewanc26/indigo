@@ -195,6 +195,24 @@ worker(void *arg)
         case JOB_FEED:
             indigo_session_do_feed(&j);
             break;
+        case JOB_FEED_DISCOVERY:
+            indigo_session_do_feed_discovery(&j);
+            break;
+        case JOB_FEED_GENERATOR:
+            indigo_session_do_feed_generator(&j);
+            break;
+        case JOB_SAVED_FEEDS_V2:
+            indigo_session_do_saved_feeds_v2(&j);
+            break;
+        case JOB_SAVE_FEED:
+            indigo_session_do_save_feed(&j);
+            break;
+        case JOB_REMOVE_FEED:
+            indigo_session_do_remove_feed(&j);
+            break;
+        case JOB_PIN_FEED:
+            indigo_session_do_pin_feed(&j);
+            break;
         case JOB_MUTES:
         case JOB_BLOCKS:
             indigo_session_do_moderation_list(&j);
