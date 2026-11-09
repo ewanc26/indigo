@@ -6,6 +6,7 @@
 #include "atproto/chat.h"
 #include "app/timeline.h"
 #include "atproto/errors.h"
+#include "atproto/feeds.h"
 
 #include <stdbool.h>
 
@@ -83,6 +84,19 @@ typedef enum {
     INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED,
     INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE,
     INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED,
+    /* Feed discovery and management */
+    INDIGO_SESSION_EVENT_FEED_DISCOVERY_PAGE,
+    INDIGO_SESSION_EVENT_FEED_DISCOVERY_FAILED,
+    INDIGO_SESSION_EVENT_FEED_GENERATOR_PAGE,
+    INDIGO_SESSION_EVENT_FEED_GENERATOR_FAILED,
+    INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_PAGE,
+    INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_FAILED,
+    INDIGO_SESSION_EVENT_SAVE_FEED_DONE,
+    INDIGO_SESSION_EVENT_SAVE_FEED_FAILED,
+    INDIGO_SESSION_EVENT_REMOVE_FEED_DONE,
+    INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED,
+    INDIGO_SESSION_EVENT_PIN_FEED_DONE,
+    INDIGO_SESSION_EVENT_PIN_FEED_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -101,6 +115,8 @@ typedef enum {
     INDIGO_POST_ACTION_REPOST,
     INDIGO_POST_ACTION_UNREPOST,
 } indigo_post_action;
+
+
 
 /* Posts fetched per timeline request. */
 #define INDIGO_PAGE_SIZE 15
@@ -218,7 +234,7 @@ bool indigo_session_submit_chat_requests(void);
 /* The next page of requests, from the cursor the last page reported. False when
  * there is no cursor to continue from. */
 bool indigo_session_submit_chat_requests_more(const char *cursor);
-const indigo_chat_inbox *indigo_session_chat_requests(void);
+const indigo_chat_join_requests *indigo_session_chat_requests(void);
 
 /* Fetch the newest messages of one conversation. Read them with
  * indigo_session_chat_thread once CHAT_THREAD_PAGE arrives. */
@@ -341,6 +357,13 @@ void indigo_session_post_search_results(const indigo_post **posts, unsigned *cou
 /* The account's curated lists. A list is a third result type, so it has its
  * own array and its own event rather than sharing the actor search's. */
 void indigo_session_lists_results(const indigo_list **lists, unsigned *count);
+void indigo_session_lists(const indigo_list **lists, unsigned *count);
+void indigo_session_feeds(const indigo_list **feeds, unsigned *count);
+void indigo_session_starter_pack_results(const indigo_starter_pack **pack, const indigo_actor **actors, unsigned *count);
+const char *indigo_session_chat_started(void);
+const indigo_chat_join_requests *indigo_session_chat_join_requests(void);
+const indigo_feed_generator *indigo_session_feed_generator(void);
+const indigo_saved_feeds_v2 *indigo_session_saved_feeds_v2(void);
 /* The account's saved feeds, and one feed's posts. The feeds are list-shaped
  * (a name with a URI to open), so they share the lists' result type but have
  * their own array and event; the feed posts reuse the timeline's, because
@@ -353,6 +376,20 @@ bool indigo_session_submit_mutes(const char *cursor);
 bool indigo_session_submit_blocks(const char *cursor);
 bool indigo_session_submit_feed(const char *feed_uri, const char *cursor);
 void indigo_session_feeds_results(const indigo_list **feeds, unsigned *count);
+
+/* Feed discovery and management (issue #115). */
+bool indigo_session_submit_feed_discovery(const char *cursor);
+bool indigo_session_submit_feed_generator(const char *feed_uri);
+bool indigo_session_submit_saved_feeds_v2(void);
+bool indigo_session_submit_save_feed(const char *feed_uri, bool pinned);
+bool indigo_session_submit_remove_feed(const char *feed_uri);
+bool indigo_session_submit_pin_feed(const char *feed_uri, bool pinned);
+
+/* Feed discovery and management accessors. */
+const indigo_feed_discovery_page *indigo_session_feed_discovery_results(void);
+const indigo_feed_generator *indigo_session_feed_generator_result(void);
+bool indigo_session_feed_generator_valid(void);
+const indigo_saved_feeds_v2 *indigo_session_saved_feeds_v2_results(void);
 /* Fetch one person's followers or following. Reuses the actor search's result
  * array and its events, because the result type is the same. Same cursor rule
  * as search. */
