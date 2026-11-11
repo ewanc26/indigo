@@ -8,6 +8,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-11
+
 ### Fixed
 
 - Build fixes: added missing types, function declarations, and struct members in app.h and related files. ([#135](https://github.com/ewanc26/indigo/pull/135))
