@@ -23,6 +23,9 @@ indigo_search_clear(indigo_search *s)
     s->searched = false;
     s->list_editing = false;
     s->list_remove_confirm = -1;
+    s->has_open_generator = false;
+    s->feed_remove_confirm = -1;
+    s->feed_detail_back = INDIGO_SEARCH_FEED_DISCOVERY;
     s->cursor[0] = '\0';
     s->has_more = false;
     s->status[0] = '\0';
@@ -223,6 +226,11 @@ indigo_search_title(const indigo_search *s)
         return "Reposted by";
     case INDIGO_SEARCH_STARTER_PACK:
         return s->pack.name[0] ? s->pack.name : "Starter pack";
+    case INDIGO_SEARCH_FEED_DISCOVERY:
+        return "Discover feeds";
+    case INDIGO_SEARCH_FEED_DETAIL:
+        return s->has_open_generator && s->open_generator.display_name[0]
+                   ? s->open_generator.display_name : "Feed";
     case INDIGO_SEARCH_PEOPLE:
         break;
     }
@@ -304,4 +312,25 @@ indigo_search_row_list(const indigo_search *s, unsigned row, unsigned rows)
         return NULL;
     }
     return &s->results.lists[index];
+}
+
+const indigo_feed_generator *
+indigo_search_selected_generator(const indigo_search *s)
+{
+    if (s->kind != INDIGO_SEARCH_FEED_DISCOVERY || s->selected >= s->count) {
+        return NULL;
+    }
+    return &s->generators[s->selected];
+}
+
+const indigo_feed_generator *
+indigo_search_row_generator(const indigo_search *s, unsigned row, unsigned rows)
+{
+    unsigned index = s->scroll + row;
+
+    if (s->kind != INDIGO_SEARCH_FEED_DISCOVERY || row >= rows ||
+        index >= s->count) {
+        return NULL;
+    }
+    return &s->generators[index];
 }

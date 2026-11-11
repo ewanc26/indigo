@@ -155,6 +155,12 @@ typedef enum {
     INDIGO_REQUEST_SAVE_SETTINGS,
     INDIGO_REQUEST_UPDATE_CHECK,
     INDIGO_REQUEST_UPDATE_INSTALL,
+    INDIGO_REQUEST_FEED_DISCOVERY,
+    INDIGO_REQUEST_FEED_GENERATOR,
+    INDIGO_REQUEST_SAVED_FEEDS_V2,
+    INDIGO_REQUEST_SAVE_FEED,
+    INDIGO_REQUEST_REMOVE_FEED,
+    INDIGO_REQUEST_PIN_FEED,
 } indigo_request_kind;
 
 typedef struct {
@@ -256,6 +262,8 @@ typedef struct {
      * timeline title. */
     char request_feed_uri[INDIGO_POST_URI_MAX];
     char request_feed_name[INDIGO_POST_NAME_MAX];
+    /* The pinned flag INDIGO_REQUEST_SAVE_FEED / PIN_FEED is asking for. */
+    bool request_feed_pinned;
     /* The feed the home screen is showing, empty for the plain Following
      * timeline. Outlives the request, so the title and Back survive paging. */
     char feed_uri[INDIGO_POST_URI_MAX];
@@ -276,6 +284,9 @@ typedef struct {
     char search_query[INDIGO_SEARCH_QUERY_MAX];
     indigo_search_kind search_kind;
     indigo_search search;
+    /* The account's v2 saved feeds (pinned flags), refreshed after every
+     * feed mutation. */
+    indigo_saved_feeds_v2 saved_feeds_v2;
     /* The compose screen. */
     indigo_compose compose;
     /* The timeline. */
@@ -461,6 +472,11 @@ bool indigo_app_queue_publish_failed(indigo_app *app, const char *message);
 void indigo_app_open_starter_pack(indigo_app *app, const char *uri);
 void indigo_app_open_lists(indigo_app *app);
 void indigo_app_open_feeds(indigo_app *app);
+void indigo_app_open_feed_discovery(indigo_app *app);
+void indigo_app_open_feed_detail(indigo_app *app, const char *feed_uri,
+                                 indigo_search_kind back);
+/* Saved state of a feed URI in the v2 list: -1 not saved, 0 saved, 1 pinned. */
+int indigo_app_feed_saved_state(const indigo_app *app, const char *feed_uri);
 void indigo_app_open_bookmarks(indigo_app *app);
 void indigo_app_toggle_bookmark(indigo_app *app);
 void indigo_app_open_mutes(indigo_app *app);

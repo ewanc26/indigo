@@ -56,7 +56,7 @@ An unknown pairing code (a restarted node forgets its pairings) used to be polle
 | Who liked or reposted a post | yes | implemented (`INDIGO_SEARCH_LIKED_BY`, `INDIGO_SEARCH_REPOSTED_BY`; post menu) | host and 3DS build in CI; #15 closed as already done |
 | Link-card previews | yes | implemented | host only |
 | Actor search, post search | yes | implemented, paged | host |
-| Custom feeds | yes | implemented: the account's saved feeds, one feed on Home | host |
+| Custom feeds | yes | implemented: the account's saved feeds picker on the search screen, plus discovery and management — Discover lists suggested generators, opening one shows a detail with Open/Save/Pin/Remove, and a saved feed's row opens the same detail; one feed shows on Home | host e2e covers discovery, detail, the v2 saved list and save/pin/remove round-trips; snapshots unchanged |
 | Lists and members | implemented, create/edit and members | implemented, create/edit and members | host |
 | Starter packs | read/use | implemented, read/use | host | A recognized starter-pack link in the More menu opens the pack on the search screen: metadata on top, suggested accounts and included feeds on the bottom. Members page through the pack's underlying list; a member opens their profile, a feed opens on Home, and Back returns to the post. Creating or sharing a pack is deferred. Host tests cover link normalization, row bounds and feed selection; snapshots `starter-pack` and `starter-pack-feed` cover both displays. No emulator or hardware run. |
 | Mute and block, with lists | yes | implemented | host |

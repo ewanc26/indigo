@@ -581,6 +581,203 @@ indigo_app_feeds_loaded(indigo_app *app, const indigo_list *feeds, unsigned coun
 }
 
 void
+indigo_app_open_feed_discovery(indigo_app *app)
+{
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_FEED_DISCOVERY;
+    indigo_search_begin_page(&app->search, false);
+    app->request = INDIGO_REQUEST_FEED_DISCOVERY;
+}
+
+void
+indigo_app_open_feed_detail(indigo_app *app, const char *feed_uri,
+                            indigo_search_kind back)
+{
+    if (!feed_uri || !feed_uri[0]) {
+        return;
+    }
+    app->screen = INDIGO_SCREEN_SEARCH;
+    app->search.kind = INDIGO_SEARCH_FEED_DETAIL;
+    app->search.feed_detail_back = back;
+    app->search.has_open_generator = false;
+    app->search.feed_remove_confirm = -1;
+    indigo_search_begin_page(&app->search, false);
+    indigo_copy_utf8(app->request_feed_uri, sizeof app->request_feed_uri, feed_uri);
+    indigo_copy_utf8(app->search.status, sizeof app->search.status, "Loading feed...");
+    app->search.status_is_error = false;
+    app->request = INDIGO_REQUEST_FEED_GENERATOR;
+}
+
+int
+indigo_app_feed_saved_state(const indigo_app *app, const char *feed_uri)
+{
+    if (!app || !feed_uri || !feed_uri[0]) {
+        return -1;
+    }
+    for (int i = 0; i < app->saved_feeds_v2.count; i++) {
+        if (strcmp(app->saved_feeds_v2.entries[i].uri, feed_uri) == 0) {
+            return app->saved_feeds_v2.entries[i].pinned ? 1 : 0;
+        }
+    }
+    return -1;
+}
+
+void
+indigo_app_feed_discovery_loaded(indigo_app *app,
+                                 const indigo_feed_discovery_page *page)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind != INDIGO_SEARCH_FEED_DISCOVERY || !page) {
+        return;
+    }
+    unsigned n = (unsigned) page->count;
+    if (n > INDIGO_FEED_DISCOVERY_PAGE) {
+        n = INDIGO_FEED_DISCOVERY_PAGE;
+    }
+    for (unsigned i = 0; i < n && s->count < INDIGO_SEARCH_MAX; i++) {
+        s->generators[s->count++] = page->generators[i];
+    }
+    indigo_search_finish_page(s, n, page->has_more ? page->cursor : NULL);
+    if (s->count == 0) {
+        indigo_copy_utf8(s->status, sizeof s->status, "No feeds discovered.");
+        s->status_is_error = false;
+    }
+    /* Only one request can be in flight; the pinned flags ride on this one. */
+    if (app->saved_feeds_v2.count == 0 && app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_SAVED_FEEDS_V2;
+    }
+}
+
+void
+indigo_app_feed_discovery_failed(indigo_app *app, const char *message)
+{
+    if (app->search.kind != INDIGO_SEARCH_FEED_DISCOVERY) {
+        return;
+    }
+    indigo_search_fail_page(&app->search, message);
+}
+
+void
+indigo_app_feed_generator_loaded(indigo_app *app,
+                                 const indigo_feed_generator *generator)
+{
+    indigo_search *s = &app->search;
+
+    if (!generator) {
+        return;
+    }
+    s->open_generator = *generator;
+    s->has_open_generator = true;
+    if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+        s->loading = false;
+        s->status[0] = '\0';
+        s->status_is_error = false;
+    }
+}
+
+void
+indigo_app_feed_generator_failed(indigo_app *app, const char *message)
+{
+    if (app->search.kind != INDIGO_SEARCH_FEED_DETAIL) {
+        return;
+    }
+    indigo_search_fail_page(&app->search, message);
+}
+
+void
+indigo_app_saved_feeds_loaded(indigo_app *app, const indigo_saved_feeds_v2 *feeds)
+{
+    if (feeds) {
+        app->saved_feeds_v2 = *feeds;
+    }
+    /* The picker's rows come from the v1 list; a mutation marks it stale, so
+     * ask for it again here. */
+    if (app->search.kind == INDIGO_SEARCH_FEEDS && app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_FEEDS;
+    }
+}
+
+void
+indigo_app_saved_feeds_failed(indigo_app *app, const char *message)
+{
+    if (app->search.kind == INDIGO_SEARCH_FEED_DETAIL) {
+        indigo_copy_utf8(app->search.status, sizeof app->search.status,
+                         message && message[0] ? message : "Could not load saved feeds.");
+        app->search.status_is_error = true;
+    }
+}
+
+/* A mutation finished: say so on the detail screen and refresh the saved
+ * lists (the picker refresh chains off the v2 result). */
+static void
+feed_mutation_done(indigo_app *app, const char *what)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "%s.", what);
+        indigo_copy_utf8(s->status, sizeof s->status, msg);
+        s->status_is_error = false;
+        s->feed_remove_confirm = -1;
+    }
+    if (app->request == INDIGO_REQUEST_NONE) {
+        app->request = INDIGO_REQUEST_SAVED_FEEDS_V2;
+    }
+}
+
+static void
+feed_mutation_failed(indigo_app *app, const char *message)
+{
+    indigo_search *s = &app->search;
+
+    if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+        indigo_copy_utf8(s->status, sizeof s->status,
+                         message && message[0] ? message : "That did not work.");
+        s->status_is_error = true;
+        s->feed_remove_confirm = -1;
+    }
+}
+
+void
+indigo_app_save_feed_done(indigo_app *app)
+{
+    feed_mutation_done(app, "Feed saved");
+}
+
+void
+indigo_app_save_feed_failed(indigo_app *app, const char *message)
+{
+    feed_mutation_failed(app, message);
+}
+
+void
+indigo_app_remove_feed_done(indigo_app *app)
+{
+    feed_mutation_done(app, "Feed removed");
+}
+
+void
+indigo_app_remove_feed_failed(indigo_app *app, const char *message)
+{
+    feed_mutation_failed(app, message);
+}
+
+void
+indigo_app_pin_feed_done(indigo_app *app)
+{
+    feed_mutation_done(app, "Pin updated");
+}
+
+void
+indigo_app_pin_feed_failed(indigo_app *app, const char *message)
+{
+    feed_mutation_failed(app, message);
+}
+
+void
 indigo_app_open_list_members(indigo_app *app, const char *list_uri, const char *name)
 {
     indigo_search *s = &app->search;

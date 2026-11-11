@@ -377,6 +377,17 @@ open_search_selection(indigo_app *app)
         if (f) {
             indigo_app_open_feed(app, f->uri, f->name);
         }
+    } else if (s->kind == INDIGO_SEARCH_FEED_DISCOVERY) {
+        const indigo_feed_generator *g = indigo_search_selected_generator(s);
+
+        if (g) {
+            indigo_app_open_feed_detail(app, g->uri, INDIGO_SEARCH_FEED_DISCOVERY);
+        }
+    } else if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+        if (s->has_open_generator) {
+            indigo_app_open_feed(app, s->open_generator.uri,
+                                 s->open_generator.display_name);
+        }
     } else if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
         const char *feed = indigo_search_selected_feed(s);
 
@@ -515,6 +526,20 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
             s->list_status[0] = '\0';
             return;
         }
+        if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+            if (s->feed_remove_confirm >= 0) {
+                s->feed_remove_confirm = -1;
+                s->status[0] = '\0';
+                return;
+            }
+            /* Back from the detail returns to the list it was opened from. */
+            s->kind = s->feed_detail_back;
+            indigo_search_begin_page(s, false);
+            if (s->kind == INDIGO_SEARCH_FEEDS) {
+                app->request = INDIGO_REQUEST_FEEDS;
+            }
+            return;
+        }
         indigo_app_go_back(app);
         return;
     }
@@ -535,6 +560,68 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
         }
         if (input->repost) {
             remove_list_member(app);
+            return;
+        }
+    }
+    if (s->kind == INDIGO_SEARCH_FEEDS) {
+        /* Manage the selected saved feed, or browse suggested feeds. */
+        if (input->like && app->request == INDIGO_REQUEST_NONE) {
+            const indigo_list *f = indigo_search_selected_list(s);
+            if (f) {
+                indigo_app_open_feed_detail(app, f->uri, INDIGO_SEARCH_FEEDS);
+            }
+            return;
+        }
+        if (input->repost && app->request == INDIGO_REQUEST_NONE) {
+            indigo_app_open_feed_discovery(app);
+            return;
+        }
+    }
+    if (s->kind == INDIGO_SEARCH_FEED_DETAIL && app->request == INDIGO_REQUEST_NONE) {
+        const char *uri = app->request_feed_uri;
+        const int saved = indigo_app_feed_saved_state(app, uri);
+
+        if (input->like) {
+            if (saved >= 0) {
+                indigo_copy_utf8(s->status, sizeof s->status, "Already in your feeds.");
+                s->status_is_error = false;
+            } else {
+                app->request_feed_pinned = false;
+                app->request = INDIGO_REQUEST_SAVE_FEED;
+                indigo_copy_utf8(s->status, sizeof s->status, "Saving feed...");
+                s->status_is_error = false;
+            }
+            return;
+        }
+        if (input->zr) {
+            if (saved < 0) {
+                indigo_copy_utf8(s->status, sizeof s->status,
+                                 "Save the feed before pinning it.");
+                s->status_is_error = true;
+            } else {
+                app->request_feed_pinned = saved != 1;
+                app->request = INDIGO_REQUEST_PIN_FEED;
+                indigo_copy_utf8(s->status, sizeof s->status,
+                                 saved == 1 ? "Unpinning..." : "Pinning...");
+                s->status_is_error = false;
+            }
+            return;
+        }
+        if (input->repost) {
+            if (saved < 0) {
+                indigo_copy_utf8(s->status, sizeof s->status, "That feed is not saved.");
+                s->status_is_error = true;
+            } else if (s->feed_remove_confirm == 1) {
+                s->feed_remove_confirm = -1;
+                app->request = INDIGO_REQUEST_REMOVE_FEED;
+                indigo_copy_utf8(s->status, sizeof s->status, "Removing feed...");
+                s->status_is_error = false;
+            } else {
+                s->feed_remove_confirm = 1;
+                indigo_copy_utf8(s->status, sizeof s->status,
+                                 "Press again to remove this feed.");
+                s->status_is_error = true;
+            }
             return;
         }
     }
@@ -599,6 +686,37 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
                 remove_list_member(app);
             }
             break;
+        case INDIGO_ACTION_FEED_DISCOVER:
+            if (s->kind == INDIGO_SEARCH_FEEDS &&
+                app->request == INDIGO_REQUEST_NONE) {
+                indigo_app_open_feed_discovery(app);
+            }
+            break;
+        case INDIGO_ACTION_FEED_SAVE:
+            if (s->kind == INDIGO_SEARCH_FEED_DETAIL &&
+                app->request == INDIGO_REQUEST_NONE &&
+                indigo_app_feed_saved_state(app, app->request_feed_uri) < 0) {
+                app->request_feed_pinned = false;
+                app->request = INDIGO_REQUEST_SAVE_FEED;
+            }
+            break;
+        case INDIGO_ACTION_FEED_PIN:
+            if (s->kind == INDIGO_SEARCH_FEED_DETAIL &&
+                app->request == INDIGO_REQUEST_NONE) {
+                const int saved = indigo_app_feed_saved_state(app, app->request_feed_uri);
+                if (saved >= 0) {
+                    app->request_feed_pinned = saved != 1;
+                    app->request = INDIGO_REQUEST_PIN_FEED;
+                }
+            }
+            break;
+        case INDIGO_ACTION_FEED_REMOVE:
+            if (s->kind == INDIGO_SEARCH_FEED_DETAIL &&
+                app->request == INDIGO_REQUEST_NONE &&
+                indigo_app_feed_saved_state(app, app->request_feed_uri) >= 0) {
+                app->request = INDIGO_REQUEST_REMOVE_FEED;
+            }
+            break;
         case INDIGO_ACTION_IMAGE:
             /* Only a post result has an image, and opening one from an actor
              * row is a no-op, so a tap that lands on a button which is not
@@ -648,6 +766,9 @@ indigo_app_update_search(indigo_app *app, const indigo_input *input)
             break;
         case INDIGO_SEARCH_BLOCKED:
             request = INDIGO_REQUEST_BLOCKS;
+            break;
+        case INDIGO_SEARCH_FEED_DISCOVERY:
+            request = INDIGO_REQUEST_FEED_DISCOVERY;
             break;
         case INDIGO_SEARCH_FEEDS:
         default:
