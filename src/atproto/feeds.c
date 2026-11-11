@@ -63,6 +63,7 @@ copy_generator_from_agent(indigo_feed_generator *out, const wf_agent_generator_v
 void
 indigo_session_do_feed_discovery(const indigo_job *j)
 {
+    (void) j;
     indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_FEED_DISCOVERY_FAILED};
 
     INDIGO_SESSION_AGENT_GUARD(ev);

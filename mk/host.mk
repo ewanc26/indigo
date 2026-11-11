@@ -53,7 +53,7 @@ HOST_WOLFRAM_LIB := $(firstword $(wildcard \
 HOST_E2E_SESSION_SRCS := src/atproto/session.c src/atproto/session_auth.c \
                          src/atproto/session_read.c src/atproto/session_view.c \
                          src/atproto/session_people.c src/atproto/session_lists.c \
-                         src/atproto/session_write.c
+                         src/atproto/session_write.c src/atproto/feeds.c
 HOST_E2E_SRCS := tests/e2e_main.c tests/e2e/mock_pds.c tests/e2e/host_platform.c \
                  $(HOST_SRCS) $(HOST_E2E_SESSION_SRCS)
 # glibc hides usleep/nanosleep under -std=c11 unless a POSIX feature level is
