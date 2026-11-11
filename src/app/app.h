@@ -409,6 +409,7 @@ indigo_store_status indigo_timeline_cache_load(indigo_timeline_cache *cache, con
 void indigo_app_set_draft(indigo_app *app, const char *text);
 void indigo_app_queue_append(indigo_app *app, const char *text);
 void indigo_app_drafts_append(indigo_app *app, const char *text);
+void indigo_app_update_drafts(indigo_app *app, const indigo_input *input);
 indigo_store_status indigo_draft_load(indigo_draft *draft, const char *path);
 indigo_store_status indigo_post_queue_load(indigo_post_queue *queue, const char *path);
 indigo_store_status indigo_drafts_load(indigo_drafts *drafts, const char *path);
@@ -435,13 +436,6 @@ void indigo_media_shutdown(void);
 void indigo_ui_render(indigo_canvas *canvas);
 void indigo_canvas_reset(indigo_canvas *canvas);
 void indigo_canvas_init(indigo_canvas *canvas, int width, int height);
-
-/* Build info */
-const char *indigo_build_commit(void);
-const char *indigo_build_date(void);
-
-/* Action functions */
-void action_undone(indigo_app *app, indigo_post_action action, const char *post_uri, const char *undo_uri);
 
 /* Post functions */
 bool indigo_app_open_image(indigo_app *app);
@@ -798,5 +792,101 @@ void indigo_app_set_undo_record(indigo_app *app, const char *post_uri, const cha
 
 /* Action undone. */
 void indigo_app_action_undone(indigo_app *app, const char *verb, const char *post_uri);
+
+
+/* Session, request and result entry points (platform glue and main.c). */
+/* Results fed back by the platform glue. */
+void indigo_app_begin_sign_in(indigo_app *app, const char *status);
+
+void indigo_app_chat_group_done(indigo_app *app);
+
+void indigo_app_chat_group_failed(indigo_app *app, const char *message);
+
+void indigo_app_chat_join_decision_done(indigo_app *app, bool approved);
+
+void indigo_app_chat_join_decision_failed(indigo_app *app, const char *message);
+
+void indigo_app_chat_request_done(indigo_app *app, bool accepted);
+
+void indigo_app_chat_request_failed(indigo_app *app, const char *message);
+
+void indigo_app_delete_done(indigo_app *app, const char *post_uri);
+
+void indigo_app_delete_failed(indigo_app *app, const char *message);
+
+void indigo_app_group_failed(indigo_app *app, const char *message);
+
+void indigo_app_group_loaded(indigo_app *app, const indigo_chat_group *src);
+
+void indigo_app_join_requests_failed(indigo_app *app, const char *message);
+
+void indigo_app_join_requests_loaded(indigo_app *app,
+                                     const indigo_chat_join_requests *src);
+
+/* Validates the working copy and leaves it ready for main.c to submit. */
+bool indigo_app_list_save(indigo_app *app);
+
+void indigo_app_list_set_add_subject(indigo_app *app, const char *text);
+
+void indigo_app_list_set_description(indigo_app *app, const char *text);
+
+void indigo_app_list_set_name(indigo_app *app, const char *text);
+
+void indigo_app_messages_failed(indigo_app *app, const char *message);
+
+void indigo_app_messages_loaded(indigo_app *app, const indigo_chat_inbox *src);
+
+void indigo_app_open_join_requests(indigo_app *app);
+
+void indigo_app_open_requests(indigo_app *app);
+
+/* The pending request without consuming it. */
+indigo_request_kind indigo_app_peek_request(const indigo_app *app);
+
+void indigo_app_persist_queue(indigo_app *app);
+
+bool indigo_app_profile_edit_valid(const char *display_name, const char *bio);
+
+void indigo_app_publish_done(indigo_app *app);
+
+void indigo_app_publish_partial(indigo_app *app, const char *message);
+
+void indigo_app_queue_send(indigo_app *app, unsigned index);
+
+void indigo_app_requests_failed(indigo_app *app, const char *message);
+
+void indigo_app_requests_loaded(indigo_app *app, const indigo_chat_inbox *src);
+
+void indigo_app_set_chat_group_members(indigo_app *app, const char *text);
+
+void indigo_app_set_chat_group_name(indigo_app *app, const char *text);
+
+/* Starting a conversation, and settling message requests and join requests.
+ * The failure paths take the event's own message when it has one, because the
+ * server's refusal (an unknown handle, your own account) is more useful than
+ * a generic wording. */
+void indigo_app_set_chat_target(indigo_app *app, const char *text);
+
+/* Store text the person entered; a rejected entry becomes a status message. */
+bool indigo_app_set_field(indigo_app *app, indigo_field f, const char *text);
+
+/* The alt text for the attached image came back from the keyboard. */
+void indigo_app_set_image_alt(indigo_app *app, const char *text);
+
+void indigo_app_set_profile_bio(indigo_app *app, const char *text);
+
+void indigo_app_set_profile_name(indigo_app *app, const char *text);
+
+/* The search query came back from the keyboard. */
+void indigo_app_set_query(indigo_app *app, const char *text);
+
+bool indigo_app_should_quit(const indigo_app *app);
+
+/* Start sign-in as if the button were pressed (no-op if incomplete or busy). */
+void indigo_app_submit(indigo_app *app);
+
+/* Returns the pending request once, then clears it. */
+indigo_request_kind indigo_app_take_request(indigo_app *app,
+                                            indigo_field *field);
 
 #endif

@@ -1,129 +1,742 @@
-/*
- * Indigo -- Bluesky client for Nintendo 3DS.
- *
- * Copyright (c) 2024 Ewan Croft.
- */
-
 #include "app/app.h"
-#include "app/app_internal.h"
-#include "app/credits.h"
+#include "atproto/atproto.h"
+#include "app/signin.h"
+#include "app/timeline_cache.h"
 #include "atproto/session.h"
-#include "gfx/canvas.h"
-#include "input/input.h"
-#include "media/media.h"
 #include "store/cache_store.h"
+#include "store/file.h"
+#include "input/input.h"
+#include "input/textinput.h"
 #include "store/draft_store.h"
-#include "store/drafts_store.h"
+#include "store/queue_store.h"
 #include "store/settings_store.h"
-#include "ui/layout.h"
 #include "ui/ui.h"
+#include "update/update_sd.h"
+#include "update/update_worker.h"
 #include "util/buildinfo.h"
 #include "util/log.h"
 
 #include <3ds.h>
-#include <citro2d.h>
-#include <dirent.h>
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
-#define CACHE_PATH  "sdmc:/3ds/indigo/timeline.dat"
-#define DRAFT_PATH  "sdmc:/3ds/indigo/draft.dat"
-#define DRAFTS_PATH "sdmc:/3ds/indigo/drafts.dat"
-#define QUEUE_PATH  "sdmc:/3ds/indigo/queue.dat"
-#define SETTINGS_PATH "sdmc:/3ds/indigo/settings.dat"
+#ifndef INDIGO_WOLFRAM_VERSION
+#define INDIGO_WOLFRAM_VERSION "unknown" /* builds that do not pass it from the Makefile */
+#endif
+
+#define DATA_DIR "sdmc:/3ds/indigo"
+#define LOG_PATH DATA_DIR "/indigo.log"
+#define SESSION_PATH DATA_DIR "/session.dat"
+#define SETTINGS_PATH DATA_DIR "/settings.dat"
+#define DRAFT_PATH DATA_DIR "/draft.dat"
+#define CACHE_PATH DATA_DIR "/timeline.dat"
+#define UPDATE_STATE_PATH DATA_DIR "/update.state"
+#define AUTOFILL_PATH DATA_DIR "/autofill.txt"
+#define COMPOSE_AUTOFILL_PATH DATA_DIR "/compose.txt"
 
 static void
-save_timeline_cache(indigo_app *app)
+handle_edit(indigo_app *app, indigo_field f)
 {
-    indigo_store_status st;
-    indigo_timeline_cache cache;
-    unsigned n = 0;
-    const indigo_post *posts = indigo_timeline_posts(&app->timeline, &n);
+    char text[INDIGO_SERVICE_MAX];
+    const char *current = f == INDIGO_FIELD_PASSWORD ? NULL : indigo_signin_field_value(&app->signin, f);
+    indigo_text_result r;
 
-    if (!posts || n == 0) {
+    indigo_log_info("keyboard opened for field: %s", indigo_signin_field_label(f));
+    r = indigo_text_edit(indigo_signin_field_label(f), current, f == INDIGO_FIELD_PASSWORD,
+                         text, f == INDIGO_FIELD_PASSWORD ? INDIGO_PASSWORD_MAX : sizeof text);
+    indigo_log_info("keyboard closed: %s", r == INDIGO_TEXT_OK ? "entered" : "cancelled");
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_field(app, f, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+/* Undo the optimistic "busy" mark when an action did not happen. */
+static void
+action_undone(indigo_app *app, indigo_post_action action, const char *post_uri,
+              const char *undo_uri)
+{
+    switch (action) {
+    case INDIGO_POST_ACTION_LIKE:
+        indigo_app_set_like(app, post_uri, "", false);
+        break;
+    case INDIGO_POST_ACTION_UNLIKE:
+        indigo_app_set_like(app, post_uri, undo_uri, false);
+        break;
+    case INDIGO_POST_ACTION_REPOST:
+        indigo_app_set_repost(app, post_uri, "", false);
+        break;
+    case INDIGO_POST_ACTION_UNREPOST:
+        indigo_app_set_repost(app, post_uri, undo_uri, false);
+        break;
+    case INDIGO_POST_ACTION_NONE:
+        break;
+    }
+}
+
+static void
+post_action(indigo_app *app, indigo_post_action action)
+{
+    if (!indigo_session_submit_post_action(action, app->request_post_uri,
+                                           app->request_post_cid, app->request_undo_uri)) {
+        action_undone(app, action, app->request_post_uri, app->request_undo_uri);
+    }
+}
+
+static void
+handle_edit_draft(indigo_app *app)
+{
+    char text[INDIGO_DRAFT_MAX];
+    indigo_text_result r;
+
+#ifdef INDIGO_DEV_AUTOFILL
+    /* Emulator aid only: the software keyboard cannot be driven there. */
+    FILE *af = fopen(COMPOSE_AUTOFILL_PATH, "rb");
+
+    if (af) {
+        size_t n = fread(text, 1, sizeof text - 1, af);
+
+        fclose(af);
+        text[n] = '\0';
+        while (n && (text[n - 1] == '\n' || text[n - 1] == '\r')) {
+            text[--n] = '\0';
+        }
+        remove(COMPOSE_AUTOFILL_PATH);
+        indigo_app_set_draft(app, text);
         return;
     }
+#endif
 
-    memset(&cache, 0, sizeof(cache));
-    for (unsigned i = 0; i < n && i < INDIGO_TIMELINE_CACHE_MAX; i++) {
-        if (indigo_timeline_cache_append(&cache, &posts[i])) {
-            n = i + 1;
+    r = indigo_text_edit("What's on your mind?", app->compose.text, false, text, sizeof text);
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_draft(app, text);
+    }
+}
+
+static void
+start_publish(indigo_app *app)
+{
+    const indigo_compose *c = &app->compose;
+
+    bool started;
+
+    if (c->thread_count > 0) {
+        const char *texts[INDIGO_THREAD_POSTS_MAX];
+        int count = indigo_compose_thread_texts(c, texts);
+        started = count >= 2 && indigo_session_submit_publish_thread(texts, (unsigned) count,
+                                                                      (int) c->reply_gate);
+    } else {
+        started = indigo_session_submit_publish(c->mode, c->text,
+                                                c->has_target ? c->target.uri : "",
+                                                c->has_target ? c->target.cid : "", c->root_uri,
+                                                c->root_cid, (int) c->reply_gate, c->image,
+                                                c->image_alt);
+    }
+    if (!started) {
+        indigo_app_publish_failed(app, "Could not start posting.");
+    }
+}
+
+/* Alt text for the picture just chosen. Cancelling leaves it empty: alt text is
+ * encouraged here, not required, and a post is not held up for it. */
+static void
+handle_edit_profile_name(indigo_app *app)
+{
+    char text[INDIGO_POST_NAME_MAX];
+
+    if (indigo_text_edit("Display name", app->profile_edit.display_name, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_profile_name(app, text);
+    }
+}
+
+static void
+handle_edit_profile_bio(indigo_app *app)
+{
+    char text[INDIGO_PROFILE_BIO_MAX];
+
+    if (indigo_text_edit("Bio", app->profile_edit.bio, false, text, sizeof text) ==
+        INDIGO_TEXT_OK) {
+        indigo_app_set_profile_bio(app, text);
+    }
+}
+
+static void
+handle_edit_list_name(indigo_app *app)
+{
+    char text[INDIGO_POST_NAME_MAX];
+
+    if (indigo_text_edit("List name", app->search.edit_name, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_name(app, text);
+    }
+}
+
+static void
+handle_edit_list_description(indigo_app *app)
+{
+    char text[INDIGO_POST_NOTE_MAX];
+
+    if (indigo_text_edit("List description", app->search.edit_description, false,
+                         text, sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_description(app, text);
+    }
+}
+
+static void
+handle_edit_list_subject(indigo_app *app)
+{
+    char text[INDIGO_LIST_SUBJECT_MAX];
+
+    if (indigo_text_edit("Handle or DID", app->search.add_subject, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_list_set_add_subject(app, text);
+    }
+}
+
+static void
+handle_edit_image_alt(indigo_app *app)
+{
+    char text[INDIGO_IMAGE_ALT_MAX];
+
+    if (indigo_text_edit("Describe the picture", app->compose.image_alt, false, text,
+                         sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_image_alt(app, text);
+    }
+}
+
+/* Accepting the keyboard runs the search: the prompt and the search are one
+ * action, so there is no second confirm on a list screen. */
+static void
+handle_edit_query(indigo_app *app)
+{
+    char text[INDIGO_SEARCH_QUERY_MAX];
+    indigo_text_result r = indigo_text_edit("Name or handle", app->search.query, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_query(app, text);
+    }
+}
+
+static void
+handle_edit_reply(indigo_app *app)
+{
+    char text[INDIGO_CHAT_REPLY_MAX];
+    indigo_text_result r = indigo_text_edit("Reply", app->chat_thread.reply, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_copy_utf8(app->chat_thread.reply, sizeof app->chat_thread.reply, text);
+    }
+}
+
+static void
+handle_edit_chat_group_name(indigo_app *app)
+{
+    char text[INDIGO_CHAT_GROUP_NAME_MAX];
+
+    if (indigo_text_edit("Group name", app->group_name, false, text, sizeof text) ==
+        INDIGO_TEXT_OK) {
+        indigo_app_set_chat_group_name(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
+handle_edit_chat_group_members(indigo_app *app)
+{
+    char text[INDIGO_CHAT_GROUP_MEMBERS_TEXT_MAX];
+
+    if (indigo_text_edit("Members: handles or DIDs, comma separated", app->group_members,
+                         false, text, sizeof text) == INDIGO_TEXT_OK) {
+        indigo_app_set_chat_group_members(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
+handle_edit_chat_target(indigo_app *app)
+{
+    char text[INDIGO_CHAT_TARGET_MAX];
+    indigo_text_result r = indigo_text_edit("Handle or DID", app->chat_target, false, text,
+                                            sizeof text);
+
+    if (r == INDIGO_TEXT_OK) {
+        indigo_app_set_chat_target(app, text);
+    }
+    memset(text, 0, sizeof text);
+}
+
+static void
+handle_requests(indigo_app *app)
+{
+    indigo_field f;
+    indigo_request_kind kind = indigo_app_peek_request(app);
+
+    /* Network work waits its turn: one job at a time on the worker. */
+    if (kind >= INDIGO_REQUEST_TIMELINE_REFRESH && kind != INDIGO_REQUEST_UPDATE_CHECK &&
+        kind != INDIGO_REQUEST_UPDATE_INSTALL && indigo_session_busy()) {
+        return;
+    }
+    switch (indigo_app_take_request(app, &f)) {
+    case INDIGO_REQUEST_EDIT_FIELD:
+        handle_edit(app, f);
+        break;
+    case INDIGO_REQUEST_SIGN_IN:
+        if (app->signin.password[0]) {
+            if (indigo_session_submit_login(app->signin.service, app->signin.handle,
+                                            app->signin.password)) {
+                indigo_app_begin_sign_in(app, "Signing in...");
+            }
         } else {
+            if (indigo_session_submit_oauth(app->signin.service, app->signin.handle)) {
+                indigo_app_begin_sign_in(app, "Open the pairing link on another device...");
+            }
+        }
+        break;
+    case INDIGO_REQUEST_SIGN_OUT:
+        if (indigo_session_submit_logout()) {
+            indigo_app_begin_sign_in(app, "Signing out...");
+        }
+        break;
+    case INDIGO_REQUEST_TIMELINE_REFRESH:
+        if (!indigo_session_submit_timeline(NULL)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_TIMELINE_MORE:
+        if (!indigo_session_submit_timeline(app->timeline.cursor)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BOOKMARKS:
+        if (!indigo_session_submit_bookmarks(NULL)) {
+            indigo_app_bookmarks_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BOOKMARKS_MORE:
+        if (!indigo_session_submit_bookmarks(app->bookmarks.cursor)) {
+            indigo_app_bookmarks_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BOOKMARK:
+        if (!indigo_session_submit_bookmark(app->request_post_uri, app->request_bookmark)) {
+            indigo_app_bookmark_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_LIKE:
+        post_action(app, INDIGO_POST_ACTION_LIKE);
+        break;
+    case INDIGO_REQUEST_UNLIKE:
+        post_action(app, INDIGO_POST_ACTION_UNLIKE);
+        break;
+    case INDIGO_REQUEST_REPOST:
+        post_action(app, INDIGO_POST_ACTION_REPOST);
+        break;
+    case INDIGO_REQUEST_UNREPOST:
+        post_action(app, INDIGO_POST_ACTION_UNREPOST);
+        break;
+    case INDIGO_REQUEST_THREAD:
+        if (!indigo_session_submit_thread(app->request_post_uri)) {
+            indigo_app_thread_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_PROFILE:
+        if (!indigo_session_submit_profile(app->request_post_uri)) {
+            indigo_app_profile_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_PROFILE_NAME:
+        handle_edit_profile_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_PROFILE_BIO:
+        handle_edit_profile_bio(app);
+        break;
+    case INDIGO_REQUEST_PROFILE_UPDATE:
+        if (indigo_session_submit_profile_update(app->profile_edit.display_name,
+                                                  app->profile_edit.bio)) {
+            app->profile_edit.saving = true;
+        } else {
+            indigo_app_profile_update_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_NOTIFICATIONS:
+        if (!indigo_session_submit_notifications()) {
+            indigo_app_notifications_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_NOTIFICATIONS_MORE:
+        if (!indigo_session_submit_notifications_more(app->notifications.cursor)) {
+            indigo_app_notifications_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_INBOX:
+        if (!indigo_session_submit_chat_inbox()) {
+            indigo_app_messages_failed(app, "Could not start the request.");
+        }
+        /* The count of pending requests is shown on the same screen. */
+        (void) indigo_session_submit_chat_requests();
+        break;
+    case INDIGO_REQUEST_CHAT_REQUESTS:
+        if (!indigo_session_submit_chat_requests()) {
+            indigo_app_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_REQUESTS_MORE:
+        if (!indigo_session_submit_chat_requests_more(app->requests.cursor)) {
+            indigo_app_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_REPLY:
+        handle_edit_reply(app);
+        break;
+    case INDIGO_REQUEST_CHAT_SEND:
+        if (!indigo_session_submit_chat_send(app->request_post_uri, app->chat_thread.reply)) {
+            indigo_app_chat_send_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_THREAD:
+        if (!indigo_session_submit_chat_messages(app->request_post_uri)) {
+            indigo_app_chat_thread_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_CHAT_TARGET:
+        handle_edit_chat_target(app);
+        break;
+    case INDIGO_REQUEST_CHAT_START:
+        if (!indigo_session_submit_chat_start(app->chat_target)) {
+            indigo_app_chat_start_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_ACCEPT:
+        if (!indigo_session_submit_chat_accept(app->chat_decision_id)) {
+            indigo_app_chat_request_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_DECLINE:
+        if (!indigo_session_submit_chat_decline(app->chat_decision_id)) {
+            indigo_app_chat_request_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REQUESTS:
+        if (!indigo_session_submit_chat_join_requests(app->join_requests.convo_id, false)) {
+            indigo_app_join_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REQUESTS_MORE:
+        if (!indigo_session_submit_chat_join_requests(app->join_requests.convo_id, true)) {
+            indigo_app_join_requests_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_APPROVE:
+        if (!indigo_session_submit_chat_join_approve(app->join_requests.convo_id,
+                                                     app->chat_decision_id)) {
+            indigo_app_chat_join_decision_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_REJECT:
+        if (!indigo_session_submit_chat_join_reject(app->join_requests.convo_id,
+                                                    app->chat_decision_id)) {
+            indigo_app_chat_join_decision_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_CHAT_GROUP_NAME:
+        handle_edit_chat_group_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_CHAT_GROUP_MEMBERS:
+        handle_edit_chat_group_members(app);
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_INFO:
+        if (!indigo_session_submit_chat_group_info(app->group.convo_id)) {
+            indigo_app_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_CREATE:
+        if (!indigo_session_submit_chat_group_create(app->group_name, app->group_members)) {
+            indigo_app_chat_group_create_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_RENAME:
+        if (!indigo_session_submit_chat_group_rename(app->group.convo_id, app->group_name)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_ADD:
+        if (!indigo_session_submit_chat_group_add(app->group.convo_id, app->group_members)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_GROUP_REMOVE:
+        if (app->group.selected >= app->group.count ||
+            !indigo_session_submit_chat_group_remove(
+                app->group.convo_id, app->group.members[app->group.selected].did)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_CHAT_JOIN_LINK:
+        if (app->group.join_link_code[0]) {
+            if (!indigo_session_submit_chat_join_link_toggle(app->group.convo_id,
+                                                             app->group.join_link_enabled)) {
+                indigo_app_chat_group_failed(app, "Could not start the request.");
+            }
+        } else if (!indigo_session_submit_chat_join_link_create(app->group.convo_id)) {
+            indigo_app_chat_group_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_DRAFT:
+        handle_edit_draft(app);
+        break;
+    case INDIGO_REQUEST_EDIT_IMAGE_ALT:
+        handle_edit_image_alt(app);
+        break;
+    case INDIGO_REQUEST_PUBLISH:
+        start_publish(app);
+        break;
+    case INDIGO_REQUEST_DELETE_POST:
+        if (!indigo_session_submit_delete_post(app->request_post_uri)) {
+            indigo_app_delete_failed(app, "Could not start deleting that post.");
+        }
+        break;
+    case INDIGO_REQUEST_REPORT:
+        if (!indigo_session_submit_report(app->request_report_account,
+                                          app->request_post_uri, app->request_post_cid,
+                                          app->request_report_did,
+                                          app->request_report_reason)) {
+            indigo_app_report_failed(app, "Could not start the report.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_QUERY:
+        handle_edit_query(app);
+        break;
+    case INDIGO_REQUEST_SEARCH:
+        if (!indigo_session_submit_search(app->search.query,
+                                          app->search.cursor[0] ? app->search.cursor : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_FOLLOW:
+        if (!indigo_session_submit_follow(app->request_follow ? INDIGO_FOLLOW : INDIGO_UNFOLLOW,
+                                          app->profile.did, app->profile.follow_uri)) {
+            indigo_app_follow_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_THREAD_MUTE:
+        if (!indigo_session_submit_thread_mute(app->request_post_uri,
+                                                app->request_thread_mute)) {
+            indigo_app_thread_mute_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_GRAPH:
+        if (!indigo_session_submit_graph(app->request_graph, app->profile.did,
+                                         app->profile.block_uri)) {
+            indigo_app_graph_failed(app, app->request_graph, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_PEOPLE:
+        if (!indigo_session_submit_people(app->request_people, app->request_subject,
+                                          app->search.cursor[0] ? app->search.cursor : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_POST_SEARCH:
+        if (!indigo_session_submit_post_search(app->search.query,
+                                               app->search.cursor[0] ? app->search.cursor
+                                                                      : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_AUTHOR_FEED:
+      if (!indigo_session_submit_author_feed(app->request_actor,
+                                             app->search.tab,
+                                             app->search.cursor[0] ? app->search.cursor
+                                                                    : NULL)) {
+        indigo_app_search_failed(app, "Could not start the request.");
+      }
+        break;
+    case INDIGO_REQUEST_LISTS:
+        if (!indigo_session_submit_lists(app->search.cursor[0] ? app->search.cursor : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_LIST_MEMBERS:
+        if (!indigo_session_submit_list_members(app->search.list_uri[0]
+                                                    ? app->search.list_uri
+                                                    : app->request_list_uri,
+                                                app->search.cursor[0] ? app->search.cursor
+                                                                       : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_EDIT_LIST_NAME:
+        handle_edit_list_name(app);
+        break;
+    case INDIGO_REQUEST_EDIT_LIST_DESC:
+        handle_edit_list_description(app);
+        break;
+    case INDIGO_REQUEST_EDIT_LIST_SUBJECT:
+        handle_edit_list_subject(app);
+        if (app->search.add_subject[0]) {
+            app->request = INDIGO_REQUEST_LIST_ADD;
+        }
+        break;
+    case INDIGO_REQUEST_LIST_SAVE:
+        if (indigo_app_list_save(app)) {
+            bool started = app->search.list_creating
+                               ? indigo_session_submit_list_create(
+                                     app->search.edit_name,
+                                     app->search.edit_description,
+                                     app->search.edit_purpose)
+                               : indigo_session_submit_list_update(
+                                     app->search.list_uri,
+                                     app->search.edit_name,
+                                     app->search.edit_description,
+                                     app->search.edit_purpose);
+
+            if (started) {
+                app->search.list_saving = true;
+                indigo_copy_utf8(app->search.list_status,
+                                 sizeof app->search.list_status,
+                                 "Saving list...");
+                app->search.list_status_error = false;
+            } else {
+                indigo_app_list_write_failed(app, "Could not start saving the list.");
+            }
+        }
+        break;
+    case INDIGO_REQUEST_LIST_ADD:
+        if (app->search.add_subject[0]) {
+            if (indigo_session_submit_list_add_member(app->search.list_uri,
+                                                      app->search.add_subject)) {
+                app->search.list_saving = true;
+                indigo_copy_utf8(app->search.list_status,
+                                 sizeof app->search.list_status,
+                                 "Adding account...");
+                app->search.list_status_error = false;
+            } else {
+                indigo_app_list_write_failed(app, "Could not start adding that account.");
+            }
+        }
+        break;
+    case INDIGO_REQUEST_LIST_REMOVE: {
+        const char *item_uri = indigo_session_list_member_uri(app->search.selected);
+
+        if (!item_uri[0]) {
+            indigo_app_list_write_failed(app, "That member has no removable record.");
+        } else if (indigo_session_submit_list_remove_member(item_uri)) {
+            app->search.list_saving = true;
+            indigo_copy_utf8(app->search.list_status,
+                             sizeof app->search.list_status,
+                             "Removing account...");
+            app->search.list_status_error = false;
+        } else {
+            indigo_app_list_write_failed(app, "Could not start removing that account.");
+        }
+        break;
+    }
+    case INDIGO_REQUEST_STARTER_PACK:
+        if (!indigo_session_submit_starter_pack(app->request_starter_pack_uri,
+                                                app->search.cursor[0]
+                                                    ? app->search.cursor : NULL)) {
+            indigo_app_starter_pack_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_FEEDS:
+        if (!indigo_session_submit_feeds()) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_MUTES:
+        if (!indigo_session_submit_mutes(app->search.cursor[0] ? app->search.cursor : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_BLOCKS:
+        if (!indigo_session_submit_blocks(app->search.cursor[0] ? app->search.cursor : NULL)) {
+            indigo_app_search_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_FEED:
+        if (!indigo_session_submit_feed(app->request_feed_uri,
+                                         app->timeline.cursor[0]
+                                             ? app->timeline.cursor : NULL)) {
+            indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_SAVE_SETTINGS:
+        indigo_settings_store_save(SETTINGS_PATH, &app->settings);
+        break;
+    case INDIGO_REQUEST_UPDATE_CHECK:
+        if (!indigo_update_worker_check()) {
+            indigo_updater_fail(&app->updater, "Could not start the check.");
+        }
+        break;
+    case INDIGO_REQUEST_UPDATE_INSTALL:
+        if (!indigo_update_worker_download()) {
+            indigo_updater_fail(&app->updater, "Could not start the download.");
+        }
+        break;
+    case INDIGO_REQUEST_NONE:
+        break;
+    }
+}
+
+/* Update results arrive on the main thread, and so does the swap: it needs
+ * RomFS closed, which a worker must not do. After it, the file the app was
+ * launched from is the backup, so the screen says to restart and nothing else
+ * touches the card. */
+static bool s_romfs_open = true;
+
+static void
+handle_update(indigo_app *app)
+{
+    indigo_update_event ev;
+
+    if (app->updater.state == INDIGO_UPDATER_READY) {
+        /* The frame that drew "putting it in place" came between the event and
+         * this, because the event is polled after this check. */
+        romfsExit();
+        s_romfs_open = false;
+        if (indigo_update_worker_install()) {
+            indigo_updater_installed(&app->updater);
+            indigo_log_info("update: %s is in place", app->updater.latest);
+        } else {
+            indigo_updater_fail(&app->updater,
+                                "Could not put the new build in place. The old one is untouched or "
+                                "restored the next time Indigo starts.");
+        }
+        /* RomFS stays closed either way: the trust store is gone, so the
+         * screen does no more network work this run. */
+    }
+    while (indigo_update_worker_poll(&ev)) {
+        switch (ev.kind) {
+        case INDIGO_UPDATE_EVENT_CHECKED:
+            indigo_updater_check_done(&app->updater, ev.version, ev.size, ev.is_update);
+            break;
+        case INDIGO_UPDATE_EVENT_STAGED:
+            indigo_updater_staged(&app->updater);
+            break;
+        case INDIGO_UPDATE_EVENT_FAILED:
+            indigo_updater_fail(&app->updater, ev.message);
+            break;
+        case INDIGO_UPDATE_EVENT_NONE:
             break;
         }
     }
-
-    st = indigo_timeline_cache_save(&cache, CACHE_PATH);
-    if (st != INDIGO_STORE_OK) {
-        indigo_log_warn("could not save timeline cache (%d)", st);
-    }
 }
 
+/* Keep the home timeline's rows for the next start. Called once per fresh
+ * first page, so a scroll through the rest of the timeline writes nothing. A
+ * failed write is logged and otherwise ignored: the cache is a convenience. */
 static void
-load_timeline_cache(indigo_app *app)
+save_timeline_cache(const indigo_app *app)
 {
-    indigo_store_status st;
-    indigo_timeline_cache cache;
+    static indigo_cache_timeline snapshot;
 
-    memset(&cache, 0, sizeof(cache));
-    st = indigo_timeline_cache_load(&cache, CACHE_PATH);
-    if (st == INDIGO_STORE_OK) {
-        for (unsigned i = 0; i < cache.count; i++) {
-            indigo_timeline_append(&app->timeline, &cache.posts[i]);
-        }
-        indigo_timeline_finish_fetch(&app->timeline, "");
-    } else if (st != INDIGO_STORE_MISSING) {
-        indigo_log_warn("could not load timeline cache (%d)", st);
-    }
-}
-
-static void
-load_draft(indigo_app *app)
-{
-    indigo_store_status st;
-    indigo_draft draft;
-
-    memset(&draft, 0, sizeof(draft));
-    st = indigo_draft_load(&draft, DRAFT_PATH);
-    if (st == INDIGO_STORE_OK) {
-        indigo_app_set_draft(app, draft.text);
-    } else if (st != INDIGO_STORE_MISSING) {
-        indigo_log_warn("could not load draft (%d)", st);
-    }
-}
-
-static void
-load_queue(indigo_app *app)
-{
-    indigo_store_status st;
-    indigo_post_queue queue;
-
-    memset(&queue, 0, sizeof(queue));
-    st = indigo_post_queue_load(&queue, QUEUE_PATH);
-    if (st == INDIGO_STORE_OK) {
-        for (unsigned i = 0; i < queue.count; i++) {
-            indigo_app_queue_append(app, queue.items[i].text);
-        }
-    } else if (st != INDIGO_STORE_MISSING) {
-        indigo_log_warn("could not load queue (%d)", st);
-    }
-}
-
-static void
-load_drafts(indigo_app *app)
-{
-    indigo_store_status st;
-    indigo_drafts drafts;
-
-    memset(&drafts, 0, sizeof(drafts));
-    st = indigo_drafts_load(&drafts, DRAFTS_PATH);
-    if (st == INDIGO_STORE_OK) {
-        for (unsigned i = 0; i < drafts.count; i++) {
-            indigo_app_drafts_append(app, drafts.records[i].text);
-        }
-    } else if (st != INDIGO_STORE_MISSING) {
-        indigo_log_warn("could not load drafts (%d)", st);
+    indigo_timeline_cache_capture(&app->timeline, &snapshot);
+    if (indigo_cache_store_save(CACHE_PATH, &snapshot) == INDIGO_STORE_IO) {
+        indigo_log_warn("could not save the timeline cache");
     }
 }
 
@@ -248,98 +861,15 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_NOTIFICATIONS_FAILED:
             indigo_app_notifications_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_PUBLISHED:
-            indigo_app_published(app, ev.compose_mode, ev.post_uri, ev.partial, ev.posted_count);
+        case INDIGO_SESSION_EVENT_CHAT_PAGE:
+            indigo_app_messages_loaded(app, indigo_session_chat_inbox());
             break;
-        case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
-            indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_SEARCH_PAGE: {
-            unsigned n;
-            const indigo_actor *items = indigo_session_search_results(&n);
-
-            indigo_app_search_loaded(app, items, n, ev.cursor);
-            break;
-        }
-        case INDIGO_SESSION_EVENT_SEARCH_FAILED:
-            indigo_app_search_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_POST_SEARCH_PAGE: {
-            unsigned n;
-            const indigo_post *items;
-            indigo_session_post_search_results(&items, &n);
-
-            indigo_app_post_search_loaded(app, items, n, ev.cursor);
-            break;
-        }
-        case INDIGO_SESSION_EVENT_LISTS_PAGE: {
-            unsigned n;
-            const indigo_list *items;
-            indigo_session_lists(&items, &n);
-
-            indigo_app_lists_loaded(app, items, n, ev.cursor);
-            break;
-        }
-        case INDIGO_SESSION_EVENT_LIST_WRITE_DONE:
-            indigo_app_list_write_done(app, "List updated");
-            break;
-        case INDIGO_SESSION_EVENT_LIST_WRITE_FAILED:
-            indigo_app_list_write_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_FEEDS_PAGE: {
-            unsigned n;
-            const indigo_list *items;
-            indigo_session_feeds(&items, &n);
-
-            indigo_app_feeds_loaded(app, items, n, ev.cursor);
-            break;
-        }
-        case INDIGO_SESSION_EVENT_STARTER_PACK_PAGE: {
-            unsigned n;
-            const indigo_starter_pack *pack;
-            const indigo_actor *actors;
-            unsigned count;
-            indigo_session_starter_pack_results(&pack, &actors, &n);
-
-            indigo_app_starter_pack_loaded(app, pack, actors, n, ev.cursor);
-            break;
-        }
-        case INDIGO_SESSION_EVENT_STARTER_PACK_FAILED:
-            indigo_app_starter_pack_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_FOLLOW_DONE:
-            indigo_app_follow_done(app, true, ev.record_uri);
-            break;
-        case INDIGO_SESSION_EVENT_FOLLOW_FAILED:
-            indigo_app_follow_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_GRAPH_DONE:
-            indigo_app_graph_done(app, ev.graph, ev.record_uri);
-            break;
-        case INDIGO_SESSION_EVENT_GRAPH_FAILED:
-            indigo_app_graph_failed(app, ev.graph, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_PAGE: {
-            unsigned n;
-            const indigo_chat_inbox *inbox = indigo_session_chat_inbox();
-            const indigo_chat_convo *items = inbox->items;
-            n = inbox->count;
-
-            indigo_app_chat_loaded(app, items, n, ev.cursor);
-            break;
-        }
         case INDIGO_SESSION_EVENT_CHAT_FAILED:
-            indigo_app_chat_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_messages_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE: {
-            unsigned n;
-            const indigo_chat_thread *thread = indigo_session_chat_thread();
-            const indigo_chat_message *items = thread->items;
-            n = thread->count;
-
-            indigo_app_chat_thread_loaded(app, thread);
+        case INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE:
+            indigo_app_chat_thread_loaded(app, indigo_session_chat_thread());
             break;
-        }
         case INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED:
             indigo_app_chat_thread_failed(app, indigo_failure_message(ev.failure));
             break;
@@ -349,290 +879,335 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_CHAT_SEND_FAILED:
             indigo_app_chat_send_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE: {
-            unsigned n;
-            const indigo_chat_join_requests *requests = indigo_session_chat_requests();
-            const indigo_chat_join_request *items = requests->items;
-            n = requests->count;
-
-            indigo_app_chat_requests_loaded(app, items, n, ev.cursor);
+        case INDIGO_SESSION_EVENT_CHAT_REQUESTS_PAGE:
+            indigo_app_requests_loaded(app, indigo_session_chat_requests());
             break;
-        }
         case INDIGO_SESSION_EVENT_CHAT_REQUESTS_FAILED:
-            indigo_app_chat_requests_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_requests_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_ACCEPT_DONE:
-            indigo_app_chat_accept_done(app);
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_ACCEPT_FAILED:
-            indigo_app_chat_accept_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_request_done(app, true);
             break;
         case INDIGO_SESSION_EVENT_CHAT_DECLINE_DONE:
-            indigo_app_chat_decline_done(app);
+            indigo_app_chat_request_done(app, false);
             break;
+        case INDIGO_SESSION_EVENT_CHAT_ACCEPT_FAILED:
         case INDIGO_SESSION_EVENT_CHAT_DECLINE_FAILED:
-            indigo_app_chat_decline_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_request_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_START_DONE:
-            const char *convo_id = indigo_session_chat_started();
-            indigo_app_chat_start_done(app, convo_id);
+            indigo_app_chat_start_done(app, indigo_session_chat_started_convo());
             break;
         case INDIGO_SESSION_EVENT_CHAT_START_FAILED:
-            indigo_app_chat_start_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_start_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE: {
-            unsigned n;
-            const indigo_chat_join_requests *requests = indigo_session_chat_join_requests();
-            const indigo_chat_join_request *items = requests->items;
-            n = requests->count;
-
-            indigo_app_chat_join_requests_loaded(app, items, n, ev.cursor);
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_PAGE:
+            indigo_app_join_requests_loaded(app, indigo_session_chat_join_requests());
             break;
-        }
         case INDIGO_SESSION_EVENT_CHAT_JOIN_REQUESTS_FAILED:
-            indigo_app_chat_join_requests_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_join_requests_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_DONE:
-            indigo_app_chat_join_request_done(app, true);
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED:
-            indigo_app_chat_join_request_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_join_decision_done(app, true);
             break;
         case INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_DONE:
-            indigo_app_chat_join_request_done(app, false);
+            indigo_app_chat_join_decision_done(app, false);
             break;
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_APPROVE_FAILED:
         case INDIGO_SESSION_EVENT_CHAT_JOIN_REJECT_FAILED:
-            indigo_app_chat_join_request_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_join_decision_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_PAGE:
-            indigo_app_chat_group_info_loaded(app, indigo_session_chat_group());
+            indigo_app_group_loaded(app, indigo_session_chat_group());
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_INFO_FAILED:
-            indigo_app_chat_group_info_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_group_failed(app, indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_DONE:
             indigo_app_chat_group_create_done(app, indigo_session_chat_group_started());
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_CREATE_FAILED:
-            indigo_app_chat_group_create_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_group_create_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_DONE:
-            indigo_app_chat_group_rename_done(app);
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE:
+        case INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE:
+        case INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE:
+            indigo_app_group_loaded(app, indigo_session_chat_group());
+            indigo_app_chat_group_done(app);
             break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_RENAME_FAILED:
-            indigo_app_chat_group_rename_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_DONE:
-            indigo_app_chat_group_add_done(app);
-            break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_ADD_FAILED:
-            indigo_app_chat_group_add_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_DONE:
-            indigo_app_chat_group_remove_done(app);
-            break;
         case INDIGO_SESSION_EVENT_CHAT_GROUP_REMOVE_FAILED:
-            indigo_app_chat_group_remove_failed(app, indigo_failure_message(ev.failure));
-            break;
-        case INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_DONE:
-            indigo_app_chat_join_link_done(app);
-            break;
         case INDIGO_SESSION_EVENT_CHAT_JOIN_LINK_FAILED:
-            indigo_app_chat_join_link_failed(app, indigo_failure_message(ev.failure));
+            indigo_app_chat_group_failed(
+                app, ev.message[0] ? ev.message : indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_FEED_DISCOVERY_PAGE:
-            indigo_app_feed_discovery_loaded(app, indigo_session_feed_discovery_results());
+        case INDIGO_SESSION_EVENT_PUBLISHED:
+            if (ev.partial) {
+                indigo_app_publish_partial(app, ev.message);
+            } else {
+                indigo_app_publish_done(app);
+            }
             break;
-        case INDIGO_SESSION_EVENT_FEED_DISCOVERY_FAILED:
-            indigo_app_feed_discovery_failed(app, indigo_failure_message(ev.failure));
+        case INDIGO_SESSION_EVENT_PUBLISH_FAILED:
+            indigo_app_publish_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_FEED_GENERATOR_PAGE:
-            indigo_app_feed_generator_loaded(app, indigo_session_feed_generator());
+        case INDIGO_SESSION_EVENT_POST_DELETED:
+            indigo_app_delete_done(app, ev.post_uri);
             break;
-        case INDIGO_SESSION_EVENT_FEED_GENERATOR_FAILED:
-            indigo_app_feed_generator_failed(app, indigo_failure_message(ev.failure));
+        case INDIGO_SESSION_EVENT_POST_DELETE_FAILED:
+            indigo_app_delete_failed(app, "Could not delete that post. It may still be there.");
             break;
-        case INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_PAGE:
-            indigo_app_saved_feeds_loaded(app, indigo_session_saved_feeds_v2());
+        case INDIGO_SESSION_EVENT_SEARCH_PAGE: {
+            unsigned n;
+            const indigo_actor *actors = indigo_session_search_results(&n);
+
+            indigo_app_search_loaded(app, actors, n, ev.cursor);
             break;
-        case INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_FAILED:
-            indigo_app_saved_feeds_failed(app, indigo_failure_message(ev.failure));
+        }
+        case INDIGO_SESSION_EVENT_SEARCH_FAILED:
+            indigo_app_search_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_SAVE_FEED_DONE:
-            indigo_app_save_feed_done(app);
+        case INDIGO_SESSION_EVENT_STARTER_PACK_PAGE: {
+            unsigned n;
+            const indigo_actor *actors = indigo_session_search_results(&n);
+
+            indigo_app_starter_pack_loaded(app, indigo_session_starter_pack(),
+                                           actors, n, ev.cursor);
             break;
-        case INDIGO_SESSION_EVENT_SAVE_FEED_FAILED:
-            indigo_app_save_feed_failed(app, indigo_failure_message(ev.failure));
+        }
+        case INDIGO_SESSION_EVENT_STARTER_PACK_FAILED:
+            indigo_app_starter_pack_failed(app, indigo_failure_message(ev.failure));
             break;
-        case INDIGO_SESSION_EVENT_REMOVE_FEED_DONE:
-            indigo_app_remove_feed_done(app);
+        case INDIGO_SESSION_EVENT_POST_SEARCH_PAGE: {
+            const indigo_post *posts;
+            unsigned pn;
+
+            indigo_session_post_search_results(&posts, &pn);
+            indigo_app_post_search_loaded(app, posts, pn, ev.cursor);
             break;
-        case INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED:
-            indigo_app_remove_feed_failed(app, indigo_failure_message(ev.failure));
+        }
+        case INDIGO_SESSION_EVENT_LISTS_PAGE: {
+            const indigo_list *lists;
+            unsigned ln;
+
+            indigo_session_lists_results(&lists, &ln);
+            indigo_app_lists_loaded(app, lists, ln, ev.cursor);
             break;
-        case INDIGO_SESSION_EVENT_PIN_FEED_DONE:
-            indigo_app_pin_feed_done(app);
+        }
+        case INDIGO_SESSION_EVENT_LIST_WRITE_DONE:
+            indigo_app_list_write_done(app, ev.message);
             break;
-        case INDIGO_SESSION_EVENT_PIN_FEED_FAILED:
-            indigo_app_pin_feed_failed(app, indigo_failure_message(ev.failure));
+        case INDIGO_SESSION_EVENT_LIST_WRITE_FAILED:
+            indigo_app_list_write_failed(app, ev.message[0] ? ev.message
+                                                            : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_FEEDS_PAGE: {
+            const indigo_list *feeds;
+            unsigned fn;
+
+            indigo_session_feeds_results(&feeds, &fn);
+            indigo_app_feeds_loaded(app, feeds, fn, ev.cursor);
+            break;
+        }
+        case INDIGO_SESSION_EVENT_FOLLOW_DONE:
+            indigo_app_follow_done(app, ev.follow == INDIGO_FOLLOW, ev.record_uri);
+            break;
+        case INDIGO_SESSION_EVENT_FOLLOW_FAILED:
+            indigo_app_follow_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_THREAD_MUTE_DONE:
+            indigo_app_thread_mute_done(app, ev.thread_root, ev.muted);
+            break;
+        case INDIGO_SESSION_EVENT_THREAD_MUTE_FAILED:
+            indigo_app_thread_mute_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_REPORT_DONE:
+            indigo_app_report_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_REPORT_FAILED:
+            indigo_app_report_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_GRAPH_DONE:
+            indigo_app_graph_done(app, ev.graph, ev.record_uri);
+            break;
+        case INDIGO_SESSION_EVENT_GRAPH_FAILED:
+            indigo_app_graph_failed(app, ev.graph, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_NONE:
             break;
         }
     }
 }
 
-
-
+#ifdef INDIGO_DEV_AUTOFILL
+/* Emulator aid only: never compiled into a normal build. */
 static void
-handle_input(indigo_app *app, const indigo_input *input)
+dev_autofill(indigo_app *app)
 {
-    if (input->pressed & KEY_START) {
-        app->quit = true;
+    char buf[1024];
+    FILE *f = fopen(AUTOFILL_PATH, "rb");
+    size_t n;
+
+    if (!f) {
         return;
     }
-
-    if (app->request) {
-        indigo_app_handle_request_input(app, input);
-        return;
+    n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    if (indigo_signin_apply_autofill(&app->signin, buf) > 0) {
+        indigo_log_warn("dev autofill applied (INDIGO_DEV_AUTOFILL build)");
+        indigo_app_submit(app);
     }
-
-    indigo_app_handle_input(app, input);
+    memset(buf, 0, sizeof buf);
 }
-
-static void
-render(indigo_app *app)
-{
-    indigo_canvas canvas;
-
-    indigo_canvas_init(&canvas, 400, 240);
-    indigo_app_draw(app, &canvas);
-    indigo_ui_render(&canvas);
-    indigo_canvas_reset(&canvas);
-}
-
-static void
-update(indigo_app *app)
-{
-    indigo_input input;
-    indigo_app_update(app, &input);
-}
-
-static void
-init_app(indigo_app *app)
-{
-    indigo_settings settings;
-    indigo_store_status st;
-
-    memset(app, 0, sizeof(*app));
-    st = indigo_settings_load(&settings, SETTINGS_PATH);
-    if (st == INDIGO_STORE_OK) {
-        indigo_app_set_settings(app, &settings);
-    } else if (st != INDIGO_STORE_MISSING) {
-        indigo_log_warn("could not load settings (%d)", st);
-    }
-
-    indigo_app_init(app);
-    load_timeline_cache(app);
-    load_draft(app);
-    load_queue(app);
-    load_drafts(app);
-}
-
-static void
-init_log(void)
-{
-    indigo_settings settings;
-    indigo_store_status st;
-
-    st = indigo_settings_load(&settings, SETTINGS_PATH);
-    if (st == INDIGO_STORE_OK && !settings.diagnostics) {
-        return;
-    }
-
-    indigo_log_init();
-    indigo_log_info("Indigo %s (%s)", indigo_build_commit(), indigo_build_date());
-}
-
-static void
-init_media(void)
-{
-    indigo_media_cache cache;
-    indigo_media_init(&cache);
-}
-
-static void
-init_session(void)
-{
-    indigo_session_start("sdmc:/3ds/indigo/session.dat");
-}
-
-static void
-init_ui(void)
-{
-    indigo_ui_init();
-}
-
-static void
-shutdown_media(void)
-{
-    indigo_media_shutdown();
-}
-
-static void
-shutdown_session(void)
-{
-    indigo_session_stop();
-}
-
-static void
-shutdown_ui(void)
-{
-    indigo_ui_shutdown();
-}
-
-static void
-shutdown_log(void)
-{
-    indigo_log_shutdown();
-}
+#endif
 
 int
-main(void)
+main(int argc, char **argv)
 {
-    indigo_app app;
-    indigo_input input;
+    indigo_log_init();
+    mkdir("sdmc:/3ds", 0777);
+    mkdir(DATA_DIR, 0777);
+
+    /* Before the log file is opened, because the diagnostics setting decides
+     * whether one is. An absent file is the normal first-run case and leaves
+     * the defaults in place, so it needs no branch of its own. */
+    static indigo_settings settings;
+
+    if (indigo_settings_store_load(SETTINGS_PATH, &settings) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("settings file was unreadable; continuing with defaults");
+    }
+    if (settings.diagnostics && !indigo_log_open_file(LOG_PATH)) {
+        indigo_log_warn("no log file; continuing with stderr only");
+    }
+    if (settings.diagnostics) {
+        indigo_log_info("wolfram %s (linked)", INDIGO_WOLFRAM_VERSION);
+    }
+
+    /* Before RomFS is mounted: recovery may have to move the .3dsx that RomFS
+     * reads from. argv[0] is the path the Homebrew Menu launched. */
+    indigo_update_sd_recover(argc > 0 ? argv[0] : NULL, UPDATE_STATE_PATH);
 
     gfxInitDefault();
     romfsInit();
-    cfguInit();
-    init_log();
-    init_media();
-    init_ui();
-    init_session();
-    init_app(&app);
 
-    while (aptMainLoop()) {
+    /* Before the renderer: the media loader owns a Wolfram client, and
+     * Wolfram's 3DS platform layer initialises the socket service. */
+    indigo_atproto_init();
+
+    if (!indigo_ui_init()) {
+        indigo_log_error("could not initialise the 3DS renderer");
+        indigo_atproto_shutdown();
+        romfsExit();
+        gfxExit();
+        indigo_log_shutdown();
+        return 1;
+    }
+
+    indigo_session_start(SESSION_PATH);
+
+    indigo_input input;
+    indigo_input_init(&input);
+
+    static indigo_app app; /* about 370KB, mostly posts: keep it off the stack */
+    indigo_app_init(&app);
+    indigo_app_set_settings(&app, &settings);
+    {
+        indigo_update_paths probe;
+        bool can_swap = argc > 0 && indigo_update_paths_from(argv[0], UPDATE_STATE_PATH, &probe);
+
+        indigo_update_worker_init(argc > 0 ? argv[0] : NULL, UPDATE_STATE_PATH);
+        indigo_app_set_updater(&app, INDIGO_BUILD_COMMIT, can_swap);
+    }
+    app.wolfram_linked = indigo_atproto_available();
+
+    /* An unsent post survives closing the app. The text is restored into the
+     * compose buffer, so the existing "Draft kept from earlier." path tells
+     * the person it is there; nothing is ever sent without their pressing it. */
+    static char saved_draft[INDIGO_DRAFT_MAX];
+
+    if (indigo_draft_store_load(DRAFT_PATH, saved_draft, sizeof saved_draft) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("draft file was unreadable; it was kept as draft.dat.bad");
+    }
+    indigo_app_set_draft(&app, saved_draft);
+
+    /* Posts saved for later survive closing the app. A damaged file is set
+     * aside by the store, and the queue starts empty. */
+    if (indigo_queue_store_load(INDIGO_QUEUE_PATH, &app.queue) == INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("queue file was unreadable; it was kept as queue.dat.bad");
+    }
+
+    /* Saved drafts are a list of their own, separate from the queue and from
+     * the one compose buffer restored above. */
+    if (indigo_drafts_store_load(INDIGO_DRAFTS_PATH, &app.drafts) ==
+        INDIGO_STORE_UNREADABLE) {
+        indigo_log_warn("drafts file was unreadable; it was kept as drafts.dat.bad");
+    }
+
+    /* The last home timeline, shown while the saved session is resumed. Only
+     * with a saved session: the cache belongs to the account that was signed
+     * in, and a signed-out device has no account to show it for. A damaged
+     * file is set aside by the store and simply restores nothing. */
+    if (indigo_session_has_saved()) {
+        static indigo_cache_timeline cached;
+
+        if (indigo_cache_store_load(CACHE_PATH, &cached) == INDIGO_STORE_UNREADABLE) {
+            indigo_log_warn("timeline cache was unreadable; it was kept as timeline.dat.bad");
+        }
+        indigo_timeline_cache_restore(&app.timeline, &cached);
+    }
+
+    if (indigo_session_has_saved() && indigo_session_submit_resume()) {
+        indigo_app_begin_sign_in(&app, "Resuming your session...");
+    }
+#ifdef INDIGO_DEV_AUTOFILL
+    else {
+        dev_autofill(&app);
+    }
+#endif
+
+    while (aptMainLoop() && !indigo_app_should_quit(&app)) {
         hidScanInput();
+
         indigo_input_begin_frame(&input);
         indigo_input_poll(&input);
 
-        handle_input(&app, &input);
-        if (app.quit) {
-            break;
-        }
-
-        update(&app);
+        indigo_app_update(&app, &input);
+        handle_requests(&app);
         handle_events(&app);
-        render(&app);
+        handle_update(&app);
+        /* Only on a change, so an idle compose screen costs no card writes.
+         * The copy is updated even when the write fails: retrying every frame
+         * would stall the loop on a full or removed card. */
+        if (strcmp(saved_draft, app.compose.text) != 0) {
+            indigo_copy_utf8(saved_draft, sizeof saved_draft, app.compose.text);
+            if (indigo_draft_store_save(DRAFT_PATH, saved_draft) == INDIGO_STORE_IO) {
+                indigo_log_warn("could not save the draft");
+            }
+        }
+        indigo_ui_draw(&app, &input);
+
         gspWaitForVBlank();
     }
 
-    shutdown_app(&app);
-    shutdown_session();
-    shutdown_ui();
-    shutdown_media();
-    shutdown_log();
-    cfguExit();
-    romfsExit();
+    indigo_app_shutdown(&app);
+    indigo_update_worker_stop();
+    indigo_session_stop();
+    indigo_input_shutdown(&input);
+    indigo_atproto_shutdown();
+    indigo_ui_shutdown();
+    if (s_romfs_open) {
+        romfsExit();
+    }
     gfxExit();
+    indigo_log_shutdown();
+
     return 0;
 }

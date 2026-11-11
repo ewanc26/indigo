@@ -234,7 +234,7 @@ bool indigo_session_submit_chat_requests(void);
 /* The next page of requests, from the cursor the last page reported. False when
  * there is no cursor to continue from. */
 bool indigo_session_submit_chat_requests_more(const char *cursor);
-const indigo_chat_join_requests *indigo_session_chat_requests(void);
+const indigo_chat_inbox *indigo_session_chat_requests(void);
 
 /* Fetch the newest messages of one conversation. Read them with
  * indigo_session_chat_thread once CHAT_THREAD_PAGE arrives. */

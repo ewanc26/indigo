@@ -1482,10 +1482,10 @@ indigo_session_submit_chat_requests_more(const char *cursor)
     return indigo_session_enqueue(&j);
 }
 
-const indigo_chat_join_requests *
+const indigo_chat_inbox *
 indigo_session_chat_requests(void)
 {
-    return &g_session.join_requests;
+    return &g_session.requests;
 }
 
 bool
