@@ -3,8 +3,12 @@
  *
  * Feed discovery uses app.bsky.unspecced.getSuggestedFeeds (via
  * wf_agent_get_suggested_feeds_typed) to find popular generators.
- * Feed management reads/writes savedFeedsPrefV2 via
- * wf_agent_get_actor_prefs_typed / wf_agent_put_actor_prefs_typed.
+ * Feed management reads/writes savedFeedsPrefV2 via the raw preferences
+ * JSON (wf_agent_get_preferences / wf_agent_put_preferences), not the strict
+ * typed parser: one preference type the parser rejects must not take the
+ * whole feed list down with it, pinned flags only exist in the raw v2 items,
+ * and a putPreferences round-trip must copy unknown preference types
+ * verbatim.
  */
 
 #include "atproto/feeds.h"
@@ -14,9 +18,10 @@
 #include "wolfram/unspecced_trends_typed.h"
 #include "wolfram/feed_gen_typed.h"
 #include "wolfram/feedgen_typed.h"
-#include "wolfram/actor_prefs_typed.h"
 
 #include "util/log.h"
+
+#include <cJSON.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -135,14 +140,27 @@ indigo_session_do_feed_generator(const indigo_job *j)
 /* ------------------------------------------------------------------ */
 /* Saved feeds v2: read savedFeedsPrefV2 */
 
-static void
-copy_saved_feed_entry(indigo_saved_feed_entry *out, const wf_actor_pref_saved_feed *src)
+/* The items array of the savedFeedsPrefV2 preference inside a raw preferences
+ * array, duplicated; NULL when there is none. */
+static cJSON *
+prefs_saved_feeds_v2_items(const cJSON *prefs)
 {
-    if (!out || !src) return;
-    snprintf(out->uri, sizeof out->uri, "%s", src->value ? src->value : "");
-    /* display_name is not in the pref; we'll fill it from getFeedGenerators */
-    out->display_name[0] = '\0';
-    out->pinned = src->has_pinned && src->pinned;
+    if (!prefs || !cJSON_IsArray(prefs)) {
+        return NULL;
+    }
+    for (int i = 0; i < cJSON_GetArraySize(prefs); i++) {
+        const cJSON *it = cJSON_GetArrayItem(prefs, i);
+        const cJSON *ty = cJSON_GetObjectItemCaseSensitive(it, "$type");
+        if (ty && cJSON_IsString(ty) && ty->valuestring &&
+            strstr(ty->valuestring, "savedFeedsPrefV2")) {
+            const cJSON *items = cJSON_GetObjectItemCaseSensitive(it, "items");
+            if (cJSON_IsArray(items)) {
+                return cJSON_Duplicate(items, true);
+            }
+            return NULL;
+        }
+    }
+    return NULL;
 }
 
 void
@@ -153,37 +171,56 @@ indigo_session_do_saved_feeds_v2(const indigo_job *j)
 
     INDIGO_SESSION_AGENT_GUARD(ev);
 
-    wf_actor_preferences prefs = {0};
-    const wf_status status = wf_agent_get_actor_prefs_typed(g_session.agent, &prefs);
-
-    if (status != WF_OK) {
+    char *cur_json = NULL;
+    const wf_status status = wf_agent_get_preferences(g_session.agent, &cur_json);
+    if (status != WF_OK || !cur_json) {
         indigo_log_warn("session: saved feeds v2 fetch failed (%d)", (int) status);
         indigo_session_publish_failure(&ev, "saved feeds v2", status);
         return;
     }
+    cJSON *prefs = cJSON_Parse(cur_json);
+    free(cur_json);
+    if (!prefs || !cJSON_IsArray(prefs)) {
+        if (prefs) cJSON_Delete(prefs);
+        prefs = NULL;
+    }
 
     LightLock_Lock(&g_session.lock);
     memset(&s_saved_feeds_v2, 0, sizeof(s_saved_feeds_v2));
-
-    /* savedFeedsPrefV2: items[] with type=="feed" */
-    for (size_t i = 0; i < prefs.saved_feeds_v2.item_count &&
-         s_saved_feeds_v2.count < INDIGO_SAVED_FEEDS_MAX; i++) {
-        const wf_actor_pref_saved_feed *src = &prefs.saved_feeds_v2.items[i];
-        if (src->type && strcmp(src->type, "feed") == 0) {
-            copy_saved_feed_entry(&s_saved_feeds_v2.entries[s_saved_feeds_v2.count],
-                                  src);
-            s_saved_feeds_v2.count++;
+    if (prefs) {
+        cJSON *items = prefs_saved_feeds_v2_items(prefs);
+        if (items) {
+            for (int i = 0; i < cJSON_GetArraySize(items) &&
+                            s_saved_feeds_v2.count < INDIGO_SAVED_FEEDS_MAX; i++) {
+                const cJSON *it = cJSON_GetArrayItem(items, i);
+                const cJSON *ty = cJSON_GetObjectItemCaseSensitive(it, "type");
+                const cJSON *val = cJSON_GetObjectItemCaseSensitive(it, "value");
+                const cJSON *pin = cJSON_GetObjectItemCaseSensitive(it, "pinned");
+                if (!ty || !val || !cJSON_IsString(ty) || !cJSON_IsString(val) ||
+                    strcmp(ty->valuestring, "feed") != 0 || !val->valuestring[0]) {
+                    continue;
+                }
+                indigo_saved_feed_entry *e =
+                    &s_saved_feeds_v2.entries[s_saved_feeds_v2.count++];
+                snprintf(e->uri, sizeof e->uri, "%s", val->valuestring);
+                const char *key = strrchr(val->valuestring, '/');
+                snprintf(e->display_name, sizeof e->display_name, "%s",
+                         key ? key + 1 : val->valuestring);
+                e->pinned = pin && cJSON_IsTrue(pin);
+            }
+            cJSON_Delete(items);
         }
+        cJSON_Delete(prefs);
     }
     LightLock_Unlock(&g_session.lock);
 
-    /* Now resolve names via getFeedGenerators for any feed without a name */
+    /* Resolve display names via getFeedGenerators; a failure there leaves the
+     * record keys in place, which are still a usable picker. */
     if (s_saved_feeds_v2.count > 0) {
         const char *uris[INDIGO_SAVED_FEEDS_MAX];
         int uri_count = 0;
         for (int i = 0; i < s_saved_feeds_v2.count; i++) {
-            if (s_saved_feeds_v2.entries[i].display_name[0] == '\0' &&
-                s_saved_feeds_v2.entries[i].uri[0]) {
+            if (s_saved_feeds_v2.entries[i].uri[0]) {
                 uris[uri_count++] = s_saved_feeds_v2.entries[i].uri;
             }
         }
@@ -197,7 +234,8 @@ indigo_session_do_saved_feeds_v2(const indigo_job *j)
                 for (size_t g = 0; g < gens.generator_count; g++) {
                     const wf_feedgen_generator_view *v = &gens.generators[g];
                     for (int i = 0; i < s_saved_feeds_v2.count; i++) {
-                        if (strcmp(v->uri, s_saved_feeds_v2.entries[i].uri) == 0 &&
+                        if (v->uri &&
+                            strcmp(v->uri, s_saved_feeds_v2.entries[i].uri) == 0 &&
                             v->display_name && v->display_name[0]) {
                             snprintf(s_saved_feeds_v2.entries[i].display_name,
                                      sizeof(s_saved_feeds_v2.entries[i].display_name),
@@ -211,8 +249,6 @@ indigo_session_do_saved_feeds_v2(const indigo_job *j)
         }
     }
 
-    wf_actor_preferences_free(&prefs);
-
     indigo_log_info("session: loaded %d saved feeds", s_saved_feeds_v2.count);
     indigo_session_event ev_saved = { .kind = INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_PAGE };
     indigo_session_publish_event(&ev_saved);
@@ -221,179 +257,169 @@ indigo_session_do_saved_feeds_v2(const indigo_job *j)
 /* ------------------------------------------------------------------ */
 /* Save/remove/pin feed: write savedFeedsPrefV2 */
 
-/* Build a wf_actor_preferences struct with the modified savedFeedsPrefV2.
- * Returns a struct the caller must free with wf_actor_preferences_free. */
-static wf_status
-build_saved_feeds_v2_prefs(const char *feed_uri, bool pinned, bool remove,
-                           wf_actor_preferences *out)
+/* Build the v2 saved-feeds items array from the raw current preferences,
+ * copied verbatim, with the target feed added, re-pinned or removed.
+ * Returns a cJSON array the caller must free. */
+static cJSON *
+build_saved_feeds_v2_items(const char *feed_uri, bool pinned, bool remove)
 {
-    /* Fetch current preferences to preserve non-feed items */
-    wf_actor_preferences prefs = {0};
-    const wf_status status = wf_agent_get_actor_prefs_typed(g_session.agent, &prefs);
-    if (status != WF_OK) {
-        indigo_log_warn("session: could not read preferences for feed save");
-        return status;
+    char *cur_json = NULL;
+    cJSON *prefs = NULL;
+    if (wf_agent_get_preferences(g_session.agent, &cur_json) == WF_OK && cur_json) {
+        prefs = cJSON_Parse(cur_json);
+        free(cur_json);
+    }
+    if (!prefs || !cJSON_IsArray(prefs)) {
+        if (prefs) cJSON_Delete(prefs);
+        prefs = cJSON_CreateArray();
     }
 
-    /* Build new items array, modifying the target feed */
-    size_t new_count = prefs.saved_feeds_v2.item_count + (remove ? 0 : 1);
-    wf_actor_pref_saved_feed *new_items =
-        calloc(new_count, sizeof(wf_actor_pref_saved_feed));
-    if (!new_items) {
-        wf_actor_preferences_free(&prefs);
-        return WF_ERR_ALLOC;
+    cJSON *items = cJSON_CreateArray();
+    if (!items) {
+        cJSON_Delete(prefs);
+        return NULL;
     }
 
-    size_t out_count = 0;
-    bool found = false;
-
-    /* Copy existing items, modifying the target feed */
-    for (size_t i = 0; i < prefs.saved_feeds_v2.item_count; i++) {
-        const wf_actor_pref_saved_feed *src = &prefs.saved_feeds_v2.items[i];
-        if (src->type && src->value) {
-            if (strcmp(src->type, "feed") == 0 &&
-                strcmp(src->value, feed_uri) == 0) {
-                found = true;
+    bool seen = false;
+    cJSON *existing = prefs_saved_feeds_v2_items(prefs);
+    if (existing) {
+        for (int i = 0; i < cJSON_GetArraySize(existing); i++) {
+            cJSON *src = cJSON_GetArrayItem(existing, i);
+            const cJSON *ty = cJSON_GetObjectItemCaseSensitive(src, "type");
+            const cJSON *val = cJSON_GetObjectItemCaseSensitive(src, "value");
+            const bool is_target = ty && val && cJSON_IsString(ty) &&
+                                   cJSON_IsString(val) && val->valuestring &&
+                                   strcmp(ty->valuestring, "feed") == 0 &&
+                                   strcmp(val->valuestring, feed_uri) == 0;
+            if (is_target) {
+                seen = true;
                 if (remove) {
-                    /* Skip: removing this feed */
-                    continue;
+                    continue;   /* drop the item entirely */
                 }
-                /* Update pinned state */
-                new_items[out_count].type = strdup(src->type);
-                new_items[out_count].value = strdup(src->value);
-                if (src->id) new_items[out_count].id = strdup(src->id);
-                new_items[out_count].has_pinned = true;
-                new_items[out_count].pinned = pinned;
-                out_count++;
+                cJSON *item = cJSON_Duplicate(src, true);
+                cJSON *pin = cJSON_GetObjectItemCaseSensitive(item, "pinned");
+                if (pin) {
+                    cJSON_ReplaceItemInObject(item, "pinned",
+                                              cJSON_CreateBool(pinned));
+                } else {
+                    cJSON_AddBoolToObject(item, "pinned", pinned);
+                }
+                cJSON_AddItemToArray(items, item);
             } else {
-                /* Copy unchanged */
-                new_items[out_count].type = strdup(src->type);
-                new_items[out_count].value = strdup(src->value);
-                if (src->id) new_items[out_count].id = strdup(src->id);
-                new_items[out_count].has_pinned = src->has_pinned;
-                new_items[out_count].pinned = src->pinned;
-                out_count++;
+                cJSON_AddItemToArray(items, cJSON_Duplicate(src, true));
             }
         }
+        cJSON_Delete(existing);
     }
 
-    if (!remove && !found) {
-        /* Add new feed entry */
-        new_items[out_count].type = strdup("feed");
-        new_items[out_count].value = strdup(feed_uri);
-        new_items[out_count].id = NULL;
-        new_items[out_count].has_pinned = true;
-        new_items[out_count].pinned = pinned;
-        out_count++;
+    if (!remove && !seen) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "type", "feed");
+        cJSON_AddStringToObject(item, "value", feed_uri);
+        cJSON_AddBoolToObject(item, "pinned", pinned);
+        cJSON_AddItemToArray(items, item);
     }
 
-    /* Initialize output with current prefs but with our new items */
-    *out = prefs;
-    /* Clear the old items */
-    for (size_t i = 0; i < out->saved_feeds_v2.item_count; i++) {
-        free(out->saved_feeds_v2.items[i].type);
-        free(out->saved_feeds_v2.items[i].value);
-        free(out->saved_feeds_v2.items[i].id);
-    }
-    free(out->saved_feeds_v2.items);
-    out->saved_feeds_v2.items = new_items;
-    out->saved_feeds_v2.item_count = out_count;
+    cJSON_Delete(prefs);
+    return items;
+}
 
-    /* Clear prefs so we can free it without affecting out */
-    prefs.saved_feeds_v2.items = NULL;
-    prefs.saved_feeds_v2.item_count = 0;
-    wf_actor_preferences_free(&prefs);
-    return WF_OK;
+/* putPreferences replaces the whole preferences array, so round-trip the
+ * current one and swap in the modified v2 saved-feeds preference. */
+static wf_status
+put_saved_feeds_v2(cJSON *items)
+{
+    char *cur_json = NULL;
+    cJSON *prefs = NULL;
+    if (wf_agent_get_preferences(g_session.agent, &cur_json) == WF_OK && cur_json) {
+        prefs = cJSON_Parse(cur_json);
+        free(cur_json);
+    }
+    if (!prefs || !cJSON_IsArray(prefs)) {
+        if (prefs) cJSON_Delete(prefs);
+        prefs = cJSON_CreateArray();
+    }
+    cJSON *v2 = cJSON_CreateObject();
+    cJSON_AddItemToObject(v2, "$type",
+                          cJSON_CreateString("app.bsky.actor.defs#savedFeedsPrefV2"));
+    cJSON_AddItemToObject(v2, "items", items);
+    for (int i = cJSON_GetArraySize(prefs) - 1; i >= 0; i--) {
+        cJSON *it = cJSON_GetArrayItem(prefs, i);
+        cJSON *ty = cJSON_GetObjectItemCaseSensitive(it, "$type");
+        if (ty && cJSON_IsString(ty) && ty->valuestring &&
+            strstr(ty->valuestring, "savedFeedsPrefV2")) {
+            cJSON_DeleteItemFromArray(prefs, i);
+        }
+    }
+    cJSON_AddItemToArray(prefs, v2);
+
+    char *json = cJSON_PrintUnformatted(prefs);
+    cJSON_Delete(prefs);
+    if (!json) {
+        return WF_ERR_ALLOC;
+    }
+    wf_response res = {0};
+    const wf_status status = wf_agent_put_preferences(g_session.agent, json, &res);
+    free(json);
+    wf_response_free(&res);
+    return status;
+}
+
+/* Shared save/remove/pin body: build the items, write them, publish the
+ * event. */
+static void
+do_feed_mutation(const indigo_job *j, bool remove,
+                 indigo_session_event_kind done_kind,
+                 indigo_session_event_kind failed_kind, const char *what)
+{
+    indigo_session_event ev = {.kind = failed_kind};
+
+    INDIGO_SESSION_AGENT_GUARD(ev);
+
+    cJSON *items = build_saved_feeds_v2_items(j->actor, j->paging != 0, remove);
+    if (!items) {
+        indigo_log_warn("session: could not prepare %s", what);
+        ev.failure = WF_FAIL_OTHER;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+
+    const wf_status put_status = put_saved_feeds_v2(items);
+    if (put_status != WF_OK) {
+        indigo_log_warn("session: %s failed (%d)", what, (int) put_status);
+        indigo_session_publish_failure(&ev, what, put_status);
+        return;
+    }
+
+    /* Invalidate the cached list so the UI reloads. */
+    LightLock_Lock(&g_session.lock);
+    memset(&s_saved_feeds_v2, 0, sizeof(s_saved_feeds_v2));
+    LightLock_Unlock(&g_session.lock);
+
+    indigo_log_info("session: %s %s", what, j->actor);
+    indigo_session_event ev_done = { .kind = done_kind };
+    indigo_session_publish_event(&ev_done);
 }
 
 void
 indigo_session_do_save_feed(const indigo_job *j)
 {
-    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_SAVE_FEED_FAILED};
-
-    INDIGO_SESSION_AGENT_GUARD(ev);
-
-    wf_actor_preferences input = {0};
-    const wf_status status = build_saved_feeds_v2_prefs(j->actor, j->paging, false, &input);
-    if (status != WF_OK) {
-        indigo_log_warn("session: could not prepare feed save");
-        ev.failure = WF_FAIL_OTHER;
-        indigo_session_publish_event(&ev);
-        return;
-    }
-
-    const wf_status put_status = wf_agent_put_actor_prefs_typed(g_session.agent, &input);
-    wf_actor_preferences_free(&input);
-
-    if (put_status != WF_OK) {
-        indigo_log_warn("session: feed save failed (%d)", (int) put_status);
-        indigo_session_publish_failure(&ev, "save feed", put_status);
-        return;
-    }
-
-    indigo_log_info("session: saved feed %s", j->actor);
-    indigo_session_event ev_save = { .kind = INDIGO_SESSION_EVENT_SAVE_FEED_DONE };
-    indigo_session_publish_event(&ev_save);
+    do_feed_mutation(j, false, INDIGO_SESSION_EVENT_SAVE_FEED_DONE,
+                     INDIGO_SESSION_EVENT_SAVE_FEED_FAILED, "saved feed");
 }
 
 void
 indigo_session_do_remove_feed(const indigo_job *j)
 {
-    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED};
-
-    INDIGO_SESSION_AGENT_GUARD(ev);
-
-    wf_actor_preferences input = {0};
-    const wf_status status = build_saved_feeds_v2_prefs(j->actor, false, true, &input);
-    if (status != WF_OK) {
-        indigo_log_warn("session: could not prepare feed removal");
-        ev.failure = WF_FAIL_OTHER;
-        indigo_session_publish_event(&ev);
-        return;
-    }
-
-    const wf_status put_status = wf_agent_put_actor_prefs_typed(g_session.agent, &input);
-    wf_actor_preferences_free(&input);
-
-    if (put_status != WF_OK) {
-        indigo_log_warn("session: feed removal failed (%d)", (int) put_status);
-        indigo_session_publish_failure(&ev, "remove feed", put_status);
-        return;
-    }
-
-    indigo_log_info("session: removed feed %s", j->actor);
-    indigo_session_event ev_remove = { .kind = INDIGO_SESSION_EVENT_REMOVE_FEED_DONE };
-    indigo_session_publish_event(&ev_remove);
+    do_feed_mutation(j, true, INDIGO_SESSION_EVENT_REMOVE_FEED_DONE,
+                     INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED, "removed feed");
 }
 
 void
 indigo_session_do_pin_feed(const indigo_job *j)
 {
-    indigo_session_event ev = {.kind = INDIGO_SESSION_EVENT_PIN_FEED_FAILED};
-
-    INDIGO_SESSION_AGENT_GUARD(ev);
-
-    wf_actor_preferences input = {0};
-    const wf_status status = build_saved_feeds_v2_prefs(j->actor, j->paging, false, &input);
-    if (status != WF_OK) {
-        indigo_log_warn("session: could not prepare feed pin");
-        ev.failure = WF_FAIL_OTHER;
-        indigo_session_publish_event(&ev);
-        return;
-    }
-
-    const wf_status put_status = wf_agent_put_actor_prefs_typed(g_session.agent, &input);
-    wf_actor_preferences_free(&input);
-
-    if (put_status != WF_OK) {
-        indigo_log_warn("session: feed pin failed (%d)", (int) put_status);
-        indigo_session_publish_failure(&ev, "pin feed", put_status);
-        return;
-    }
-
-    indigo_log_info("session: pinned feed %s to %d", j->actor, j->paging);
-    indigo_session_event ev_pin = { .kind = INDIGO_SESSION_EVENT_PIN_FEED_DONE };
-    indigo_session_publish_event(&ev_pin);
+    do_feed_mutation(j, false, INDIGO_SESSION_EVENT_PIN_FEED_DONE,
+                     INDIGO_SESSION_EVENT_PIN_FEED_FAILED, "pinned feed");
 }
 
 /* ------------------------------------------------------------------ */

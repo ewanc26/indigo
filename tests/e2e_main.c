@@ -575,6 +575,104 @@ test_timeline_and_chat(const char *data_dir)
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.getTimeline") == 1);
     CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 1);
 
+    /* Feed discovery and management: suggested generators, one generator's
+     * detail, the v2 saved-feeds list with pinned flags, and save/pin/remove
+     * round-trips through putPreferences. */
+    e2e_pds_route(pds, "app.bsky.unspecced.getSuggestedFeeds", 200,
+                  "{\"feeds\":["
+                  "{\"uri\":\"at://did:plc:x/app.bsky.feed.generator/cats\",\"cid\":\"g1\","
+                  "\"did\":\"did:web:x\",\"creator\":{\"did\":\"did:plc:x\",\"handle\":\"x.test\"},"
+                  "\"displayName\":\"Cat Pics\",\"description\":\"Nothing but cats.\","
+                  "\"likeCount\":4200,\"indexedAt\":\"2026-10-01T10:00:00.000Z\"},"
+                  "{\"uri\":\"at://did:plc:y/app.bsky.feed.generator/dogs\",\"cid\":\"g2\","
+                  "\"did\":\"did:web:y\",\"creator\":{\"did\":\"did:plc:y\",\"handle\":\"y.test\"},"
+                  "\"displayName\":\"Dog Spotting\",\"description\":\"Good dogs only.\","
+                  "\"likeCount\":980,\"indexedAt\":\"2026-10-02T10:00:00.000Z\"}]}");
+    e2e_pds_route(pds, "app.bsky.feed.getFeedGenerator", 200,
+                  "{\"view\":{\"uri\":\"at://did:plc:x/app.bsky.feed.generator/cats\",\"cid\":\"g1\","
+                  "\"did\":\"did:web:x\",\"creator\":{\"did\":\"did:plc:x\",\"handle\":\"x.test\"},"
+                  "\"displayName\":\"Cat Pics\",\"description\":\"Nothing but cats, all day.\","
+                  "\"likeCount\":4200,\"indexedAt\":\"2026-10-01T10:00:00.000Z\"},"
+                  "\"isOnline\":true,\"isValid\":true}");
+    e2e_pds_route(pds, "app.bsky.actor.getPreferences", 200,
+                  "{\"preferences\":["
+                  "{\"$type\":\"app.bsky.actor.defs#threadViewPref\",\"sort\":\"newest\"},"
+                  "{\"$type\":\"app.bsky.actor.defs#savedFeedsPrefV2\",\"items\":["
+                  "{\"type\":\"timeline\",\"value\":\"following\",\"pinned\":true,\"id\":\"a\"},"
+                  "{\"type\":\"feed\",\"value\":\"at://did:plc:x/app.bsky.feed.generator/cats\",\"pinned\":true,\"id\":\"b\"},"
+                  "{\"type\":\"feed\",\"value\":\"at://did:plc:x/app.bsky.feed.generator/poetry\",\"pinned\":false,\"id\":\"c\"}]}]}");
+    e2e_pds_route(pds, "app.bsky.feed.getFeedGenerators", 200,
+                  "{\"feeds\":[{\"uri\":\"at://did:plc:x/app.bsky.feed.generator/cats\",\"cid\":\"g1\","
+                  "\"did\":\"did:web:x\",\"creator\":{\"did\":\"did:plc:x\",\"handle\":\"x.test\"},"
+                  "\"displayName\":\"Cat Pics\",\"indexedAt\":\"2026-10-01T10:00:00.000Z\"}]}");
+    e2e_pds_route(pds, "app.bsky.actor.putPreferences", 200, "{}");
+
+    CHECK(indigo_session_submit_feed_discovery(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_FEED_DISCOVERY_PAGE, &ev));
+    {
+        const indigo_feed_discovery_page *pg = indigo_session_feed_discovery_results();
+        CHECK(pg->count == 2);
+        CHECK_STR(pg->generators[0].display_name, "Cat Pics");
+        CHECK(pg->generators[0].has_like_count && pg->generators[0].like_count == 4200);
+        CHECK_STR(pg->generators[1].uri, "at://did:plc:y/app.bsky.feed.generator/dogs");
+    }
+
+    CHECK(indigo_session_submit_feed_generator(
+             "at://did:plc:x/app.bsky.feed.generator/cats"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_FEED_GENERATOR_PAGE, &ev));
+    {
+        const indigo_feed_generator *g = indigo_session_feed_generator_result();
+        CHECK(g != NULL);
+        CHECK_STR(g->display_name, "Cat Pics");
+        CHECK(g->has_like_count && g->like_count == 4200);
+    }
+    CHECK(e2e_pds_request_path_contains(pds, "app.bsky.feed.getFeedGenerator", "feed="));
+
+    CHECK(indigo_session_submit_saved_feeds_v2());
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_PAGE, &ev));
+    {
+        const indigo_saved_feeds_v2 *v2 = indigo_session_saved_feeds_v2_results();
+        CHECK(v2->count == 2);
+        CHECK_STR(v2->entries[0].uri, "at://did:plc:x/app.bsky.feed.generator/cats");
+        CHECK(v2->entries[0].pinned);
+        CHECK_STR(v2->entries[0].display_name, "Cat Pics");
+        CHECK(!v2->entries[1].pinned);
+    }
+
+    /* Saving a new feed round-trips the whole preferences array: the thread
+     * view pref and the existing v2 items survive, the new one is appended. */
+    CHECK(indigo_session_submit_save_feed(
+             "at://did:plc:y/app.bsky.feed.generator/dogs", false));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SAVE_FEED_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "app.bsky.actor.putPreferences") == 1);
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "dogs"));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "threadViewPref"));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "savedFeedsPrefV2"));
+    CHECK(indigo_session_saved_feeds_v2_results()->count == 0);
+
+    /* Pin and remove are the same round-trip. */
+    CHECK(indigo_session_submit_pin_feed(
+             "at://did:plc:x/app.bsky.feed.generator/poetry", true));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_PIN_FEED_DONE, &ev));
+    CHECK(indigo_session_submit_remove_feed(
+             "at://did:plc:x/app.bsky.feed.generator/poetry"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_REMOVE_FEED_DONE, &ev));
+    CHECK(e2e_pds_hits(pds, "app.bsky.actor.putPreferences") == 3);
+
+    /* A failing write reports failure. */
+    e2e_pds_route(pds, "app.bsky.actor.putPreferences", 400,
+                  "{\"error\":\"InvalidRequest\",\"message\":\"too many feeds\"}");
+    CHECK(indigo_session_submit_save_feed(
+             "at://did:plc:y/app.bsky.feed.generator/dogs", false));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SAVE_FEED_FAILED, &ev));
+
+    /* A failed discovery reports too, and the previous page is still held. */
+    e2e_pds_route(pds, "app.bsky.unspecced.getSuggestedFeeds", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"boom\"}");
+    CHECK(indigo_session_submit_feed_discovery(NULL));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_FEED_DISCOVERY_FAILED, &ev));
+    CHECK(indigo_session_feed_discovery_results()->count == 2);
+
     /* getMessages answers newest first; the thread screen keeps oldest first
      * and selects the newest, with the viewer's own message marked. */
     CHECK(indigo_session_submit_chat_messages("c1"));
@@ -633,7 +731,8 @@ test_timeline_and_chat(const char *data_dir)
     CHECK(ev.failure != WF_FAIL_NONE);
     CHECK(indigo_session_page(&count) != NULL && count == 2);
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.getTimeline") == 2);
-    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 1);
+    /* The feed-management block above also reads preferences. */
+    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") >= 1);
 
     e2e_pds_route(pds, "chat.bsky.convo.getMessages", 500,
                   "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");

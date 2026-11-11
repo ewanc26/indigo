@@ -2,6 +2,7 @@
 #define INDIGO_SEARCH_H
 
 #include "app/timeline.h"
+#include "atproto/feeds.h"
 #include "atproto/starter_pack.h"
 
 #include <stdbool.h>
@@ -63,6 +64,10 @@ typedef enum {
     /* One starter pack: its members are the search screen's actor rows, and
      * the pack's feed references follow them as list-shaped rows. */
     INDIGO_SEARCH_STARTER_PACK,
+    /* Suggested feed generators to browse, and one generator's detail with
+     * the save/pin/remove actions. */
+    INDIGO_SEARCH_FEED_DISCOVERY,
+    INDIGO_SEARCH_FEED_DETAIL,
 } indigo_search_kind;
 
 typedef struct {
@@ -109,6 +114,17 @@ typedef struct {
     int list_remove_confirm;
     char list_status[INDIGO_POST_NOTE_MAX];
     bool list_status_error;
+    /* Discovered generators for INDIGO_SEARCH_FEED_DISCOVERY, held apart
+     * from the union because a generator is neither a person, a post nor a
+     * list. */
+    indigo_feed_generator generators[INDIGO_FEED_DISCOVERY_PAGE];
+    /* The generator INDIGO_SEARCH_FEED_DETAIL is showing. */
+    indigo_feed_generator open_generator;
+    bool has_open_generator;
+    /* Where B from the feed detail goes: the discovery list or the picker. */
+    indigo_search_kind feed_detail_back;
+    /* Removing a feed takes two presses of the remove button. */
+    int feed_remove_confirm;
     unsigned count;
     unsigned selected;
     unsigned scroll;
@@ -144,6 +160,9 @@ const indigo_list *indigo_search_row_list(const indigo_search *s, unsigned row, 
 unsigned indigo_search_row_count(const indigo_search *s);
 /* The feed row at/after the member rows, or empty when the selection is an
  * account or the kind is not a starter pack. */
+const indigo_feed_generator *indigo_search_selected_generator(const indigo_search *s);
+const indigo_feed_generator *indigo_search_row_generator(const indigo_search *s,
+                                                         unsigned row, unsigned rows);
 const char *indigo_search_selected_feed(const indigo_search *s);
 const char *indigo_search_row_feed(const indigo_search *s, unsigned row,
                                    unsigned rows);

@@ -664,6 +664,39 @@ handle_requests(indigo_app *app)
             indigo_timeline_fail_fetch(&app->timeline, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_FEED_DISCOVERY:
+        if (!indigo_session_submit_feed_discovery(app->search.cursor[0]
+                                                      ? app->search.cursor : NULL)) {
+            indigo_app_feed_discovery_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_FEED_GENERATOR:
+        if (!indigo_session_submit_feed_generator(app->request_feed_uri)) {
+            indigo_app_feed_generator_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_SAVED_FEEDS_V2:
+        if (!indigo_session_submit_saved_feeds_v2()) {
+            indigo_app_saved_feeds_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_SAVE_FEED:
+        if (!indigo_session_submit_save_feed(app->request_feed_uri,
+                                             app->request_feed_pinned)) {
+            indigo_app_save_feed_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_REMOVE_FEED:
+        if (!indigo_session_submit_remove_feed(app->request_feed_uri)) {
+            indigo_app_remove_feed_failed(app, "Could not start the request.");
+        }
+        break;
+    case INDIGO_REQUEST_PIN_FEED:
+        if (!indigo_session_submit_pin_feed(app->request_feed_uri,
+                                            app->request_feed_pinned)) {
+            indigo_app_pin_feed_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_SAVE_SETTINGS:
         indigo_settings_store_save(SETTINGS_PATH, &app->settings);
         break;
@@ -1014,6 +1047,48 @@ handle_events(indigo_app *app)
             indigo_app_feeds_loaded(app, feeds, fn, ev.cursor);
             break;
         }
+        case INDIGO_SESSION_EVENT_FEED_DISCOVERY_PAGE:
+            indigo_app_feed_discovery_loaded(app,
+                                             indigo_session_feed_discovery_results());
+            break;
+        case INDIGO_SESSION_EVENT_FEED_DISCOVERY_FAILED:
+            indigo_app_feed_discovery_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_FEED_GENERATOR_PAGE:
+            indigo_app_feed_generator_loaded(app,
+                                             indigo_session_feed_generator_result());
+            break;
+        case INDIGO_SESSION_EVENT_FEED_GENERATOR_FAILED:
+            indigo_app_feed_generator_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_PAGE:
+            indigo_app_saved_feeds_loaded(app,
+                                          indigo_session_saved_feeds_v2_results());
+            break;
+        case INDIGO_SESSION_EVENT_SAVED_FEEDS_V2_FAILED:
+            indigo_app_saved_feeds_failed(app, indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_SAVE_FEED_DONE:
+            indigo_app_save_feed_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_SAVE_FEED_FAILED:
+            indigo_app_save_feed_failed(app, ev.message[0] ? ev.message
+                                                           : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_REMOVE_FEED_DONE:
+            indigo_app_remove_feed_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED:
+            indigo_app_remove_feed_failed(app, ev.message[0] ? ev.message
+                                                             : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_PIN_FEED_DONE:
+            indigo_app_pin_feed_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_PIN_FEED_FAILED:
+            indigo_app_pin_feed_failed(app, ev.message[0] ? ev.message
+                                                          : indigo_failure_message(ev.failure));
+            break;
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:
             indigo_app_follow_done(app, ev.follow == INDIGO_FOLLOW, ev.record_uri);
             break;

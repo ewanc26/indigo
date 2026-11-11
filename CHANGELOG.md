@@ -8,6 +8,14 @@ as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Feed discovery and management on the search screen, completing #115: the Feeds picker gains a Discover pill (and the repost button) opening a list of suggested generators; opening one shows a detail with its name, description and avatar plus Open, Save, Pin/Unpin and Remove actions (remove asks twice), and the like button on a saved feed opens the same detail. B from the detail returns to the list it came from. Feed mutations refresh the saved-feeds lists, chained because only one request can be in flight. Host e2e covers discovery, generator detail, the v2 saved-feeds list with pinned flags and save/pin/remove round-trips including failures. ([#115](https://github.com/ewanc26/indigo/issues/115))
+
+### Fixed
+
+- The saved-feeds v2 read and the save/remove/pin writes now use the raw preferences JSON (`wf_agent_get_preferences` / `wf_agent_put_preferences`) instead of the strict typed parser: pinned flags were dropped by the read, one unknown preference type could fail the whole read, and the typed write rebuilt the preferences array dropping types it did not know. Saving an already-saved feed updates it instead of appending a duplicate. ([#115](https://github.com/ewanc26/indigo/issues/115))
+
 ## [0.17.0] - 2026-11-11
 
 ### Fixed

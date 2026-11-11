@@ -82,6 +82,10 @@ typedef enum {
     INDIGO_ACTION_LIST_SAVE,
     INDIGO_ACTION_LIST_ADD,
     INDIGO_ACTION_LIST_REMOVE,
+    INDIGO_ACTION_FEED_DISCOVER,
+    INDIGO_ACTION_FEED_SAVE,
+    INDIGO_ACTION_FEED_PIN,
+    INDIGO_ACTION_FEED_REMOVE,
 } indigo_action;
 
 /* Posts visible at once in the bottom list. */

@@ -613,6 +613,13 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
                                s->kind == INDIGO_SEARCH_LIKED_BY
                                    ? "People who liked this post"
                                    : "People who reposted this post");
+        } else if (s->kind == INDIGO_SEARCH_FEED_DISCOVERY) {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT,
+                               "Discover feeds - suggested generators");
+        } else if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+            indigo_canvas_text(c, q.x + 8, q.y + 8, 0.55f, COL_TEXT_SOFT, "%.40s",
+                               s->has_open_generator && s->open_generator.display_name[0]
+                                   ? s->open_generator.display_name : "Feed details");
         } else if (s->kind == INDIGO_SEARCH_AUTHOR) {
           /* The box doubles as the tab switch: it names the person and what
            * a tap on it will show instead. */
@@ -636,6 +643,33 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         unsigned idx = s->scroll + row;
         char title[96];
 
+        if (s->kind == INDIGO_SEARCH_FEED_DISCOVERY) {
+            const indigo_feed_generator *g =
+                indigo_search_row_generator(s, row, INDIGO_SEARCH_ROWS);
+
+            if (!g) {
+                break;
+            }
+            snprintf(title, sizeof title, "%.30s",
+                     g->display_name[0] ? g->display_name : g->uri);
+            indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                                   idx == s->selected, title,
+                                   g->description[0] ? g->description : g->did, NULL);
+            continue;
+        }
+        if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+            if (row > 0 || !s->has_open_generator) {
+                break;
+            }
+            const indigo_feed_generator *g = &s->open_generator;
+            snprintf(title, sizeof title, "%.30s",
+                     g->display_name[0] ? g->display_name : g->uri);
+            indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row),
+                                   true, title,
+                                   g->description[0] ? g->description : g->did,
+                                   g->avatar);
+            continue;
+        }
         if (s->kind == INDIGO_SEARCH_LISTS || s->kind == INDIGO_SEARCH_FEEDS) {
             const indigo_list *l = indigo_search_row_list(s, row, INDIGO_SEARCH_ROWS);
 
@@ -705,12 +739,18 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
      * a 74px pill in the baked font. Every row kind but the people ones opens
      * its row rather than a profile: a thread, a curated list, a saved feed. */
     opens = posts || indigo_search_is_lists(s) ||
-            s->kind == INDIGO_SEARCH_STARTER_PACK;
+            s->kind == INDIGO_SEARCH_STARTER_PACK ||
+            s->kind == INDIGO_SEARCH_FEED_DISCOVERY ||
+            s->kind == INDIGO_SEARCH_FEED_DETAIL;
     {
         bool has_selection;
 
         if (posts) {
             has_selection = indigo_search_selected_post(s) != NULL;
+        } else if (s->kind == INDIGO_SEARCH_FEED_DISCOVERY) {
+            has_selection = indigo_search_selected_generator(s) != NULL;
+        } else if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+            has_selection = s->has_open_generator;
         } else if (indigo_search_is_lists(s)) {
             has_selection = indigo_search_selected_list(s) != NULL;
         } else if (s->kind == INDIGO_SEARCH_STARTER_PACK) {
@@ -722,6 +762,18 @@ build_bottom_search(const indigo_app *app, indigo_canvas *c)
         indigo_layout_action_pill(c, INDIGO_ACTION_AUTHOR, has_selection,
                     s->loading, COL_PILL_ACTIVE,
                     posts ? "Thread" : opens ? "Open" : "Profile");
+    }
+    if (s->kind == INDIGO_SEARCH_FEEDS) {
+        indigo_layout_action_pill(c, INDIGO_ACTION_FEED_DISCOVER, true, s->loading,
+                                  COL_PILL_ACTIVE, "Discover");
+    } else if (s->kind == INDIGO_SEARCH_FEED_DETAIL) {
+        const int saved = indigo_app_feed_saved_state(app, app->request_feed_uri);
+        indigo_layout_action_pill(c, INDIGO_ACTION_FEED_SAVE, saved < 0, s->loading,
+                                  COL_PILL_ACTIVE, "Save");
+        indigo_layout_action_pill(c, INDIGO_ACTION_FEED_PIN, saved >= 0, s->loading,
+                                  COL_PILL_ACTIVE, saved == 1 ? "Unpin" : "Pin");
+        indigo_layout_action_pill(c, INDIGO_ACTION_FEED_REMOVE, saved >= 0, s->loading,
+                                  COL_PILL_ACTIVE, "Remove");
     }
     if (s->kind == INDIGO_SEARCH_LISTS) {
         indigo_layout_action_pill(c, INDIGO_ACTION_LIST_NEW, true, s->loading,
