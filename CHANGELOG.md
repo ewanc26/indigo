@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Build fixes: added missing types, function declarations, and struct members in app.h and related files. ([#135](https://github.com/ewanc26/indigo/pull/135))
+
 ## [0.16.0] - 2026-11-07
 
 ### Fixed
@@ -565,7 +569,3 @@ who liked or reposted a post, and the start-up update recovery.
 [Unreleased]: https://github.com/ewanc26/indigo/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/ewanc26/indigo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ewanc26/indigo/compare/v0.2.0...v0.3.0
-## [Unreleased]
-
-### Fixed
-- Build issues: Added missing types, function declarations, and struct members in app.h and related files.

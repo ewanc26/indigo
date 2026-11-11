@@ -444,7 +444,7 @@ test_canvas_overflow_is_bounded(void)
 static void
 test_app_navigation(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -476,7 +476,7 @@ test_app_navigation(void)
 static void
 test_touch_navigation(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_rect menu = indigo_layout_button_rect(INDIGO_ACTION_MENU);
     indigo_rect back = indigo_layout_button_rect(INDIGO_ACTION_BACK);
@@ -646,7 +646,7 @@ test_layout_invariants(void)
     static indigo_canvas bottom;
 
     for (int screen = 0; screen <= INDIGO_SCREEN_SEARCH; screen++) {
-        indigo_app app;
+        static indigo_app app;
         indigo_input in = {0};
 
         indigo_app_init(&app);
@@ -698,7 +698,7 @@ make_post(const char *uri, const char *text)
 static void
 test_drag_scrolls_feeds(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_rect row = indigo_layout_button_rect(INDIGO_ACTION_ROW0);
     indigo_rect like = indigo_layout_button_rect(INDIGO_ACTION_LIKE);
@@ -745,7 +745,7 @@ test_drag_scrolls_feeds(void)
 static void
 test_thread_navigation(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_post posts[3];
@@ -789,7 +789,7 @@ test_thread_navigation(void)
 static void
 test_thread_mute_state(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "one");
@@ -842,7 +842,7 @@ test_thread_mute_state(void)
 static void
 test_delete_post_confirmation(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "my post");
     indigo_rect r = indigo_layout_button_rect(INDIGO_ACTION_DELETE);
@@ -893,7 +893,7 @@ test_delete_post_confirmation(void)
 static void
 test_delete_post_result_removes_stale_rows(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_post p = make_post("at://did:plc:me/app.bsky.feed.post/1", "my post");
 
     indigo_app_init(&app);
@@ -1010,7 +1010,7 @@ test_compose_reply_gate(void)
 static void
 test_new_post_reply_gate(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -1135,7 +1135,7 @@ test_attach_image(void)
 {
     char dir[] = "build-host/attach-test";
     char path[256];
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     mkdir("build-host", 0777);
@@ -1242,7 +1242,7 @@ test_attach_camera_folder(void)
     char camera[] = "build-host/attach-camera";
     char appdir[] = "build-host/attach-camera-app";
     char path[256];
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     FILE *f;
 
@@ -1346,7 +1346,7 @@ test_compose_gate_text_fits(void)
         "A draft that runs long enough to fill every line the compose box allows, "
         "so the gate line below it is pushed as far down as it will go.",
     };
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -1391,7 +1391,7 @@ test_compose_gate_text_fits(void)
 static void
 test_compose_flow(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_post target = make_post("at://a/app.bsky.feed.post/1", "hello");
@@ -1456,7 +1456,7 @@ test_compose_flow(void)
 static void
 test_compose_thread_touch_flow(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field field;
     indigo_rect thread_button;
@@ -1496,7 +1496,7 @@ test_compose_thread_touch_flow(void)
 static void
 test_partial_thread_publish_clears_draft(void)
 {
-    indigo_app app;
+    static indigo_app app;
 
     indigo_app_init(&app);
     app.screen = INDIGO_SCREEN_COMPOSE;
@@ -1580,7 +1580,7 @@ test_chat_group(void)
 static void
 test_chat_group_flow(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_chat_group loaded;
@@ -1679,7 +1679,7 @@ test_chat_group_flow(void)
 static void
 test_chat_thread_and_open(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_chat_thread page;
@@ -1732,7 +1732,7 @@ test_chat_thread_and_open(void)
 static void
 test_chat_start_and_decisions(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_chat_join_requests page;
@@ -1853,7 +1853,7 @@ test_chat_start_and_decisions(void)
 static void
 test_chat_screens_use_both(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -1923,7 +1923,7 @@ display_content(const indigo_canvas *c)
 static void
 test_every_screen_uses_both_displays(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -1952,7 +1952,7 @@ test_every_screen_uses_both_displays(void)
 static void
 test_chat_reply(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
 
@@ -2027,7 +2027,7 @@ test_messages_list(void)
 static void
 test_messages_loaded_and_failed(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_chat_inbox page;
@@ -2084,7 +2084,7 @@ test_messages_loaded_and_failed(void)
 static void
 test_notifications(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_notification items[3] = {0};
@@ -2293,7 +2293,7 @@ test_signin_fields(void)
 static void
 test_signin_flow(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_rect r;
@@ -2812,7 +2812,7 @@ test_saved_drafts(void)
     static char buf[262144];
     size_t len = 0;
     indigo_saved_draft d, bad_draft;
-    indigo_app app;
+    static indigo_app app;
     indigo_input input = {0};
 
     indigo_saved_drafts_init(&in);
@@ -3832,7 +3832,7 @@ text_at(const indigo_canvas *c, float x, float y)
 static void
 test_long_utf8_labels_fit(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -3999,7 +3999,7 @@ test_home_requests(void)
 static void
 test_facet_menu(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_menu menu;
@@ -4086,7 +4086,7 @@ test_facet_menu(void)
 static void
 test_liked_by_from_the_menu(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_post p = make_post("at://did:plc:alice0000000000000000000000/app.bsky.feed.post/3kabc", "hi");
     indigo_request_kind k;
@@ -4456,7 +4456,7 @@ test_no_duplicate_back_hints(void)
         INDIGO_SCREEN_PROFILE, INDIGO_SCREEN_NOTIFICATIONS, INDIGO_SCREEN_MENU,
         INDIGO_SCREEN_COMPOSE, INDIGO_SCREEN_SEARCH,     INDIGO_SCREEN_SETTINGS,
         INDIGO_SCREEN_UPDATE};
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -4640,7 +4640,7 @@ test_layout_draws_post_images(void)
 {
     static const char *const thumb =
         "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/a@jpeg";
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -4754,7 +4754,7 @@ static void
 test_layout_draws_video_poster(void)
 {
     static const char *const poster = "https://video.example/hls/did:plc:one/c/thumbnail.jpg";
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -4849,7 +4849,7 @@ test_layout_draws_link_cards(void)
 {
     static const char *const card_thumb =
         "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/card@jpeg";
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -4963,7 +4963,7 @@ test_layout_text_scale(void)
     unsigned lines[3] = {0};
 
     for (unsigned k = 0; k < 3; k++) {
-        indigo_app app;
+        static indigo_app app;
         indigo_input in = {0};
         indigo_canvas top;
         indigo_canvas bottom;
@@ -4999,7 +4999,7 @@ test_layout_draws_alt_text(void)
 {
     static const char *const thumb =
         "https://cdn.example/img/feed_thumbnail/plain/did:plc:one/a@jpeg";
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -5080,7 +5080,7 @@ test_layout_draws_alt_text(void)
 static void
 test_settings_screen_shows_the_build(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -5123,7 +5123,7 @@ test_shapes_stay_on_screen(void)
         INDIGO_SCREEN_UPDATE};
     static const char *const url =
         "https://cdn.bsky.app/img/avatar/plain/did:plc:rhiannon/avatar@jpeg";
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -5166,7 +5166,7 @@ test_text_stays_on_screen(void)
         "Quiet posters and writers",
         "A feed name long enough to need cutting somewhere in the middle of it",
     };
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
 
     indigo_app_init(&app);
@@ -5260,7 +5260,7 @@ test_search_selection_scroll(void)
 static void
 test_search_flow(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
     indigo_rect r;
@@ -5352,7 +5352,7 @@ test_search_flow(void)
 static void
 test_search_query_resets_results(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_actor actors[2] = {0};
     indigo_field f;
 
@@ -5375,7 +5375,7 @@ test_search_query_resets_results(void)
 static void
 test_search_empty_and_failure(void)
 {
-    indigo_app app;
+    static indigo_app app;
 
     indigo_app_init(&app);
     app.screen = INDIGO_SCREEN_SEARCH;
@@ -5398,7 +5398,7 @@ test_search_empty_and_failure(void)
 static void
 test_search_results_bounded(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_actor many[INDIGO_SEARCH_MAX + 5];
     indigo_field f;
 
@@ -5419,7 +5419,7 @@ test_search_results_bounded(void)
 static void
 test_search_paging(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_actor page[2];
 
     indigo_app_init(&app);
@@ -5460,7 +5460,7 @@ test_search_paging(void)
 static void
 test_profile_editor(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_input in;
     char long_name[INDIGO_POST_NAME_MAX + 1];
@@ -5529,7 +5529,7 @@ test_profile_editor(void)
 static void
 test_follow_toggle(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5570,7 +5570,7 @@ test_follow_toggle(void)
 static void
 test_follow_failure_reverts(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5607,7 +5607,7 @@ test_follow_failure_reverts(void)
 static void
 test_follow_guards(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5737,7 +5737,7 @@ test_prefs(void)
 static void
 test_mute_block_toggle(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5785,7 +5785,7 @@ test_mute_block_toggle(void)
 static void
 test_mute_block_failure_reverts(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5814,7 +5814,7 @@ test_mute_block_failure_reverts(void)
 static void
 test_block_without_uri(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5834,7 +5834,7 @@ test_block_without_uri(void)
 static void
 test_graph_guards(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
 
     indigo_app_init(&app);
@@ -5908,7 +5908,7 @@ test_starter_pack_model(void)
 static void
 test_people_lists(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_actor a[3];
 
@@ -5961,7 +5961,7 @@ test_people_lists(void)
 static void
 test_post_search(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_post p[2];
 
@@ -6024,7 +6024,7 @@ test_post_search(void)
 static void
 test_author_posts(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_post p[1];
 
@@ -6094,7 +6094,7 @@ test_author_posts(void)
 static void
 test_pinned_post(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_rect r;
 
@@ -6134,7 +6134,7 @@ test_pinned_post(void)
 static void
 test_list_management(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_list list;
 
@@ -6190,7 +6190,7 @@ test_list_management(void)
 static void
 test_lists(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_list lists[2];
     indigo_actor members[2];
@@ -6290,7 +6290,7 @@ test_lists(void)
 static void
 test_feeds(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_field f;
     indigo_list feeds[2];
     indigo_input in;
@@ -6387,7 +6387,7 @@ test_feeds(void)
 static void
 test_settings_screen(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_field f;
 
@@ -6503,7 +6503,7 @@ test_settings_screen(void)
 static void
 test_credits_screen(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -6891,7 +6891,7 @@ test_media_placeholder_colour(void)
 static void
 test_layout_draws_avatars(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -6973,7 +6973,7 @@ with_image(indigo_post *p, unsigned w, unsigned h, unsigned count, const char *a
 static void
 test_image_viewer_opens_from_the_selected_post(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
 
@@ -7001,7 +7001,7 @@ test_image_viewer_opens_from_the_selected_post(void)
 static void
 test_image_viewer_needs_an_image(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_post plain = make_post("at://a/app.bsky.feed.post/1", "no picture");
     indigo_post card = make_post("at://a/app.bsky.feed.post/2", "a link");
 
@@ -7035,7 +7035,7 @@ test_image_viewer_needs_an_image(void)
 static void
 test_image_viewer_holds_a_copy(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
 
     with_image(&p, 16, 9, 1, "");
@@ -7054,7 +7054,7 @@ test_image_viewer_holds_a_copy(void)
 static void
 test_image_viewer_from_search_results(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_post p = make_post("at://a/app.bsky.feed.post/1", "a river");
 
     with_image(&p, 1, 1, 1, "");
@@ -7082,7 +7082,7 @@ test_image_viewer_from_search_results(void)
 static void
 test_image_button_is_offered_only_when_there_is_an_image(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -7154,7 +7154,7 @@ test_image_button_keeps_the_header_bar_readable(void)
 static void
 test_image_viewer_draws_the_picture_at_the_screen(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -7217,7 +7217,7 @@ test_image_viewer_draws_the_picture_at_the_screen(void)
 static void
 test_image_viewer_says_what_the_picture_is(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -7274,7 +7274,7 @@ test_image_viewer_says_what_the_picture_is(void)
 static void
 test_image_viewer_is_entered_and_left_the_way_the_app_does(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_rect image = indigo_layout_button_rect(INDIGO_ACTION_IMAGE);
     indigo_rect close = indigo_layout_button_rect(INDIGO_ACTION_BACK);
@@ -7319,7 +7319,7 @@ test_image_viewer_is_entered_and_left_the_way_the_app_does(void)
 static void
 test_image_button_takes_the_status_line(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
@@ -8059,7 +8059,7 @@ test_updater_transitions(void)
 static void
 test_update_screen_asks_before_it_installs(void)
 {
-    indigo_app app;
+    static indigo_app app;
     indigo_input in = {0};
     indigo_canvas top;
     indigo_canvas bottom;
