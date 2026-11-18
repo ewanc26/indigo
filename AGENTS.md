@@ -1,4 +1,8 @@
-# AGENTS.md — Indigo
+# AGENTS.md
+
+Guidance for AI coding agents working in **indigo**.
+
+— Indigo
 
 Indigo is a native Nintendo 3DS homebrew client for Bluesky. It is scoped to the Bluesky app: it is not a general AT Protocol client and speaks Bluesky's own lexicons (`app.bsky.*`). Accounts on any PDS must work, so sign-in takes a service URL (default `https://bsky.social`) and the session follows the account's own PDS.
 
