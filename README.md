@@ -308,3 +308,5 @@ Changes go through a branch and a pull request, and `main` is never pushed to di
 ## Licence
 
 Indigo is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+
+Copyright (C) 2026 Ewan Croft (ewanc26).
