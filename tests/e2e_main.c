@@ -544,7 +544,8 @@ test_timeline_and_chat(const char *data_dir)
                   "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\","
                   "\"displayName\":\"bob\"}]},"
                   "{\"id\":\"g1\",\"rev\":\"1\",\"unreadCount\":0,"
-                  "\"kind\":{\"$type\":\"chat.bsky.convo.defs#groupConvo\"},"
+                  "\"kind\":{\"$type\":\"chat.bsky.convo.defs#groupConvo\","
+                  "\"name\":\"Weekend crew\",\"memberCount\":3,\"memberLimit\":50},"
                   "\"members\":[{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\"},"
                   "{\"did\":\"did:plc:bob\",\"handle\":\"bob.test\"},"
                   "{\"did\":\"did:plc:carol\",\"handle\":\"carol.test\"}]},"
@@ -706,7 +707,7 @@ test_timeline_and_chat(const char *data_dir)
     CHECK(!inbox->items[0].group);
     CHECK_STR(inbox->items[1].id, "g1");
     CHECK(inbox->items[1].group);
-    CHECK_STR(inbox->items[1].name, "Group");
+    CHECK_STR(inbox->items[1].name, "Weekend crew");
     CHECK(e2e_pds_hits(pds, "chat.bsky.convo.listConvos") == 1);
 
     /* A reply is refused locally when it is only spaces, and sent as a
@@ -722,6 +723,31 @@ test_timeline_and_chat(const char *data_dir)
                                    "\"text\":\"hello there\""));
     CHECK(e2e_pds_request_contains(pds, "chat.bsky.convo.sendMessage",
                                    "chat.bsky.convo.defs#messageInput"));
+
+    /* A group thread: the messages name their senders by DID only, and the
+     * member list read alongside them turns those into the names the two
+     * other members are told apart by. */
+    e2e_pds_route(pds, "chat.bsky.convo.getConvo", 200,
+                  group_view_json("g1", "Weekend crew", NULL, NULL));
+    e2e_pds_route(pds, "chat.bsky.convo.getMessages", 200,
+                  "{\"messages\":["
+                  "{\"id\":\"gm2\",\"rev\":\"2\",\"text\":\"see you there\","
+                  "\"sender\":{\"did\":\"did:plc:carol\"},"
+                  "\"sentAt\":\"2026-10-01T10:03:00.000Z\"},"
+                  "{\"id\":\"gm1\",\"rev\":\"1\",\"text\":\"hi all\","
+                  "\"sender\":{\"did\":\"did:plc:bob\"},"
+                  "\"sentAt\":\"2026-10-01T10:02:00.000Z\"}]}");
+    CHECK(indigo_session_submit_chat_messages("g1"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE, &ev));
+    CHECK(ev.page_count == 2);
+    thread = indigo_session_chat_thread();
+    CHECK_STR(thread->convo_id, "g1");
+    CHECK(thread->count == 2);
+    CHECK_STR(thread->items[0].text, "hi all");
+    CHECK_STR(thread->items[0].sender_name, "bob");
+    CHECK_STR(thread->items[1].text, "see you there");
+    CHECK_STR(thread->items[1].sender_name, "carol");
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getConvo") == 1);
 
     /* A failed refresh surfaces the failure and leaves the last page alone. */
     e2e_pds_route(pds, "app.bsky.feed.getTimeline", 500,
@@ -740,7 +766,8 @@ test_timeline_and_chat(const char *data_dir)
     CHECK(wait_for_kind(INDIGO_SESSION_EVENT_CHAT_THREAD_FAILED, &ev));
     CHECK(ev.failure != WF_FAIL_NONE);
     CHECK(indigo_session_chat_thread()->count == 2);
-    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getMessages") == 2);
+    /* Three reads by now: the direct thread, the group thread, this failure. */
+    CHECK(e2e_pds_hits(pds, "chat.bsky.convo.getMessages") == 3);
 
     e2e_pds_route(pds, "chat.bsky.convo.listConvos", 500,
                   "{\"error\":\"InternalServerError\",\"message\":\"try later\"}");

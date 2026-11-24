@@ -573,6 +573,21 @@ indigo_session_do_chat_messages(const indigo_job *j)
                                          wf_agent_get_did(g_session.agent));
     wf_chat_message_list_free(&list);
 
+    /* A message names its sender by DID only, so the conversation's member
+     * list is what turns a DID into the name a group message is read under.
+     * Best effort: a failed read leaves the rows unnamed, as they were, and
+     * never fails the thread itself. */
+    {
+        wf_chat_convo convo;
+
+        memset(&convo, 0, sizeof convo);
+        if (wf_agent_chat_get_convo(g_session.agent, j->post_uri, &convo) == WF_OK) {
+            indigo_chat_thread_apply_sender_names(&g_session.chat_thread, &convo,
+                                                  wf_agent_get_did(g_session.agent));
+            wf_chat_convo_free(&convo);
+        }
+    }
+
     ev.kind = INDIGO_SESSION_EVENT_CHAT_THREAD_PAGE;
     ev.page_count = g_session.chat_thread.count;
     indigo_session_publish_event(&ev);
