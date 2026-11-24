@@ -267,7 +267,10 @@ build_bottom_chat_thread(const indigo_app *app, indigo_canvas *c)
             break;
         }
         it = &t->items[idx];
-        snprintf(title, sizeof title, "%s", it->mine ? "You" : (t->title[0] ? t->title : "Them"));
+        snprintf(title, sizeof title, "%s",
+                 it->mine ? "You"
+                 : it->sender_name[0] ? it->sender_name
+                                      : (t->title[0] ? t->title : "Them"));
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == t->selected,
                                title, it->text, "");
     }

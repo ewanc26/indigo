@@ -115,6 +115,7 @@ test_chat_inbox_counterpart(void)
     convos[2].id = (char *)"convo-group";
     convos[2].members = trio;
     convos[2].member_count = 3;
+    convos[2].group_name = (char *)"Weekend crew";
 
     wf_chat_convo_list page;
     memset(&page, 0, sizeof page);
@@ -134,17 +135,81 @@ test_chat_inbox_counterpart(void)
     CHECK(got.items[0].unread == 3);
     CHECK(!got.items[0].group);
     CHECK(strcmp(got.items[1].id, "convo-group") == 0);
-    CHECK(strcmp(got.items[1].name, "Group") == 0);
+    /* The group's own name from its kind, not the word "Group". */
+    CHECK(strcmp(got.items[1].name, "Weekend crew") == 0);
     CHECK(got.items[1].group);
     CHECK(strcmp(got.cursor, "next") == 0);
     CHECK(got.has_more);
 
-    /* A page with no cursor ends the inbox. */
+    /* A page with no cursor ends the inbox. A group whose kind carried no
+     * name falls back to "Group". */
     page.cursor = NULL;
+    convos[2].group_name = NULL;
     memset(&got, 0, sizeof got);
     indigo_chat_inbox_append_from_wolfram(&got, &page, "did:plc:me");
     CHECK(!got.has_more);
     CHECK(got.cursor[0] == '\0');
+    CHECK(strcmp(got.items[1].name, "Group") == 0);
+}
+
+static void
+test_chat_thread_sender_names(void)
+{
+    /* A group thread: three messages, newest first as the server sends them,
+     * from two other members and the viewer. The fill keeps each sender's
+     * DID; applying the member list turns them into the names the thread is
+     * read under, so the two other members can be told apart. */
+    wf_agent_profile_view me = { (char *)"did:plc:me", (char *)"me.test",
+                                 (char *)"Me", NULL, NULL, false };
+    wf_agent_profile_view a = { (char *)"did:plc:a", (char *)"a.test", NULL,
+                                NULL, NULL, false };
+    wf_agent_profile_view b = { (char *)"did:plc:b", (char *)"b.test",
+                                (char *)"Bob B", NULL, NULL, false };
+    wf_agent_profile_view trio[3] = { me, a, b };
+
+    wf_chat_convo convo;
+    memset(&convo, 0, sizeof convo);
+    convo.members = trio;
+    convo.member_count = 3;
+
+    wf_chat_message msgs[3];
+    memset(msgs, 0, sizeof msgs);
+    msgs[0].text = (char *)"newest";
+    msgs[0].sender = (char *)"did:plc:b";
+    msgs[1].text = (char *)"middle";
+    msgs[1].sender = (char *)"did:plc:a";
+    msgs[2].text = (char *)"oldest";
+    msgs[2].sender = (char *)"did:plc:me";
+
+    wf_chat_message_list list;
+    memset(&list, 0, sizeof list);
+    list.messages = msgs;
+    list.message_count = 3;
+
+    indigo_chat_thread t;
+    memset(&t, 0, sizeof t);
+    CHECK(indigo_chat_thread_fill_from_wolfram(&t, &list, "did:plc:me") == 3);
+    CHECK(t.count == 3);
+    /* Reversed into oldest first; the viewer's own row is marked and keeps
+     * no sender name, and nobody is named before the member list is applied. */
+    CHECK(strcmp(t.items[0].text, "oldest") == 0);
+    CHECK(t.items[0].mine);
+    CHECK(t.items[0].sender_name[0] == '\0');
+    CHECK(strcmp(t.items[1].sender_did, "did:plc:a") == 0);
+    CHECK(t.items[1].sender_name[0] == '\0');
+
+    indigo_chat_thread_apply_sender_names(&t, &convo, "did:plc:me");
+    /* No display name: the handle stands in. With one: the display name. */
+    CHECK(strcmp(t.items[1].sender_name, "a.test") == 0);
+    CHECK(strcmp(t.items[2].sender_name, "Bob B") == 0);
+    CHECK(t.items[0].sender_name[0] == '\0');
+
+    /* A sender who is not in the member list stays unnamed. */
+    msgs[0].sender = (char *)"did:plc:stranger";
+    memset(&t, 0, sizeof t);
+    indigo_chat_thread_fill_from_wolfram(&t, &list, "did:plc:me");
+    indigo_chat_thread_apply_sender_names(&t, &convo, "did:plc:me");
+    CHECK(t.items[2].sender_name[0] == '\0');
 }
 
 static void
@@ -8198,6 +8263,7 @@ main(void)
     test_canvas_text_fast_paths();
     test_canvas_reinit_resets_state();
     test_chat_inbox_counterpart();
+    test_chat_thread_sender_names();
     test_chat_requests_label();
     test_chat_target();
     test_chat_inbox_edits();

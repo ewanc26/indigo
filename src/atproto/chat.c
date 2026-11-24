@@ -416,7 +416,15 @@ indigo_chat_inbox_append_from_wolfram(indigo_chat_inbox *out,
          * only a fallback for a server that did not send the kind. */
         if (wf_chat_convo_is_group(src) || others > 1) {
             item->group = true;
-            snprintf(item->name, sizeof item->name, "Group");
+            /* The group's own name, which the parser reads out of the kind;
+             * "Group" is only the fallback for a server that sent none. The
+             * row's name is also the thread's title, so this is the name the
+             * conversation is read under too. */
+            if (src->group_name && src->group_name[0]) {
+                indigo_copy_utf8(item->name, sizeof item->name, src->group_name);
+            } else {
+                snprintf(item->name, sizeof item->name, "Group");
+            }
         } else {
             const int at = indigo_chat_pick_counterpart(dids, scanned, viewer_did);
             const wf_agent_profile_view *who = at >= 0 ? &src->members[at] : NULL;
@@ -748,12 +756,52 @@ indigo_chat_thread_fill_from_wolfram(indigo_chat_thread *out,
         memset(dst, 0, sizeof *dst);
         indigo_copy_utf8(dst->text, sizeof dst->text, src->text ? src->text : "");
         dst->mine = viewer_did && src->sender && strcmp(src->sender, viewer_did) == 0;
+        if (src->sender) {
+            indigo_copy_utf8(dst->sender_did, sizeof dst->sender_did, src->sender);
+        }
     }
     out->count = (unsigned) n;
     if (out->count > 0) {
         indigo_chat_thread_select(out, out->count - 1, INDIGO_CHAT_THREAD_ROWS);
     }
     return (int) n;
+}
+
+void
+indigo_chat_thread_apply_sender_names(indigo_chat_thread *thread,
+                                      const struct wf_chat_convo *convo,
+                                      const char *viewer_did)
+{
+    const wf_chat_convo *typed = (const wf_chat_convo *) convo;
+
+    if (!thread || !typed) {
+        return;
+    }
+    for (unsigned i = 0; i < thread->count; i++) {
+        indigo_chat_message *msg = &thread->items[i];
+
+        if (msg->mine || msg->sender_did[0] == '\0') {
+            continue;
+        }
+        if (viewer_did && strcmp(msg->sender_did, viewer_did) == 0) {
+            continue;
+        }
+        for (size_t m = 0; m < typed->member_count; m++) {
+            const wf_agent_profile_view *who = &typed->members[m];
+            const char *name;
+
+            if (!who->did || strcmp(who->did, msg->sender_did) != 0) {
+                continue;
+            }
+            name = who->display_name && who->display_name[0] ? who->display_name
+                   : who->handle && who->handle[0]         ? who->handle
+                                                           : NULL;
+            if (name) {
+                indigo_copy_utf8(msg->sender_name, sizeof msg->sender_name, name);
+            }
+            break;
+        }
+    }
 }
 
 int

@@ -14,6 +14,7 @@ as the release notes.
 
 ### Fixed
 
+- Group conversations are read under their own name and their members can be told apart: the inbox row (and so the thread title) used the word "Group" instead of the name the server sends in the conversation's kind, and a thread dropped who sent each message, so every message in a group that was not mine was drawn under the conversation's title. A thread now also reads the conversation's member list and names each message's sender from it (display name, or handle when there is none); a failed member read leaves the thread as it was. ([#144](https://github.com/ewanc26/indigo/issues/144))
 - The saved-feeds v2 read and the save/remove/pin writes now use the raw preferences JSON (`wf_agent_get_preferences` / `wf_agent_put_preferences`) instead of the strict typed parser: pinned flags were dropped by the read, one unknown preference type could fail the whole read, and the typed write rebuilt the preferences array dropping types it did not know. Saving an already-saved feed updates it instead of appending a duplicate. ([#115](https://github.com/ewanc26/indigo/issues/115))
 
 ## [0.17.0] - 2026-11-11

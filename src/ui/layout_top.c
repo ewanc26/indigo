@@ -267,7 +267,9 @@ build_top_chat_thread(const indigo_app *app, indigo_canvas *c)
     indigo_canvas_text(c, 330, 36, 0.55f, COL_TEXT_DIM, "%u / %u", t->selected + 1, t->count);
     indigo_layout_text_fitted(c, 18, 52, 0.7f, sel->mine ? COL_LINK : COL_TEXT_SOFT,
                               364.0f,
-                              sel->mine ? "You" : (t->title[0] ? t->title : "Them"));
+                              sel->mine ? "You"
+                              : sel->sender_name[0] ? sel->sender_name
+                                                    : (t->title[0] ? t->title : "Them"));
     indigo_layout_top_paragraph(c, 18, 84, 0.6f, COL_TEXT, 4, sel->text);
     /* The reply being written, or the last send's result. */
     if (t->reply[0]) {

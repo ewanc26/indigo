@@ -37,7 +37,7 @@ extern "C" {
 
 typedef struct {
    char id[INDIGO_CHAT_ID_MAX];           /* convo id, for opening it later */
-   char name[INDIGO_POST_NAME_MAX];       /* counterpart, or "Group" */
+   char name[INDIGO_POST_NAME_MAX];       /* counterpart, or the group's name ("Group" when it sent none) */
    char handle[INDIGO_POST_NAME_MAX];     /* with a leading @, empty for a group */
    char preview[INDIGO_CHAT_PREVIEW_MAX]; /* last message text, empty if none */
    int unread;                            /* unread messages in this convo */
@@ -243,6 +243,12 @@ bool indigo_chat_join_requests_move(indigo_chat_join_requests *list, int delta, 
 typedef struct {
    char text[INDIGO_POST_TEXT_MAX];
    bool mine;                             /* sent by the signed-in account */
+   char sender_did[INDIGO_CHAT_TARGET_MAX]; /* who sent it, for naming them */
+   /* The sender's display name, or their handle when they have none. Filled
+    * from the conversation's member list by
+    * indigo_chat_thread_apply_sender_names; empty when the sender is the
+    * viewer or the member list was not read. */
+   char sender_name[INDIGO_POST_NAME_MAX];
 } indigo_chat_message;
 
 /*
@@ -280,6 +286,19 @@ bool indigo_chat_thread_move(indigo_chat_thread *thread, int delta, unsigned row
 int indigo_chat_thread_fill_from_wolfram(indigo_chat_thread *out,
                                          const struct wf_chat_message_list *list,
                                          const char *viewer_did);
+
+/*
+ * Name the sender of each row from a conversation's member list, matched by
+ * DID: the display name, or the handle when there is none. A messageView names
+ * its sender by DID only, so without this every message in a group that is
+ * not the viewer's is drawn under the conversation's title and the members
+ * cannot be told apart. Rows whose sender is not in the member list keep an
+ * empty name, and the viewer's own rows are left unnamed.
+ */
+struct wf_chat_convo;
+void indigo_chat_thread_apply_sender_names(indigo_chat_thread *thread,
+                                           const struct wf_chat_convo *convo,
+                                           const char *viewer_did);
 
 struct wf_chat_convo_list;
 
