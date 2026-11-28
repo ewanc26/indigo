@@ -260,6 +260,16 @@ menu_choose(indigo_app *app, unsigned item)
         indigo_app_go_back(app);
         indigo_app_open_profile(app, app->signin.account);
         break;
+    case INDIGO_MENU_CONTENT_LABELS:
+        indigo_app_go_back(app);
+        indigo_app_open_label_menu(app);
+        break;
+    case INDIGO_MENU_LABELS_BACK:
+        indigo_app_go_back(app);
+        break;
+    case INDIGO_MENU_LABEL_SETTING:
+        indigo_app_activate_label_setting(app, it->payload);
+        break;
     case INDIGO_MENU_SETTINGS:
         indigo_app_go_back(app);
         indigo_app_open_settings(app);

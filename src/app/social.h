@@ -2,6 +2,7 @@
 #define INDIGO_SOCIAL_H
 
 #include "app/report.h"
+#include "atproto/labels.h"
 #include "app/timeline.h"
 
 #include <stdbool.h>
@@ -253,6 +254,11 @@ typedef enum {
     INDIGO_MENU_OPEN_STARTER_PACK,
     INDIGO_MENU_PICK_IMAGE,
     INDIGO_MENU_CLOSE,
+    /* Content labels: the entry on the main menu, one row per setting in the
+     * submenu (payload "label:value"), and the submenu's way back. */
+    INDIGO_MENU_CONTENT_LABELS,
+    INDIGO_MENU_LABEL_SETTING,
+    INDIGO_MENU_LABELS_BACK,
 } indigo_menu_kind;
 
 typedef struct {
@@ -298,6 +304,7 @@ void indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *acco
  * camera's subfolders), with `camera` set for the camera rows. A Close item
  * follows, so an empty picker still has a way out. `title` becomes "Images". */
 void indigo_menu_build_images(indigo_menu *m, const char *images_dir, const char *camera_dir);
+void indigo_menu_build_labels(indigo_menu *m, const indigo_label_snapshot *s, const char *status);
 /* Open the selected web link in the menu's QR view; false means the URL could
  * not be encoded, but the URL is still retained for display. */
 bool indigo_menu_show_link(indigo_menu *m, const char *url);
