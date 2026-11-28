@@ -479,8 +479,13 @@ note_unsupported(indigo_post_mod *out, const wf_mod_label *labels, size_t n,
         if (used + need >= sizeof(out->unsupported)) {
             break;   /* a bounded line; the first few name the problem */
         }
-        snprintf(out->unsupported + used, sizeof(out->unsupported) - used, "%s%s",
-                    used ? ", " : "", l->val);
+        /* Appended without a formatted write: CI's compiler cannot prove the
+         * tail of a buffer fits one, and warns. */
+        if (used) {
+            indigo_copy_utf8(out->unsupported + used, sizeof(out->unsupported) - used, ", ");
+        }
+        indigo_copy_utf8(out->unsupported + strlen(out->unsupported),
+                         sizeof(out->unsupported) - strlen(out->unsupported), l->val);
     }
 }
 

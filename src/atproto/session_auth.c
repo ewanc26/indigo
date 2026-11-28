@@ -35,7 +35,6 @@ indigo_session_send_accept_labelers(wf_agent *agent)
     const char *dids[INDIGO_LABELS_ACCEPT_MAX];
     const int n = indigo_labels_labelers(dids, INDIGO_LABELS_ACCEPT_MAX);
     char value[2048];
-    size_t used = 0;
 
     if (!agent) {
         return;
@@ -43,14 +42,19 @@ indigo_session_send_accept_labelers(wf_agent *agent)
     value[0] = '\0';
     for (int i = 0; i < n; i++) {
         const bool bsky = strcmp(dids[i], WF_MOD_BSKY_LABELER_DID) == 0;
-        const int w = snprintf(value + used, sizeof value - used, "%s%s%s", used ? ", " : "",
-                               dids[i], bsky ? ";redact" : "");
 
-        if (w < 0 || (size_t) w >= sizeof value - used) {
-            value[used] = '\0';
+        /* Bounded copies, not a formatted write: a formatted tail write warns
+         * under CI's compiler. A DID that does not fit is dropped whole. */
+        if (strlen(value) + strlen(dids[i]) + 9 >= sizeof value) {
             break;
         }
-        used += (size_t) w;
+        if (value[0]) {
+            indigo_copy_utf8(value + strlen(value), sizeof value - strlen(value), ", ");
+        }
+        indigo_copy_utf8(value + strlen(value), sizeof value - strlen(value), dids[i]);
+        if (bsky) {
+            indigo_copy_utf8(value + strlen(value), sizeof value - strlen(value), ";redact");
+        }
     }
     if (wf_xrpc_client_set_accept_labelers(wf_agent_get_xrpc_client(agent), value) != WF_OK) {
         indigo_log_warn("accept-labelers refused");
