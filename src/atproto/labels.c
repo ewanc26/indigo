@@ -428,18 +428,18 @@ indigo_labels_snapshot(indigo_label_snapshot *out)
     }
 }
 
+/* The name a cause is shown by: the labeler's own English name where it gave
+ * one, else Indigo's name for the value. */
 static void
-set_reason(indigo_post_mod *out, const wf_mod_cause *cause)
+cause_name(const wf_mod_cause *cause, char *out, size_t cap)
 {
-    if (out->reason[0] || !cause) {
-        return;
-    }
     const char *value = NULL;
+
     if (cause->type == WF_MOD_CAUSE_LABEL && cause->label_def && g_ctx.def_names &&
-       cause->label_def >= g_ctx.defs && cause->label_def < g_ctx.defs + g_ctx.def_count) {
+        cause->label_def >= g_ctx.defs && cause->label_def < g_ctx.defs + g_ctx.def_count) {
         const char *name = g_ctx.def_names[cause->label_def - g_ctx.defs];
         if (name && name[0]) {
-            indigo_copy_utf8(out->reason, sizeof(out->reason), name);
+            indigo_copy_utf8(out, cap, name);
             return;
         }
     }
@@ -448,7 +448,81 @@ set_reason(indigo_post_mod *out, const wf_mod_cause *cause)
                  ? cause->label_def->identifier
                  : cause->label.val;
     }
-    snprintf(out->reason, sizeof(out->reason), "%s", indigo_labels_reason(value));
+    snprintf(out, cap, "%s", indigo_labels_reason(value));
+}
+
+static void
+set_reason(indigo_post_mod *out, const wf_mod_cause *cause)
+{
+    if (out->reason[0] || !cause) {
+        return;
+    }
+    cause_name(cause, out->reason, sizeof(out->reason));
+}
+
+/* Whether a profile's avatar is covered for its labels, decided in the avatar
+ * context from the account's labels and its profile-record labels together, as
+ * upstream does. Writes the cover's name into `reason`, or "". Worker only, as
+ * it can rebuild the context lazily. */
+bool
+indigo_labels_avatar_covered(const char *did, const cJSON *labels, char *reason, size_t reason_size)
+{
+    bool covered = false;
+    wf_mod_label *pl = NULL;
+    size_t pn = 0;
+    wf_mod_subject_profile subject;
+    wf_mod_decision da;
+    wf_mod_decision dp;
+    wf_mod_decision d;
+
+    if (reason && reason_size) {
+        reason[0] = '\0';
+    }
+    if (!did || !did[0] || !labels) {
+        return false;
+    }
+    if (!g_ctx.ready) {
+        indigo_labels_reset();
+    }
+    if (wf_mod_labels_from_cjson(&pl, &pn, labels) != WF_OK) {
+        return false;
+    }
+    g_ctx.opts.label_defs = g_ctx.defs;
+    g_ctx.opts.label_def_count = g_ctx.def_count;
+
+    memset(&subject, 0, sizeof subject);
+    subject.did = did;
+    subject.labels = pl;
+    subject.label_count = pn;
+    memset(&da, 0, sizeof da);
+    memset(&dp, 0, sizeof dp);
+    memset(&d, 0, sizeof d);
+    if (wf_mod_decide_account(&da, &subject, &g_ctx.opts) == WF_OK &&
+        wf_mod_decide_profile(&dp, &subject, &g_ctx.opts) == WF_OK &&
+        wf_mod_decision_merge(&d, &da, &dp) == WF_OK) {
+        wf_mod_ui ui;
+        if (wf_mod_decision_ui(&d, WF_MOD_CTX_AVATAR, &ui) == WF_OK) {
+            const wf_mod_cause *cause = NULL;
+
+            if (ui.filter_count > 0) {
+                cause = &ui.filters[0];
+            } else if (ui.blur_count > 0) {
+                cause = &ui.blurs[0];
+            }
+            if (cause) {
+                covered = true;
+                if (reason && reason_size) {
+                    cause_name(cause, reason, reason_size);
+                }
+            }
+            wf_mod_ui_free(&ui);
+        }
+    }
+    wf_mod_decision_free(&da);
+    wf_mod_decision_free(&dp);
+    wf_mod_decision_free(&d);
+    wf_mod_labels_free(pl, pn);
+    return covered;
 }
 
 /* The action `d` asks for: a list's decision first (filter or cover the

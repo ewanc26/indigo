@@ -102,6 +102,9 @@ typedef struct {
     bool loading;
     char status[INDIGO_POST_NOTE_MAX];
     bool status_is_error;
+    /* A label covers the avatar: nothing is fetched, a placeholder is drawn,
+     * and the status line names the cover. */
+    bool avatar_covered;
 } indigo_profile;
 
 /* Mute and block are split from follow because their record shapes differ:

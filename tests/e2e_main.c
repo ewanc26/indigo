@@ -1813,6 +1813,23 @@ test_label_settings(const char *data_dir)
     CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "adultContentPref"));
     CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"enabled\":false"));
 
+    /* A profile whose account carries graphic media from Bluesky's labeler: the
+     * avatar is not fetched, a placeholder is drawn, and the status line names
+     * the cover. */
+    e2e_pds_route(pds, "app.bsky.actor.getProfile", 200,
+                  "{\"did\":\"did:plc:author\",\"handle\":\"author.test\","
+                  "\"avatar\":\"https://cdn.example/a.jpg\","
+                  "\"labels\":[{\"src\":\"did:plc:ar7c4by46qjdydhdevvrndac\","
+                  "\"uri\":\"did:plc:author\",\"val\":\"graphic-media\"}]}");
+    CHECK(indigo_session_submit_profile("did:plc:author"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_PROFILE_LOADED, &ev));
+    {
+        const indigo_profile *pr = indigo_session_profile();
+        CHECK(pr->avatar_covered);
+        CHECK(pr->avatar[0] == '\0');
+        CHECK(strstr(pr->status, "Avatar hidden: Graphic media") != NULL);
+    }
+
     indigo_session_stop();
     e2e_pds_free(pds);
 }
