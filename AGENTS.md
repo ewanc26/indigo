@@ -294,6 +294,15 @@ Network failures, expired sessions and malformed responses must become applicati
 
 Do not assume that every account uses bsky.social.
 
+### Content labels
+
+Labels are decided by Wolfram's moderation engine on the session worker and flattened onto each post (`src/atproto/labels.c`, `indigo_post_mod`). Cobalt's design is the reference (AGENTS.md section 13 there). Rules Indigo follows:
+
+- The label context is read on the main thread (the settings menu) and rebuilt on the worker. Every rebuild and every labeler-definition insert takes the session lock, and the menu reads through `indigo_session_label_snapshot`, which copies the context under the lock. Do not read `indigo_labels_*` from the UI without it.
+- Preferences are changed only by read-modify-write (`src/atproto/label_prefs.c`): a failed read writes nothing, and a write replaces only its own `contentLabelPref` or `adultContentPref` entry.
+- Preferences load at sign-in (`indigo_session_load_prefs`), so the settings menu shows the account's values before a timeline is opened.
+- The Content labels submenu is a list menu (`indigo_menu_build_labels`). Its rows carry `label:value` payloads, and its title shows the result of the last change.
+
 ## 12. Authentication
 
 Never hard-code or commit:
