@@ -368,7 +368,8 @@ indigo_layout_build_top_post(const indigo_app *app, indigo_canvas *c)
     indigo_layout_text_fitted(c, 44, 56, 0.75f, COL_TEXT, 348.0f,
                               indigo_layout_author_name(p));
     indigo_layout_handle_fitted(c, 44, 80, 0.55f, COL_TEXT_DIM, 348.0f, p->handle);
-    indigo_layout_draw_post_body(c, p, app->settings.alt_text, app->settings.text_scale);
+    indigo_layout_draw_post_body(c, indigo_post_shown(p), app->settings.alt_text,
+                                 app->settings.text_scale);
 
     indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                        p->reply_count);

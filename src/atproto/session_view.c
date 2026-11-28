@@ -4,6 +4,8 @@
 
 #if defined(INDIGO_SESSION_REAL)
 
+#include "atproto/labels.h"
+
 static void
 embed_note(const wf_post_display *d, char *dst, size_t cap)
 {
@@ -150,6 +152,8 @@ indigo_session_fill_post(const wf_agent_post_view *pv, indigo_post *out)
     out->repost_count = indigo_session_count_of(pv->repost_count);
     out->reply_count = indigo_session_count_of(pv->reply_count);
     out->bookmarked = pv->viewer.has_bookmarked && pv->viewer.bookmarked;
+    indigo_labels_apply(&out->mod, pv->uri, pv->author.did, pv->labels, pv->author_labels,
+                        g_session.agent ? wf_agent_get_did(g_session.agent) : NULL);
     if (pv->viewer.like && strlen(pv->viewer.like) < sizeof out->like_uri) {
         snprintf(out->like_uri, sizeof out->like_uri, "%s", pv->viewer.like);
     }
@@ -224,6 +228,8 @@ indigo_session_thread_post_to_post(const wf_agent_thread_post *tp, unsigned dept
     pv.indexed_at = tp->indexed_at;
     pv.viewer.like = tp->viewer_like;
     pv.viewer.repost = tp->viewer_repost;
+    pv.labels = tp->labels;
+    pv.author_labels = tp->author_labels;
     if (!indigo_session_fill_post(&pv, out)) {
         return false;
     }

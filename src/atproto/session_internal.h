@@ -303,6 +303,7 @@ bool indigo_session_fill_actor(const wf_agent_profile_view *a, indigo_actor *o);
 unsigned indigo_session_count_of(int v);
 void indigo_session_add_replies(const wf_agent_thread_node *n, unsigned depth);
 bool indigo_session_fill_post(const wf_agent_post_view *pv, indigo_post *out);
+void indigo_session_send_accept_labelers(wf_agent *agent);
 indigo_note_kind indigo_session_note_kind(const char *reason);
 bool indigo_session_thread_post_to_post(const wf_agent_thread_post *tp, unsigned depth, indigo_post *out);
 bool indigo_session_to_post(const wf_agent_feed_item *item, indigo_post *out);

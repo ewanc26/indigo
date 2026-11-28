@@ -56,6 +56,11 @@ indigo_prefs_post_is_hidden(const indigo_prefs *prefs, const indigo_post *post,
     if (home && prefs->hide_reposts && post->reposted_by[0]) {
         return true;
     }
+    /* A label the account hides, or a moderator's !hide: dropped from every
+     * filtered list, as muted words are. */
+    if (post->mod.action == INDIGO_MOD_FILTER) {
+        return true;
+    }
     if (prefs->muted.count == 0) {
         return false;
     }

@@ -4,6 +4,9 @@
 
 #if defined(INDIGO_SESSION_REAL)
 
+#include "atproto/labels.h"
+#include <wolfram/labeler_typed.h>
+
 /* A playlist for a short clip is a few kilobytes; a feature-length one with
  * ten-second segments is about 900 lines. The cap stops a hostile URL
  * streaming forever. */
@@ -80,6 +83,28 @@ fill_video_durations(indigo_post *posts, unsigned count)
 
 /* Fetch the saved preferences once per sign-in. Failure is not fatal: the
  * feed is simply shown unfiltered, and the next page tries again. */
+
+/* The subscribed labelers' own label definitions. A failure is logged and not
+ * fatal: their labels are then named as unsupported. */
+static void
+load_labeler_definitions(void)
+{
+    const char *dids[INDIGO_LABELS_ACCEPT_MAX];
+    const int n = indigo_labels_labelers(dids, INDIGO_LABELS_ACCEPT_MAX);
+    wf_labeler_service_list list;
+
+    if (n <= 0) {
+        return;
+    }
+    memset(&list, 0, sizeof list);
+    if (wf_agent_get_labeler_services(g_session.agent, dids, (size_t) n, true, &list) != WF_OK) {
+        indigo_log_warn("getServices failed; labeler labels stay unsupported");
+        return;
+    }
+    indigo_labels_add_services(&list);
+    wf_labeler_service_list_free(&list);
+}
+
 static void
 ensure_prefs(void)
 {
@@ -97,7 +122,10 @@ ensure_prefs(void)
         return;
     }
     indigo_prefs_from_wolfram(&g_session.prefs, &p, indigo_time_now());
+    indigo_labels_from_prefs(&p);
     wf_actor_preferences_free(&p);
+    indigo_session_send_accept_labelers(g_session.agent);
+    load_labeler_definitions();
     g_session.prefs_loaded = true;
 }
 

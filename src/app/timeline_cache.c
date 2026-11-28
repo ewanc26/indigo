@@ -12,7 +12,9 @@ indigo_timeline_cache_capture(const indigo_timeline *t, indigo_cache_timeline *o
         const indigo_post *p = &t->posts[i];
         indigo_cache_post *c = &out->posts[out->count];
 
-        if (p->uri[0] == '\0') {
+        /* The cache keeps text and not label decisions, so a covered post
+         * would come back uncovered offline: leave it out instead. */
+        if (p->uri[0] == '\0' || p->mod.action != INDIGO_MOD_NONE) {
             continue;
         }
         indigo_copy_utf8(c->uri, sizeof c->uri, p->uri);
