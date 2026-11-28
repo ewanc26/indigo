@@ -8,6 +8,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-28
+
 ### Added
 
 - Content-label settings. The main menu has a Content labels entry that lists the adult-content switch and each label's visibility (Hide, Warn or Show). Each change writes one preference, and the menu shows what Bluesky now holds, so a refused change leaves the previous setting in place. Adult labels read as hidden while adult content is off, and the menu says so. Preferences now load at sign-in, so the menu shows the account's real values straight away. ([#147](https://github.com/ewanc26/indigo/issues/147))
