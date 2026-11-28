@@ -649,6 +649,8 @@ test_timeline_and_chat(const char *data_dir)
     CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "dogs"));
     CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "threadViewPref"));
     CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "savedFeedsPrefV2"));
+    /* The new item carries the id app.bsky.actor.defs#savedFeed requires. */
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"id\":\"3"));
     CHECK(indigo_session_saved_feeds_v2_results()->count == 0);
 
     /* Pin and remove are the same round-trip. */
@@ -659,6 +661,23 @@ test_timeline_and_chat(const char *data_dir)
              "at://did:plc:x/app.bsky.feed.generator/poetry"));
     CHECK(wait_for_kind(INDIGO_SESSION_EVENT_REMOVE_FEED_DONE, &ev));
     CHECK(e2e_pds_hits(pds, "app.bsky.actor.putPreferences") == 3);
+
+    /* When the preferences cannot be read, nothing is written: a write built
+     * from nothing would replace everything the account has saved. */
+    {
+        const char *saved_prefs_route = "app.bsky.actor.getPreferences";
+        e2e_pds_route(pds, saved_prefs_route, 500,
+                      "{\"error\":\"InternalServerError\",\"message\":\"boom\"}");
+        CHECK(indigo_session_submit_save_feed(
+                 "at://did:plc:y/app.bsky.feed.generator/dogs", false));
+        CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SAVE_FEED_FAILED, &ev));
+        CHECK(indigo_session_submit_remove_feed(
+                 "at://did:plc:x/app.bsky.feed.generator/cats"));
+        CHECK(wait_for_kind(INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED, &ev));
+        CHECK(e2e_pds_hits(pds, "app.bsky.actor.putPreferences") == 3);
+        e2e_pds_route(pds, saved_prefs_route, 200,
+                      "{\"preferences\":[{\"$type\":\"app.bsky.actor.defs#savedFeedsPrefV2\",\"items\":[]}]}");
+    }
 
     /* A failing write reports failure. */
     e2e_pds_route(pds, "app.bsky.actor.putPreferences", 400,
