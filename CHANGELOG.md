@@ -8,6 +8,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-28
+
 ### Added
 
 - A profile's avatar is covered when a label on the account asks for it, for example graphic media from a labeler you subscribe to. The image is not downloaded; a flat square is drawn in its place, and the status line says "Avatar hidden: <reason>". Banners are not drawn by Indigo, so they are not covered. ([#147](https://github.com/ewanc26/indigo/issues/147))
