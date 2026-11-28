@@ -568,6 +568,22 @@ indigo_session_submit_pin_feed(const char *feed_uri, bool pinned)
 }
 
 bool
+indigo_session_submit_label_pref(const char *label, const char *visibility)
+{
+    (void) label;
+    (void) visibility;
+    return false;
+}
+
+void
+indigo_session_label_snapshot(indigo_label_snapshot *out)
+{
+    if (out) {
+        memset(out, 0, sizeof *out);
+    }
+}
+
+bool
 indigo_session_submit_mutes(const char *cursor)
 {
     (void) cursor;

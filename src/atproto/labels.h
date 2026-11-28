@@ -44,6 +44,24 @@ bool indigo_labels_from_prefs(const struct wf_actor_preferences *prefs);
 
 bool indigo_labels_adult_enabled(void);
 
+/* The effective visibility of a global label ("hide", "warn" or "ignore"), as
+ * the engine applies it. Never NULL. Read it with the session lock held, as
+ * the worker rebuilds the context under the same lock. */
+const char *indigo_labels_visibility(const char *label);
+
+/* The labels the settings menu sets, and what the account has for them. */
+#define INDIGO_CONFIGURABLE_LABEL_COUNT 4
+extern const char *const INDIGO_CONFIGURABLE_LABELS[INDIGO_CONFIGURABLE_LABEL_COUNT];
+
+typedef struct {
+    bool adult;
+    /* "hide", "warn" or "ignore" per label in INDIGO_CONFIGURABLE_LABELS. */
+    char visibility[INDIGO_CONFIGURABLE_LABEL_COUNT][8];
+} indigo_label_snapshot;
+
+/* Copy the context into `out`. Call with the session lock held. */
+void indigo_labels_snapshot(indigo_label_snapshot *out);
+
 /* The labelers the context counts, Bluesky's first; borrowed until the context
  * is rebuilt. Returns how many. */
 #define INDIGO_LABELS_ACCEPT_MAX 20

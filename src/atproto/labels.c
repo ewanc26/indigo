@@ -196,6 +196,10 @@ ctx_build(labels_ctx *c, const wf_actor_preferences *src)
     if (wf_mod_global_label_defs(&c->defs, &c->def_count) != WF_OK) {
         return false;
     }
+    /* The engine reads definitions through opts: set them now, so a lookup made
+     * before any post is decided (the settings menu) sees the globals. */
+    c->opts.label_defs = c->defs;
+    c->opts.label_def_count = c->def_count;
     c->def_names = calloc(c->def_count, sizeof(*c->def_names));
     if (!c->def_names) {
         return false;
@@ -382,6 +386,46 @@ bool
 indigo_labels_adult_enabled(void)
 {
     return g_ctx.ready && g_ctx.opts.prefs.adult_content_enabled;
+}
+
+const char *
+indigo_labels_visibility(const char *label)
+{
+    const wf_mod_label_def *def;
+
+    if (!label || !g_ctx.ready) {
+        return "warn";
+    }
+    def = wf_mod_find_label_def(&g_ctx.opts, label, NULL);
+    if (!def) {
+        return "warn";
+    }
+    switch (wf_mod_get_label_pref(&g_ctx.opts, def, NULL)) {
+    case WF_MOD_PREF_HIDE:
+        return "hide";
+    case WF_MOD_PREF_IGNORE:
+        return "ignore";
+    default:
+        return "warn";
+    }
+}
+
+/* The four labels the settings menu sets, in the order it lists them. */
+const char *const INDIGO_CONFIGURABLE_LABELS[INDIGO_CONFIGURABLE_LABEL_COUNT] = {
+    "porn", "sexual", "nudity", "graphic-media",
+};
+
+void
+indigo_labels_snapshot(indigo_label_snapshot *out)
+{
+    if (!out) {
+        return;
+    }
+    out->adult = indigo_labels_adult_enabled();
+    for (unsigned i = 0; i < INDIGO_CONFIGURABLE_LABEL_COUNT; i++) {
+        snprintf(out->visibility[i], sizeof out->visibility[i], "%s",
+                 indigo_labels_visibility(INDIGO_CONFIGURABLE_LABELS[i]));
+    }
 }
 
 static void

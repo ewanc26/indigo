@@ -22,8 +22,10 @@ indigo_session_drop_agent(void)
     g_session.prefs_loaded = false;
     /* The label context is the account's: its adult setting and labelers
      * must not outlive it into the next sign-in. */
+    LightLock_Lock(&g_session.lock);
     indigo_labels_set_viewer(NULL);
     indigo_labels_reset();
+    LightLock_Unlock(&g_session.lock);
 }
 
 /* Send atproto-accept-labelers on every request `agent` makes: Bluesky's
@@ -212,6 +214,7 @@ indigo_session_do_oauth(const indigo_job *j)
             g_session.node_session = true;
             remember(result.service);
             wf_oauth_pair_poll_wipe(&result);
+            indigo_session_load_prefs();
             indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, handle);
             return;
         }
@@ -270,6 +273,7 @@ indigo_session_do_login(const indigo_job *j)
     free(pds);
     who = wf_agent_get_handle(g_session.agent);
     indigo_log_info("signed in as %s", who ? who : "(unknown)");
+    indigo_session_load_prefs();
     indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
 }
 
@@ -320,6 +324,7 @@ indigo_session_do_resume(void)
             g_session.node_session = true;
             cJSON_Delete(saved);
             who = wf_agent_get_handle(g_session.agent);
+            indigo_session_load_prefs();
             indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
             return;
         }
@@ -363,6 +368,7 @@ indigo_session_do_resume(void)
     }
     who = wf_agent_get_handle(g_session.agent);
     indigo_log_info("resumed session for %s", who ? who : "(unknown)");
+    indigo_session_load_prefs();
     indigo_session_publish(INDIGO_SESSION_EVENT_SIGNED_IN, WF_FAIL_NONE, who);
 }
 

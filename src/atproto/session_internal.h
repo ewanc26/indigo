@@ -119,6 +119,7 @@ typedef enum {
     JOB_SAVE_FEED,
     JOB_REMOVE_FEED,
     JOB_PIN_FEED,
+    JOB_LABEL_PREF,
     JOB_MUTES,
     JOB_BLOCKS,
 } indigo_job_kind;
@@ -183,6 +184,9 @@ typedef struct {
      * `post_uri`/`post_cid`. `report_account` says which one to send. */
     bool report_account;
     char report_reason[INDIGO_REPORT_REASON_MAX];
+    /* JOB_LABEL_PREF: the label in `actor` set to `label_value` ("hide", "warn",
+     * "ignore"), or "adult" in `actor` with "on"/"off" for the adult switch. */
+    char label_value[16];
     /* JOB_BOOKMARK: create when true, delete when false. */
     bool bookmark;
     /* True when this job asks for the next page of the last search rather
@@ -289,6 +293,13 @@ extern indigo_session_state g_session;
 void indigo_session_publish(indigo_session_event_kind kind, wf_failure_kind failure, const char *account);
 void indigo_session_publish_event(const indigo_session_event *ev);
 void indigo_session_publish_failure(indigo_session_event *ev, const char *what, wf_status st);
+/* Re-read the account's label preferences and rebuild the label context from
+ * them, with the labelers' definitions. Worker thread only. */
+void indigo_session_refresh_label_context(void);
+/* Load the account's preferences and label context if not yet loaded. Called
+ * at sign-in, so the settings menu shows the account's real values at once. */
+void indigo_session_load_prefs(void);
+void indigo_session_do_label_pref(const indigo_job *j);
 bool indigo_session_enqueue(const indigo_job *j);
 
 /* session_auth.c */

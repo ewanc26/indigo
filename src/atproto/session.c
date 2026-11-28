@@ -213,6 +213,9 @@ worker(void *arg)
         case JOB_PIN_FEED:
             indigo_session_do_pin_feed(&j);
             break;
+        case JOB_LABEL_PREF:
+            indigo_session_do_label_pref(&j);
+            break;
         case JOB_MUTES:
         case JOB_BLOCKS:
             indigo_session_do_moderation_list(&j);
