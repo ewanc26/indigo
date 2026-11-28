@@ -8,6 +8,10 @@ as the release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving, pinning or removing a feed can no longer erase your Bluesky preferences. If Indigo could not read your current preferences first, it wrote back a list holding only the feed change, which replaced everything else the account had saved: muted words, other feeds, label and adult-content choices. It now refuses and reports the failure. A newly saved feed also carries the `id` every saved feed must have. ([#148](https://github.com/ewanc26/indigo/pull/148))
+
 ## [0.18.0] - 2026-11-25
 
 ### Added
