@@ -1273,3 +1273,79 @@ indigo_app_requests_failed(indigo_app *app, const char *message)
     indigo_copy_utf8(app->requests.status, sizeof app->requests.status, message);
     app->requests.status_is_error = true;
 }
+
+/* Rebuild the Content labels submenu from the context, with a status line. The
+ * menu is only rebuilt while it is the one on screen. */
+static bool
+label_menu_on_screen(const indigo_app *app)
+{
+    return app->screen == INDIGO_SCREEN_MENU && app->menu.count > 0 &&
+           app->menu.items[0].kind == INDIGO_MENU_LABEL_SETTING;
+}
+
+static void
+rebuild_label_menu(indigo_app *app, const char *status, bool status_is_error)
+{
+    indigo_label_snapshot s;
+
+    (void) status_is_error;
+    indigo_session_label_snapshot(&s);
+    indigo_menu_build_labels(&app->menu, &s, status);
+}
+
+void
+indigo_app_open_label_menu(indigo_app *app)
+{
+    indigo_app_push_screen(app);
+    app->screen = INDIGO_SCREEN_MENU;
+    rebuild_label_menu(app, NULL, false);
+}
+
+void
+indigo_app_activate_label_setting(indigo_app *app, const char *payload)
+{
+    char label[32] = "";
+    char value[16] = "";
+    const char *colon = payload ? strchr(payload, ':') : NULL;
+    indigo_label_snapshot s;
+    bool adult_label;
+
+    if (!colon || colon == payload || (size_t) (colon - payload) >= sizeof label) {
+        return;
+    }
+    memcpy(label, payload, (size_t) (colon - payload));
+    label[colon - payload] = '\0';
+    snprintf(value, sizeof value, "%s", colon + 1);
+
+    /* An adult label reads as hidden while adult content is off, so a change
+     * now would change nothing the viewer can see. */
+    indigo_session_label_snapshot(&s);
+    adult_label = strcmp(label, "adult") != 0 && strcmp(label, "nudity") != 0;
+    if (adult_label && !s.adult) {
+        rebuild_label_menu(app, "Turn on adult content first.", true);
+        return;
+    }
+    if (value[0] == '\0') {
+        return;
+    }
+    app->request = INDIGO_REQUEST_LABEL_PREF;
+    snprintf(app->request_label, sizeof app->request_label, "%s", label);
+    snprintf(app->request_label_value, sizeof app->request_label_value, "%s", value);
+    rebuild_label_menu(app, "Saving...", false);
+}
+
+void
+indigo_app_label_pref_done(indigo_app *app)
+{
+    if (label_menu_on_screen(app)) {
+        rebuild_label_menu(app, "Saved.", false);
+    }
+}
+
+void
+indigo_app_label_pref_failed(indigo_app *app, const char *message)
+{
+    if (label_menu_on_screen(app)) {
+        rebuild_label_menu(app, message && message[0] ? message : "That did not work.", true);
+    }
+}

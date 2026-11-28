@@ -697,6 +697,12 @@ handle_requests(indigo_app *app)
             indigo_app_pin_feed_failed(app, "Could not start the request.");
         }
         break;
+    case INDIGO_REQUEST_LABEL_PREF:
+        if (!indigo_session_submit_label_pref(app->request_label,
+                                              app->request_label_value)) {
+            indigo_app_label_pref_failed(app, "Could not start the request.");
+        }
+        break;
     case INDIGO_REQUEST_SAVE_SETTINGS:
         indigo_settings_store_save(SETTINGS_PATH, &app->settings);
         break;
@@ -1088,6 +1094,13 @@ handle_events(indigo_app *app)
         case INDIGO_SESSION_EVENT_PIN_FEED_FAILED:
             indigo_app_pin_feed_failed(app, ev.message[0] ? ev.message
                                                           : indigo_failure_message(ev.failure));
+            break;
+        case INDIGO_SESSION_EVENT_LABEL_PREF_DONE:
+            indigo_app_label_pref_done(app);
+            break;
+        case INDIGO_SESSION_EVENT_LABEL_PREF_FAILED:
+            indigo_app_label_pref_failed(app, ev.message[0] ? ev.message
+                                                            : indigo_failure_message(ev.failure));
             break;
         case INDIGO_SESSION_EVENT_FOLLOW_DONE:
             indigo_app_follow_done(app, ev.follow == INDIGO_FOLLOW, ev.record_uri);

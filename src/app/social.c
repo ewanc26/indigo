@@ -374,6 +374,7 @@ indigo_menu_build(indigo_menu *m, const indigo_post *post, const char *account)
     add_item(m, INDIGO_MENU_MY_PROFILE,
              account && account[0] ? "My profile" : "Your profile", "");
     add_item(m, INDIGO_MENU_SETTINGS, "Settings", "");
+    add_item(m, INDIGO_MENU_CONTENT_LABELS, "Content labels", "");
     add_item(m, INDIGO_MENU_CREDITS, "Credits", "");
     add_item(m, INDIGO_MENU_UPDATE, "Check for updates", "");
     add_item(m, INDIGO_MENU_SIGN_OUT, "Sign out", "");
@@ -521,4 +522,72 @@ indigo_menu_row(const indigo_menu *m, unsigned row, unsigned rows)
     }
     index = m->scroll + row;
     return index < m->count ? &m->items[index] : NULL;
+}
+
+/* The Content labels submenu: the adult switch, then one row per configurable
+ * label that cycles it through hide, warn and show. Each row's payload is the
+ * label and the value it would set. `status`, when set, replaces the title, so
+ * the result of the last change shows where the list is read. */
+static const char *
+visibility_word(const char *v)
+{
+    if (strcmp(v, "hide") == 0) {
+        return "Hide";
+    }
+    if (strcmp(v, "ignore") == 0) {
+        return "Show";
+    }
+    return "Warn";
+}
+
+static const char *
+next_visibility(const char *v)
+{
+    if (strcmp(v, "hide") == 0) {
+        return "warn";
+    }
+    if (strcmp(v, "warn") == 0) {
+        return "ignore";
+    }
+    return "hide";
+}
+
+/* dst = a + sep + b, by bounded copies: CI's compiler warns when a formatted
+ * write goes into an unknown-length tail. */
+static void
+join3(char *dst, size_t cap, const char *a, const char *sep, const char *b)
+{
+    indigo_copy_utf8(dst, cap, a);
+    indigo_copy_utf8(dst + strlen(dst), cap - strlen(dst), sep);
+    indigo_copy_utf8(dst + strlen(dst), cap - strlen(dst), b);
+}
+
+void
+indigo_menu_build_labels(indigo_menu *m, const indigo_label_snapshot *s, const char *status)
+{
+    static const char *const NAMES[INDIGO_CONFIGURABLE_LABEL_COUNT] = {
+        "Adult nudity and porn", "Sexually suggestive", "Non-sexual nudity", "Graphic media",
+    };
+    /* Labels the engine hides whatever the setting says, while adult content is off. */
+    static const bool ADULT[INDIGO_CONFIGURABLE_LABEL_COUNT] = {true, true, false, true};
+    char label[INDIGO_POST_NAME_MAX * 2];
+    char payload[INDIGO_FACET_TARGET_MAX];
+
+    memset(m, 0, sizeof *m);
+    indigo_copy_utf8(m->title, sizeof m->title, status && status[0] ? status : "Content labels");
+    join3(label, sizeof label, "Adult content", ": ", s->adult ? "On" : "Off");
+    join3(payload, sizeof payload, "adult", ":", s->adult ? "off" : "on");
+    add_item(m, INDIGO_MENU_LABEL_SETTING, label, payload);
+    for (unsigned i = 0; i < INDIGO_CONFIGURABLE_LABEL_COUNT; i++) {
+        if (ADULT[i] && !s->adult) {
+            join3(label, sizeof label, NAMES[i], ": ", "Hidden (adult off)");
+            join3(payload, sizeof payload, INDIGO_CONFIGURABLE_LABELS[i], ":", "");
+        } else {
+            join3(label, sizeof label, NAMES[i], ": ", visibility_word(s->visibility[i]));
+            join3(payload, sizeof payload, INDIGO_CONFIGURABLE_LABELS[i], ":",
+                  next_visibility(s->visibility[i]));
+        }
+        add_item(m, INDIGO_MENU_LABEL_SETTING, label, payload);
+    }
+    add_item(m, INDIGO_MENU_LABELS_BACK, "Back", "");
 }

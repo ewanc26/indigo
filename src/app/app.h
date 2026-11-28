@@ -161,6 +161,7 @@ typedef enum {
     INDIGO_REQUEST_SAVE_FEED,
     INDIGO_REQUEST_REMOVE_FEED,
     INDIGO_REQUEST_PIN_FEED,
+    INDIGO_REQUEST_LABEL_PREF,
 } indigo_request_kind;
 
 typedef struct {
@@ -264,6 +265,9 @@ typedef struct {
     char request_feed_name[INDIGO_POST_NAME_MAX];
     /* The pinned flag INDIGO_REQUEST_SAVE_FEED / PIN_FEED is asking for. */
     bool request_feed_pinned;
+    /* The content-label setting INDIGO_REQUEST_LABEL_PREF is asking for. */
+    char request_label[32];
+    char request_label_value[16];
     /* The feed the home screen is showing, empty for the plain Following
      * timeline. Outlives the request, so the title and Back survive paging. */
     char feed_uri[INDIGO_POST_URI_MAX];
@@ -790,6 +794,12 @@ void indigo_app_pin_feed_done(indigo_app *app);
 
 /* Feed pin failed. */
 void indigo_app_pin_feed_failed(indigo_app *app, const char *message);
+/* The Content labels submenu: open it, act on one of its rows (payload
+ * "label:value"), and hear the result of the write it asked for. */
+void indigo_app_open_label_menu(indigo_app *app);
+void indigo_app_activate_label_setting(indigo_app *app, const char *payload);
+void indigo_app_label_pref_done(indigo_app *app);
+void indigo_app_label_pref_failed(indigo_app *app, const char *message);
 
 /* Set the updater. */
 void indigo_app_set_updater(indigo_app *app, const char *describe, bool can_swap);
