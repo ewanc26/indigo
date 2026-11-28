@@ -60,6 +60,29 @@ typedef struct {
     char target[INDIGO_FACET_TARGET_MAX];
 } indigo_post_facet;
 
+/* What a post's content labels make a row do, decided once by
+ * atproto/labels.c. Zeroed means nothing. */
+typedef enum {
+    INDIGO_MOD_NONE = 0,
+    INDIGO_MOD_BLUR_MEDIA,   /* text shown; the embed covered */
+    INDIGO_MOD_BLUR_CONTENT, /* the whole post behind a cover */
+    INDIGO_MOD_FILTER,       /* dropped from filtered lists, covered elsewhere */
+} indigo_mod_action;
+
+#define INDIGO_POST_MOD_REASON_MAX 48
+#define INDIGO_POST_MOD_UNSUPPORTED_MAX 64
+
+typedef struct {
+    unsigned char action; /* indigo_mod_action */
+    /* The cover cannot be lifted: an adult label with adult content off, or a
+     * moderator's !hide. */
+    bool no_override;
+    char reason[INDIGO_POST_MOD_REASON_MAX];
+    /* Label values with no definition, comma separated, named on the row
+     * rather than dropped. Empty when there are none. */
+    char unsupported[INDIGO_POST_MOD_UNSUPPORTED_MAX];
+} indigo_post_mod;
+
 typedef struct {
     char uri[INDIGO_POST_URI_MAX];
     char cid[INDIGO_POST_CID_MAX];
@@ -113,6 +136,7 @@ typedef struct {
     /* An action is in flight for this post. */
     bool like_pending;
     bool repost_pending;
+    indigo_post_mod mod;
 } indigo_post;
 
 typedef struct {
@@ -169,5 +193,21 @@ bool indigo_timeline_set_bookmarked(indigo_timeline *t, const char *post_uri,
 
 /* Copy `src` into `dst` of `cap` bytes, truncating on a UTF-8 boundary. */
 void indigo_copy_utf8(char *dst, size_t cap, const char *src);
+
+/*
+ * Content-label covers. A post whose labels cover it is shown as its cover:
+ * the reason in place of the text, and no embed. One post at a time can be
+ * revealed, by URI; revealing another, or NULL, covers the previous one again.
+ * A no_override or filtered post ignores the reveal. Main thread only.
+ */
+void indigo_post_reveal(const char *uri);
+bool indigo_post_covered(const indigo_post *p);
+/* Covered, and A should lift the cover rather than act on the post. */
+bool indigo_post_can_reveal(const indigo_post *p);
+/* Write what `p` is shown as into `out`: its cover, or a copy. */
+void indigo_post_cover(const indigo_post *p, indigo_post *out);
+/* `p` itself when nothing about it changes, else its cover in a scratch post
+ * reused by the next call: use it before calling again. */
+const indigo_post *indigo_post_shown(const indigo_post *p);
 
 #endif

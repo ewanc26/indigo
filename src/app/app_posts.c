@@ -130,7 +130,10 @@ indigo_app_update_home(indigo_app *app, const indigo_input *input)
     const indigo_post *sel = indigo_timeline_selected(t);
 
     update_list(app, input, t);
-    if (input->confirm && sel) {
+    if (input->confirm && sel && indigo_post_can_reveal(sel)) {
+        /* A on a labelled post lifts its cover first; a second A opens it. */
+        indigo_post_reveal(sel->uri);
+    } else if (input->confirm && sel) {
         indigo_app_open_thread(app, sel->uri);
     }
     if (input->back) {
@@ -161,7 +164,9 @@ indigo_app_update_home(indigo_app *app, const indigo_input *input)
             post_list_touch(app, t, a);
             break;
         case INDIGO_ACTION_OPEN:
-            if (sel) {
+            if (sel && indigo_post_can_reveal(sel)) {
+                indigo_post_reveal(sel->uri);
+            } else if (sel) {
                 indigo_app_open_thread(app, sel->uri);
             }
             break;
@@ -199,7 +204,10 @@ indigo_app_update_bookmarks(indigo_app *app, const indigo_input *input)
     const indigo_post *sel = indigo_timeline_selected(t);
 
     update_list(app, input, t);
-    if (input->confirm && sel) {
+    if (input->confirm && sel && indigo_post_can_reveal(sel)) {
+        /* A on a labelled post lifts its cover first; a second A opens it. */
+        indigo_post_reveal(sel->uri);
+    } else if (input->confirm && sel) {
         indigo_app_open_thread(app, sel->uri);
     }
     if (input->back) {
@@ -228,7 +236,9 @@ indigo_app_update_bookmarks(indigo_app *app, const indigo_input *input)
             post_list_touch(app, t, a);
             break;
         case INDIGO_ACTION_OPEN:
-            if (sel) {
+            if (sel && indigo_post_can_reveal(sel)) {
+                indigo_post_reveal(sel->uri);
+            } else if (sel) {
                 indigo_app_open_thread(app, sel->uri);
             }
             break;
@@ -290,7 +300,9 @@ indigo_app_update_thread(indigo_app *app, const indigo_input *input)
         indigo_app_go_back(app);
         return;
     }
-    if (input->confirm && sel) {
+    if (input->confirm && sel && indigo_post_can_reveal(sel)) {
+        indigo_post_reveal(sel->uri);
+    } else if (input->confirm && sel) {
         indigo_app_begin_compose(app, INDIGO_COMPOSE_REPLY, sel);
     }
     if (input->refresh && sel) {
@@ -312,7 +324,9 @@ indigo_app_update_thread(indigo_app *app, const indigo_input *input)
             post_list_touch(app, t, a);
             break;
         case INDIGO_ACTION_REPLY:
-            if (sel) {
+            if (sel && indigo_post_can_reveal(sel)) {
+                indigo_post_reveal(sel->uri);
+            } else if (sel) {
                 indigo_app_begin_compose(app, INDIGO_COMPOSE_REPLY, sel);
             }
             break;

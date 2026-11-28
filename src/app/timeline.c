@@ -1,5 +1,6 @@
 #include "app/timeline.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static void keep_visible(indigo_timeline *t, unsigned rows);
@@ -262,4 +263,102 @@ indigo_timeline_set_repost(indigo_timeline *t, const char *post_uri,
         }
     }
     return true;
+}
+
+/* --- content-label covers --- */
+
+static char s_revealed[INDIGO_POST_URI_MAX];
+
+void
+indigo_post_reveal(const char *uri)
+{
+    indigo_copy_utf8(s_revealed, sizeof s_revealed, uri ? uri : "");
+}
+
+/* A filtered post is one the account asked never to see in a list; where a
+ * list shows it anyway its cover stays, as a no_override one does. */
+static bool
+can_lift(const indigo_post *p)
+{
+    return !p->mod.no_override && p->mod.action != INDIGO_MOD_FILTER;
+}
+
+bool
+indigo_post_covered(const indigo_post *p)
+{
+    if (!p || p->mod.action == INDIGO_MOD_NONE) {
+        return false;
+    }
+    if (!can_lift(p)) {
+        return true;
+    }
+    return !(s_revealed[0] && strcmp(s_revealed, p->uri) == 0);
+}
+
+bool
+indigo_post_can_reveal(const indigo_post *p)
+{
+    return indigo_post_covered(p) && can_lift(p);
+}
+
+static void
+clear_embed(indigo_post *out)
+{
+    out->embed_kind = INDIGO_EMBED_NONE;
+    out->embed_w = 0;
+    out->embed_h = 0;
+    out->embed_count = 0;
+    out->embed_thumb[0] = '\0';
+    out->embed_alt[0] = '\0';
+    out->embed_title[0] = '\0';
+    out->embed_uri[0] = '\0';
+    out->embed_playlist[0] = '\0';
+    out->embed_duration[0] = '\0';
+}
+
+void
+indigo_post_cover(const indigo_post *p, indigo_post *out)
+{
+    size_t used;
+
+    memcpy(out, p, sizeof *out);
+    if (p->mod.unsupported[0]) {
+        /* Named rather than dropped: Indigo was told something about this post
+         * it cannot act on, which the reader should know. */
+        used = strlen(out->text);
+        snprintf(out->text + used, sizeof out->text - used,
+                 "%sLabelled %s, which Indigo does not support yet.", used ? "\n\n" : "",
+                 p->mod.unsupported);
+    }
+    if (!indigo_post_covered(p)) {
+        return;
+    }
+    {
+        const char *reason = p->mod.reason[0] ? p->mod.reason : "Labelled content";
+        const char *how = can_lift(p) ? "A: show it." : "Indigo will not show it.";
+
+        clear_embed(out);
+        if (p->mod.action == INDIGO_MOD_BLUR_MEDIA) {
+            snprintf(out->embed_note, sizeof out->embed_note, "[media hidden]");
+            used = strlen(out->text);
+            snprintf(out->text + used, sizeof out->text - used, "%s%s: media hidden. %s",
+                     used ? "\n\n" : "", reason, how);
+            return;
+        }
+        out->facet_count = 0;
+        out->embed_note[0] = '\0';
+        snprintf(out->text, sizeof out->text, "%s. %s", reason, how);
+    }
+}
+
+const indigo_post *
+indigo_post_shown(const indigo_post *p)
+{
+    static indigo_post scratch;
+
+    if (!p || (!indigo_post_covered(p) && !p->mod.unsupported[0])) {
+        return p;
+    }
+    indigo_post_cover(p, &scratch);
+    return &scratch;
 }

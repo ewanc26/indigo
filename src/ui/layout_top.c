@@ -497,7 +497,8 @@ build_top_search(const indigo_app *app, indigo_canvas *c)
         indigo_layout_text_fitted(c, 18, 52, 0.75f, COL_TEXT, 364.0f,
                                   indigo_layout_author_name(psel));
         indigo_layout_handle_fitted(c, 18, 76, 0.55f, COL_TEXT_DIM, 364.0f, psel->handle);
-        indigo_layout_draw_post_body(c, psel, app->settings.alt_text, app->settings.text_scale);
+        indigo_layout_draw_post_body(c, indigo_post_shown(psel), app->settings.alt_text,
+                                     app->settings.text_scale);
         indigo_canvas_text(c, 18, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u replies",
                            psel->reply_count);
         indigo_canvas_text(c, 118, POST_COUNTER_Y, 0.55f, COL_TEXT_DIM, "%u reposts",

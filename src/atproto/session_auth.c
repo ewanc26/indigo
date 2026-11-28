@@ -6,6 +6,12 @@
 
 #if defined(INDIGO_SESSION_REAL)
 
+#include "atproto/labels.h"
+#include <wolfram/moderation.h>
+#include <wolfram/xrpc.h>
+#include <stdio.h>
+#include <string.h>
+
 void
 indigo_session_drop_agent(void)
 {
@@ -14,6 +20,41 @@ indigo_session_drop_agent(void)
         g_session.agent = NULL;
     }
     g_session.prefs_loaded = false;
+    /* The label context is the account's: its adult setting and labelers
+     * must not outlive it into the next sign-in. */
+    indigo_labels_set_viewer(NULL);
+    indigo_labels_reset();
+}
+
+/* Send atproto-accept-labelers on every request `agent` makes: Bluesky's
+ * labeler with ;redact (its takedowns remove content, as upstream), then the
+ * account's subscriptions. Without it the AppView attaches only its defaults. */
+void
+indigo_session_send_accept_labelers(wf_agent *agent)
+{
+    const char *dids[INDIGO_LABELS_ACCEPT_MAX];
+    const int n = indigo_labels_labelers(dids, INDIGO_LABELS_ACCEPT_MAX);
+    char value[2048];
+    size_t used = 0;
+
+    if (!agent) {
+        return;
+    }
+    value[0] = '\0';
+    for (int i = 0; i < n; i++) {
+        const bool bsky = strcmp(dids[i], WF_MOD_BSKY_LABELER_DID) == 0;
+        const int w = snprintf(value + used, sizeof value - used, "%s%s%s", used ? ", " : "",
+                               dids[i], bsky ? ";redact" : "");
+
+        if (w < 0 || (size_t) w >= sizeof value - used) {
+            value[used] = '\0';
+            break;
+        }
+        used += (size_t) w;
+    }
+    if (wf_xrpc_client_set_accept_labelers(wf_agent_get_xrpc_client(agent), value) != WF_OK) {
+        indigo_log_warn("accept-labelers refused");
+    }
 }
 
 static wf_agent *
@@ -32,6 +73,7 @@ new_agent(const char *service)
     if (wf_3ds_apply_tls_rng(a) != WF_OK) {
         indigo_log_warn("TLS RNG hook not applied; using the transport default");
     }
+    indigo_session_send_accept_labelers(a);
     return a;
 }
 

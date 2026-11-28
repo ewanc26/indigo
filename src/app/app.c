@@ -396,7 +396,8 @@ indigo_app_image_source(const indigo_app *app)
 bool
 indigo_app_open_image(indigo_app *app)
 {
-    const indigo_post *p = indigo_app_image_source(app);
+    /* A labelled post's cover has no image, so this refuses to open one. */
+    const indigo_post *p = indigo_post_shown(indigo_app_image_source(app));
 
     if (!indigo_post_has_image(p)) {
         return false;

@@ -68,7 +68,7 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
                                                  : p->reposted_by[0] ? "RT  " : "",
                  indigo_layout_author_name(p));
         indigo_layout_list_row(c, (indigo_action) (INDIGO_ACTION_ROW0 + row), idx == t->selected, title,
-                 p->text, p->avatar);
+                 indigo_post_shown(p)->text, p->avatar);
     }
 
     indigo_layout_action_pill(c, INDIGO_ACTION_LIKE, sel && sel->like_uri[0], sel && sel->like_pending,
@@ -76,7 +76,9 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
     indigo_layout_action_pill(c, INDIGO_ACTION_REPOST, sel && sel->repost_uri[0], sel && sel->repost_pending,
                 COL_PILL_ACTIVE, sel && sel->repost_uri[0] ? "X Reposted" : "X Repost");
     if (thread) {
-        indigo_layout_action_pill(c, INDIGO_ACTION_REPLY, false, false, COL_PILL_ACTIVE, "A Reply");
+        /* A lifts a label's cover before it acts on the post, so say so. */
+        indigo_layout_action_pill(c, INDIGO_ACTION_REPLY, false, false, COL_PILL_ACTIVE,
+                                  indigo_post_can_reveal(sel) ? "A Show" : "A Reply");
         if (indigo_app_selected_post_is_own(app)) {
             indigo_layout_action_pill(c, INDIGO_ACTION_DELETE, false, false, COL_PILL_ACTIVE, "Delete");
         } else {
@@ -87,7 +89,8 @@ build_bottom_posts(const indigo_app *app, indigo_canvas *c)
                                       indigo_app_thread_muted(app) ? "Unmute" : "Mute");
         }
     } else {
-        indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE, "A Open");
+        indigo_layout_action_pill(c, INDIGO_ACTION_OPEN, false, false, COL_PILL_ACTIVE,
+                                  indigo_post_can_reveal(sel) ? "A Show" : "A Open");
         indigo_layout_action_pill(c, INDIGO_ACTION_REFRESH, t->loading, false, COL_PILL_ACTIVE, "Reload");
     }
 }
