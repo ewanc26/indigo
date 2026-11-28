@@ -316,19 +316,32 @@ clear_embed(indigo_post *out)
     out->embed_duration[0] = '\0';
 }
 
+/* Append `src` to the string in `dst` (capacity `cap`), truncating at a UTF-8
+ * boundary. Used instead of a formatted append: the compiler cannot prove a
+ * formatted write into a tail of a buffer fits, and warns. */
+static void
+append_text(char *dst, size_t cap, const char *src)
+{
+    const size_t n = strlen(dst);
+
+    if (n < cap) {
+        indigo_copy_utf8(dst + n, cap - n, src);
+    }
+}
+
 void
 indigo_post_cover(const indigo_post *p, indigo_post *out)
 {
-    size_t used;
-
     memcpy(out, p, sizeof *out);
     if (p->mod.unsupported[0]) {
         /* Named rather than dropped: Indigo was told something about this post
          * it cannot act on, which the reader should know. */
-        used = strlen(out->text);
-        snprintf(out->text + used, sizeof out->text - used,
-                 "%sLabelled %s, which Indigo does not support yet.", used ? "\n\n" : "",
-                 p->mod.unsupported);
+        if (out->text[0]) {
+            append_text(out->text, sizeof out->text, "\n\n");
+        }
+        append_text(out->text, sizeof out->text, "Labelled ");
+        append_text(out->text, sizeof out->text, p->mod.unsupported);
+        append_text(out->text, sizeof out->text, ", which Indigo does not support yet.");
     }
     if (!indigo_post_covered(p)) {
         return;
@@ -340,9 +353,12 @@ indigo_post_cover(const indigo_post *p, indigo_post *out)
         clear_embed(out);
         if (p->mod.action == INDIGO_MOD_BLUR_MEDIA) {
             snprintf(out->embed_note, sizeof out->embed_note, "[media hidden]");
-            used = strlen(out->text);
-            snprintf(out->text + used, sizeof out->text - used, "%s%s: media hidden. %s",
-                     used ? "\n\n" : "", reason, how);
+            if (out->text[0]) {
+                append_text(out->text, sizeof out->text, "\n\n");
+            }
+            append_text(out->text, sizeof out->text, reason);
+            append_text(out->text, sizeof out->text, ": media hidden. ");
+            append_text(out->text, sizeof out->text, how);
             return;
         }
         out->facet_count = 0;
