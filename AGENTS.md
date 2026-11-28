@@ -301,6 +301,7 @@ Labels are decided by Wolfram's moderation engine on the session worker and flat
 - The label context is read on the main thread (the settings menu) and rebuilt on the worker. Every rebuild and every labeler-definition insert takes the session lock, and the menu reads through `indigo_session_label_snapshot`, which copies the context under the lock. Do not read `indigo_labels_*` from the UI without it.
 - Preferences are changed only by read-modify-write (`src/atproto/label_prefs.c`): a failed read writes nothing, and a write replaces only its own `contentLabelPref` or `adultContentPref` entry.
 - Preferences load at sign-in (`indigo_session_load_prefs`), so the settings menu shows the account's values before a timeline is opened.
+- A profile's avatar is decided by `indigo_labels_avatar_covered`, which merges the account's labels with its profile-record labels (Wolfram 0.49.0 keeps them on the profile). A covered avatar is not fetched; the profile draws a flat square and the status line names the cover.
 - The Content labels submenu is a list menu (`indigo_menu_build_labels`). Its rows carry `label:value` payloads, and its title shows the result of the last change.
 
 ## 12. Authentication
