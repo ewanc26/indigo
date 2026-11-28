@@ -9,6 +9,7 @@
 #include <wolfram/chat_group.h>
 #include <wolfram/chat_typed.h>
 #include "atproto/prefs.h"
+#include "atproto/labels.h"
 #include "media/media.h"
 #include "store/session_codec.h"
 #include "util/log.h"
@@ -5697,6 +5698,63 @@ test_follow_guards(void)
     CHECK(app.profile.status_is_error);
 }
 
+/* Content-label covers: a warned post is shown as its cover until A reveals
+ * it; an unliftable one stays covered; an unsupported label is named. */
+static void
+test_label_covers(void)
+{
+    indigo_post post;
+    indigo_post shown;
+
+    memset(&post, 0, sizeof post);
+    indigo_copy_utf8(post.uri, sizeof post.uri, "at://did:plc:a/app.bsky.feed.post/1");
+    indigo_copy_utf8(post.text, sizeof post.text, "hello there");
+    indigo_copy_utf8(post.embed_note, sizeof post.embed_note, "[image]");
+
+    /* Not covered: the post is itself. */
+    CHECK(!indigo_post_covered(&post));
+    CHECK(indigo_post_shown(&post) == &post);
+
+    /* Warned: covered until revealed, and A can reveal it. */
+    post.mod.action = INDIGO_MOD_BLUR_CONTENT;
+    indigo_copy_utf8(post.mod.reason, sizeof post.mod.reason, "Content warning");
+    indigo_post_reveal(NULL);
+    CHECK(indigo_post_covered(&post));
+    CHECK(indigo_post_can_reveal(&post));
+    indigo_post_cover(&post, &shown);
+    CHECK(strcmp(shown.text, "Content warning. A: show it.") == 0);
+    indigo_post_reveal(post.uri);
+    CHECK(!indigo_post_covered(&post));
+    indigo_post_reveal(NULL);
+
+    /* No override: the reveal is ignored. */
+    post.mod.no_override = true;
+    indigo_post_reveal(post.uri);
+    CHECK(indigo_post_covered(&post));
+    CHECK(!indigo_post_can_reveal(&post));
+    indigo_post_cover(&post, &shown);
+    CHECK(strcmp(shown.text, "Content warning. Indigo will not show it.") == 0);
+    indigo_post_reveal(NULL);
+
+    /* Media-only cover keeps the text and drops the embed note. */
+    memset(&post.mod, 0, sizeof post.mod);
+    post.mod.action = INDIGO_MOD_BLUR_MEDIA;
+    indigo_copy_utf8(post.mod.reason, sizeof post.mod.reason, "Graphic media");
+    indigo_post_cover(&post, &shown);
+    CHECK(strstr(shown.text, "hello there") == shown.text);
+    CHECK(strstr(shown.text, "Graphic media: media hidden. A: show it.") != NULL);
+    CHECK(strcmp(shown.embed_note, "[media hidden]") == 0);
+
+    /* Unsupported labels are named, not dropped. */
+    memset(&post.mod, 0, sizeof post.mod);
+    indigo_copy_utf8(post.mod.unsupported, sizeof post.mod.unsupported, "made-up");
+    indigo_post_cover(&post, &shown);
+    CHECK(strstr(shown.text, "Labelled made-up, which Indigo does not support yet.") != NULL);
+    CHECK(strcmp(indigo_labels_reason("porn"), "Adult content") == 0);
+    CHECK(strcmp(indigo_labels_reason("gore"), "Graphic media") == 0);
+    CHECK(strcmp(indigo_labels_reason("made-up"), "made-up") == 0);
+}
+
 /* Muted words and hide-reposts. The list and the matching are Wolfram's (its own
  * vectors pin the rules); these check Indigo's side: the posts a mute is tried
  * against (text and tag facets), the loaded list, and the page filter. */
@@ -8366,6 +8424,7 @@ main(void)
     test_list_management();
     test_feeds();
     test_prefs();
+    test_label_covers();
     test_text_stays_on_screen();
     test_settings_screen();
     test_credits_screen();
