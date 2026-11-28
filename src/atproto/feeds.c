@@ -18,6 +18,7 @@
 #include "wolfram/unspecced_trends_typed.h"
 #include "wolfram/feed_gen_typed.h"
 #include "wolfram/feedgen_typed.h"
+#include "wolfram/tid.h"
 
 #include "util/log.h"
 
@@ -261,22 +262,10 @@ indigo_session_do_saved_feeds_v2(const indigo_job *j)
  * copied verbatim, with the target feed added, re-pinned or removed.
  * Returns a cJSON array the caller must free. */
 static cJSON *
-build_saved_feeds_v2_items(const char *feed_uri, bool pinned, bool remove)
+build_saved_feeds_v2_items(cJSON *prefs, const char *feed_uri, bool pinned, bool remove)
 {
-    char *cur_json = NULL;
-    cJSON *prefs = NULL;
-    if (wf_agent_get_preferences(g_session.agent, &cur_json) == WF_OK && cur_json) {
-        prefs = cJSON_Parse(cur_json);
-        free(cur_json);
-    }
-    if (!prefs || !cJSON_IsArray(prefs)) {
-        if (prefs) cJSON_Delete(prefs);
-        prefs = cJSON_CreateArray();
-    }
-
     cJSON *items = cJSON_CreateArray();
     if (!items) {
-        cJSON_Delete(prefs);
         return NULL;
     }
 
@@ -313,32 +302,48 @@ build_saved_feeds_v2_items(const char *feed_uri, bool pinned, bool remove)
     }
 
     if (!remove && !seen) {
+        /* `id` is required by app.bsky.actor.defs#savedFeed; upstream uses a
+         * TID, and an item without one is invalid to every other client. */
+        char id[15];
+        if (wf_tid_now(id) != WF_OK) {
+            cJSON_Delete(items);
+            return NULL;
+        }
         cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "id", id);
         cJSON_AddStringToObject(item, "type", "feed");
         cJSON_AddStringToObject(item, "value", feed_uri);
         cJSON_AddBoolToObject(item, "pinned", pinned);
         cJSON_AddItemToArray(items, item);
     }
-
-    cJSON_Delete(prefs);
     return items;
+}
+
+/* The account's raw preferences array, or NULL when it could not be read.
+ * A write must never be built from a failed read: putPreferences replaces the
+ * whole array, so it would erase everything else the account has saved. */
+static cJSON *
+read_prefs(void)
+{
+    char *cur_json = NULL;
+    if (wf_agent_get_preferences(g_session.agent, &cur_json) != WF_OK || !cur_json) {
+        free(cur_json);
+        return NULL;
+    }
+    cJSON *prefs = cJSON_Parse(cur_json);
+    free(cur_json);
+    if (!cJSON_IsArray(prefs)) {
+        cJSON_Delete(prefs);
+        return NULL;
+    }
+    return prefs;
 }
 
 /* putPreferences replaces the whole preferences array, so round-trip the
  * current one and swap in the modified v2 saved-feeds preference. */
 static wf_status
-put_saved_feeds_v2(cJSON *items)
+put_saved_feeds_v2(cJSON *prefs, cJSON *items)
 {
-    char *cur_json = NULL;
-    cJSON *prefs = NULL;
-    if (wf_agent_get_preferences(g_session.agent, &cur_json) == WF_OK && cur_json) {
-        prefs = cJSON_Parse(cur_json);
-        free(cur_json);
-    }
-    if (!prefs || !cJSON_IsArray(prefs)) {
-        if (prefs) cJSON_Delete(prefs);
-        prefs = cJSON_CreateArray();
-    }
     cJSON *v2 = cJSON_CreateObject();
     cJSON_AddItemToObject(v2, "$type",
                           cJSON_CreateString("app.bsky.actor.defs#savedFeedsPrefV2"));
@@ -354,7 +359,6 @@ put_saved_feeds_v2(cJSON *items)
     cJSON_AddItemToArray(prefs, v2);
 
     char *json = cJSON_PrintUnformatted(prefs);
-    cJSON_Delete(prefs);
     if (!json) {
         return WF_ERR_ALLOC;
     }
@@ -376,15 +380,24 @@ do_feed_mutation(const indigo_job *j, bool remove,
 
     INDIGO_SESSION_AGENT_GUARD(ev);
 
-    cJSON *items = build_saved_feeds_v2_items(j->actor, j->paging != 0, remove);
+    cJSON *prefs = read_prefs();
+    if (!prefs) {
+        indigo_log_warn("session: could not read preferences; %s not written", what);
+        ev.failure = WF_FAIL_NETWORK;
+        indigo_session_publish_event(&ev);
+        return;
+    }
+    cJSON *items = build_saved_feeds_v2_items(prefs, j->actor, j->paging != 0, remove);
     if (!items) {
+        cJSON_Delete(prefs);
         indigo_log_warn("session: could not prepare %s", what);
         ev.failure = WF_FAIL_OTHER;
         indigo_session_publish_event(&ev);
         return;
     }
 
-    const wf_status put_status = put_saved_feeds_v2(items);
+    const wf_status put_status = put_saved_feeds_v2(prefs, items);
+    cJSON_Delete(prefs);
     if (put_status != WF_OK) {
         indigo_log_warn("session: %s failed (%d)", what, (int) put_status);
         indigo_session_publish_failure(&ev, what, put_status);
