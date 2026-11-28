@@ -18,10 +18,29 @@ indigo_session_do_profile(const indigo_job *j)
         indigo_session_publish_failure(&ev, "profile", st);
         return;
     }
+    /* The labels decide the avatar before the profile is shown: a covered avatar
+     * is never fetched, and the status line says why. */
+    char avatar_reason[INDIGO_POST_NOTE_MAX];
+    const bool avatar_covered =
+        indigo_labels_avatar_covered(p.did, p.labels, avatar_reason, sizeof avatar_reason);
+
     memset(&g_session.profile, 0, sizeof g_session.profile);
     indigo_copy_utf8(g_session.profile.handle, sizeof g_session.profile.handle, p.handle);
     indigo_copy_utf8(g_session.profile.display_name, sizeof g_session.profile.display_name, p.display_name);
-    indigo_media_cdn_url(g_session.profile.avatar, sizeof g_session.profile.avatar, p.avatar, INDIGO_CDN_AVATAR);
+    if (!avatar_covered) {
+        indigo_media_cdn_url(g_session.profile.avatar, sizeof g_session.profile.avatar, p.avatar,
+                             INDIGO_CDN_AVATAR);
+    }
+    g_session.profile.avatar_covered = avatar_covered;
+    if (avatar_covered) {
+        /* Built with copies: a formatted write into the status tail warns under
+         * CI's compiler. */
+        indigo_copy_utf8(g_session.profile.status, sizeof g_session.profile.status,
+                         "Avatar hidden: ");
+        indigo_copy_utf8(g_session.profile.status + strlen(g_session.profile.status),
+                         sizeof g_session.profile.status - strlen(g_session.profile.status),
+                         avatar_reason);
+    }
     indigo_copy_utf8(g_session.profile.bio, sizeof g_session.profile.bio, p.description);
     indigo_copy_utf8(g_session.profile.did, sizeof g_session.profile.did, p.did);
     indigo_copy_utf8(g_session.profile.follow_uri, sizeof g_session.profile.follow_uri, p.following);

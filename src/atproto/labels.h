@@ -17,6 +17,7 @@
 
 #include "app/timeline.h"
 
+#include <cJSON.h>
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -58,6 +59,10 @@ typedef struct {
     /* "hide", "warn" or "ignore" per label in INDIGO_CONFIGURABLE_LABELS. */
     char visibility[INDIGO_CONFIGURABLE_LABEL_COUNT][8];
 } indigo_label_snapshot;
+
+/* Whether a profile's avatar is covered for its labels (see labels.c). Worker
+ * only. `labels` is the profile's labels array, or NULL. */
+bool indigo_labels_avatar_covered(const char *did, const cJSON *labels, char *reason, size_t reason_size);
 
 /* Copy the context into `out`. Call with the session lock held. */
 void indigo_labels_snapshot(indigo_label_snapshot *out);

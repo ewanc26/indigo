@@ -52,7 +52,12 @@ build_top_profile(const indigo_app *app, indigo_canvas *c)
         }
         return;
     }
-    indigo_layout_draw_avatar(c, p->avatar, 14, 38, PROFILE_AVATAR);
+    if (p->avatar_covered) {
+        /* A covered avatar: the same square as a picture, in a flat tone. */
+        indigo_canvas_rect(c, 14, 38, PROFILE_AVATAR, PROFILE_AVATAR, COL_TEXT_DIM);
+    } else {
+        indigo_layout_draw_avatar(c, p->avatar, 14, 38, PROFILE_AVATAR);
+    }
     /* The name ends inside the screen: a 40px avatar plus a long name is wider
      * than the 400px line, and `%.26s` assumed one byte was one character, so
      * a CJK name could be twice the width it was cut for. */
