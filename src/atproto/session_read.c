@@ -84,6 +84,16 @@ fill_video_durations(indigo_post *posts, unsigned count)
 /* Fetch the saved preferences once per sign-in. Failure is not fatal: the
  * feed is simply shown unfiltered, and the next page tries again. */
 
+/* The menu reads the label context on the main thread under the session lock,
+ * so the rebuild is done under it too. */
+static void
+rebuild_label_context(const wf_actor_preferences *p)
+{
+    LightLock_Lock(&g_session.lock);
+    indigo_labels_from_prefs(p);
+    LightLock_Unlock(&g_session.lock);
+}
+
 /* The subscribed labelers' own label definitions. A failure is logged and not
  * fatal: their labels are then named as unsupported. */
 static void
@@ -101,7 +111,9 @@ load_labeler_definitions(void)
         indigo_log_warn("getServices failed; labeler labels stay unsupported");
         return;
     }
+    LightLock_Lock(&g_session.lock);
     indigo_labels_add_services(&list);
+    LightLock_Unlock(&g_session.lock);
     wf_labeler_service_list_free(&list);
 }
 
@@ -122,11 +134,37 @@ ensure_prefs(void)
         return;
     }
     indigo_prefs_from_wolfram(&g_session.prefs, &p, indigo_time_now());
-    indigo_labels_from_prefs(&p);
+    rebuild_label_context(&p);
     wf_actor_preferences_free(&p);
     indigo_session_send_accept_labelers(g_session.agent);
     load_labeler_definitions();
     g_session.prefs_loaded = true;
+}
+
+void
+indigo_session_load_prefs(void)
+{
+    ensure_prefs();
+}
+
+void
+indigo_session_refresh_label_context(void)
+{
+    wf_actor_preferences p;
+
+    if (!g_session.agent) {
+        return;
+    }
+    memset(&p, 0, sizeof p);
+    if (wf_agent_get_actor_prefs_typed(g_session.agent, &p) != WF_OK) {
+        indigo_log_warn("label context not refreshed (getPreferences failed)");
+        wf_actor_preferences_free(&p);
+        return;
+    }
+    rebuild_label_context(&p);
+    wf_actor_preferences_free(&p);
+    indigo_session_send_accept_labelers(g_session.agent);
+    load_labeler_definitions();
 }
 
 void

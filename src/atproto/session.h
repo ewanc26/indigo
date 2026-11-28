@@ -7,6 +7,7 @@
 #include "app/timeline.h"
 #include "atproto/errors.h"
 #include "atproto/feeds.h"
+#include "atproto/labels.h"
 
 #include <stdbool.h>
 
@@ -97,6 +98,8 @@ typedef enum {
     INDIGO_SESSION_EVENT_REMOVE_FEED_FAILED,
     INDIGO_SESSION_EVENT_PIN_FEED_DONE,
     INDIGO_SESSION_EVENT_PIN_FEED_FAILED,
+    INDIGO_SESSION_EVENT_LABEL_PREF_DONE,
+    INDIGO_SESSION_EVENT_LABEL_PREF_FAILED,
 } indigo_session_event_kind;
 
 /* Follow and unfollow are separate actions rather than a toggle with one
@@ -384,6 +387,17 @@ bool indigo_session_submit_saved_feeds_v2(void);
 bool indigo_session_submit_save_feed(const char *feed_uri, bool pinned);
 bool indigo_session_submit_remove_feed(const char *feed_uri);
 bool indigo_session_submit_pin_feed(const char *feed_uri, bool pinned);
+
+/* Set one content-label preference. `label` is a configurable label ("porn",
+ * "sexual", "nudity", "graphic-media") with `visibility` "hide", "warn" or
+ * "ignore"; or `label` is "adult" with "on" or "off". Only that preference is
+ * written; on failure the account keeps its previous setting and the label
+ * context is unchanged. The result arrives as LABEL_PREF_DONE or _FAILED. */
+bool indigo_session_submit_label_pref(const char *label, const char *visibility);
+
+/* Copy the label context for the settings menu. Main thread; takes the session
+ * lock, which the worker holds while it rebuilds the context. */
+void indigo_session_label_snapshot(indigo_label_snapshot *out);
 
 /* Feed discovery and management accessors. */
 const indigo_feed_discovery_page *indigo_session_feed_discovery_results(void);
