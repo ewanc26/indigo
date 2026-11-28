@@ -14,7 +14,7 @@
 
 A native Bluesky client for the Nintendo 3DS.
 
-**Version 0.18.1**
+**Version 0.19.0**
 
 Indigo exists because apparently making a Wii U post to Bluesky was not enough.
 

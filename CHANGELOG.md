@@ -8,6 +8,8 @@ as the release notes.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-28
+
 ### Added
 
 - Posts with content labels are no longer shown as if they had none. Indigo now runs each post's labels, and its author's, through Wolfram's moderation engine with your adult-content setting, subscribed labelers and Bluesky's moderation labeler. A hidden post is dropped from filtered lists. A warned post shows a cover with the reason ("Content warning", "Graphic media") in place of its text and embed; A reveals it, and A again opens it. Adult and moderator-hidden covers stay. Labels from your labelers' own definitions are loaded too. Labelers' labels are requested with `atproto-accept-labelers`. Covered posts are left out of the offline cache. ([#147](https://github.com/ewanc26/indigo/issues/147))
