@@ -2426,7 +2426,7 @@ test_signin_flow(void)
     in.touch_y = (int) (r.y + 4);
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 18);
+    CHECK(app.menu.count == 19);
     CHECK(app.menu.items[2].kind == INDIGO_MENU_MESSAGES);
     CHECK(app.menu.items[4].kind == INDIGO_MENU_FIND_POSTS);
     CHECK(app.menu.items[5].kind == INDIGO_MENU_LISTS);
@@ -2437,14 +2437,14 @@ test_signin_flow(void)
     CHECK(app.menu.items[10].kind == INDIGO_MENU_QUEUE);
     CHECK(app.menu.items[11].kind == INDIGO_MENU_DRAFTS);
     CHECK(app.menu.items[13].kind == INDIGO_MENU_SETTINGS);
-    CHECK(app.menu.items[14].kind == INDIGO_MENU_CREDITS);
-    CHECK(app.menu.items[15].kind == INDIGO_MENU_UPDATE);
-    CHECK(app.menu.items[16].kind == INDIGO_MENU_SIGN_OUT);
+    CHECK(app.menu.items[15].kind == INDIGO_MENU_CREDITS);
+    CHECK(app.menu.items[16].kind == INDIGO_MENU_UPDATE);
+    CHECK(app.menu.items[17].kind == INDIGO_MENU_SIGN_OUT);
     CHECK(strcmp(app.menu.items[12].label, "My profile") == 0);
 
-    /* Sign out is the seventeenth item, so it sits below the window until the
+    /* Sign out is the eighteenth item, so it sits below the window until the
      * selection is moved onto it. */
-    for (unsigned i = 0; i < 16; i++) {
+    for (unsigned i = 0; i < 17; i++) {
         in = (indigo_input) {0};
         in.down = true;
         indigo_app_update(&app, &in);
@@ -4084,7 +4084,7 @@ test_facet_menu(void)
     indigo_menu_build(&menu, &p, "me.example.com");
     /* Three facet targets, the three entries about the post, then the fourteen
      * app actions. */
-    CHECK(menu.count == 25);
+    CHECK(menu.count == 26);
     CHECK(menu.items[0].kind == INDIGO_MENU_OPEN_MENTION);
     CHECK(strcmp(menu.items[0].label, "Profile: @alice.example.com") == 0);
     CHECK(strcmp(menu.items[0].payload, "did:plc:alice0000000000000000000000") == 0);
@@ -4097,7 +4097,7 @@ test_facet_menu(void)
     CHECK(menu.items[5].kind == INDIGO_MENU_BOOKMARK);
     CHECK(strcmp(menu.post_uri, p.uri) == 0);
     CHECK(menu.items[7].kind == INDIGO_MENU_COMPOSE);
-    CHECK(menu.items[24].kind == INDIGO_MENU_CLOSE);
+    CHECK(menu.items[25].kind == INDIGO_MENU_CLOSE);
     CHECK(indigo_menu_show_link(&menu, menu.items[2].payload));
     CHECK(menu.showing_link);
     CHECK(strcmp(menu.link_url, "https://example.com/x") == 0);
@@ -4123,8 +4123,8 @@ test_facet_menu(void)
     }
     indigo_app_update(&app, &in);
     CHECK(app.screen == INDIGO_SCREEN_MENU);
-    CHECK(app.menu.count == 25);
-    CHECK(app.menu.items[24].kind == INDIGO_MENU_CLOSE);
+    CHECK(app.menu.count == 26);
+    CHECK(app.menu.items[25].kind == INDIGO_MENU_CLOSE);
 
     /* A link opens a QR view within the menu; Back returns to the menu rows. */
     app.menu.selected = 2;
@@ -4223,7 +4223,7 @@ test_report_flow(void)
     p.handle[0] = '\0';
     indigo_copy_utf8(p.handle, sizeof p.handle, "alice.example");
     indigo_menu_build(&menu, &p, "me.example");
-    CHECK(menu.count == 23);
+    CHECK(menu.count == 24);
     for (unsigned i = 0; i < menu.count; i++) {
         if (menu.items[i].kind == INDIGO_MENU_REPORT_POST) {
             report_post = (int) i;
@@ -4254,7 +4254,7 @@ test_report_flow(void)
     /* Your own post has neither report entry. */
     indigo_copy_utf8(p.handle, sizeof p.handle, "me.example");
     indigo_menu_build(&menu, &p, "me.example");
-    CHECK(menu.count == 21);
+    CHECK(menu.count == 22);
     for (unsigned i = 0; i < menu.count; i++) {
         CHECK(menu.items[i].kind != INDIGO_MENU_REPORT_POST);
         CHECK(menu.items[i].kind != INDIGO_MENU_REPORT_ACCOUNT);
@@ -4272,7 +4272,7 @@ test_facet_menu_edges(void)
     p.facet_count = 1;
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_MENTION, 6, 27, ""};
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 22);
+    CHECK(menu.count == 23);
     CHECK(menu.items[0].kind == INDIGO_MENU_LIKED_BY);
     CHECK(menu.items[4].kind == INDIGO_MENU_COMPOSE);
 
@@ -4281,11 +4281,11 @@ test_facet_menu_edges(void)
     p.facets[0] = (indigo_post_facet) {INDIGO_FACET_LINK, 400, 900, "https://example.com"};
     p.text[sizeof p.text - 1] = '\0';
     indigo_menu_build(&menu, &p, "me.example.com");
-    CHECK(menu.count == 22);
+    CHECK(menu.count == 23);
 
     /* An empty account does not claim to know whose profile it is. */
     indigo_menu_build(&menu, NULL, "");
-    CHECK(menu.count == 18);
+    CHECK(menu.count == 19);
     CHECK(strcmp(menu.items[12].label, "Your profile") == 0);
     CHECK(strcmp(menu.items[4].payload, "") == 0);
 
@@ -4312,7 +4312,7 @@ test_facet_menu_edges(void)
 
         indigo_menu_build(&menu, &big, "me.example.com");
         /* Eight facets, the three post actions, and every app action. */
-        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 22);
+        CHECK(menu.count == INDIGO_POST_FACETS_MAX + 23);
         CHECK(menu.count <= INDIGO_MENU_MAX);
         CHECK(menu.scroll == 0);
 
@@ -5696,6 +5696,45 @@ test_follow_guards(void)
     CHECK(!app.profile.follow_busy);
     CHECK(indigo_app_take_request(&app, &f) == INDIGO_REQUEST_NONE);
     CHECK(app.profile.status_is_error);
+}
+
+/* The Content labels submenu: a row per setting, the value each row would set
+ * as its payload, the adult-off rows named as hidden, and the status title. */
+static void
+test_label_menu(void)
+{
+    indigo_menu m;
+    indigo_label_snapshot s;
+
+    memset(&s, 0, sizeof s);
+    s.adult = false;
+    snprintf(s.visibility[0], sizeof s.visibility[0], "%s", "hide");
+    snprintf(s.visibility[1], sizeof s.visibility[1], "%s", "hide");
+    snprintf(s.visibility[2], sizeof s.visibility[2], "%s", "ignore");
+    snprintf(s.visibility[3], sizeof s.visibility[3], "%s", "warn");
+    indigo_menu_build_labels(&m, &s, NULL);
+    CHECK(m.count == 6);
+    CHECK(strcmp(m.title, "Content labels") == 0);
+    CHECK(m.items[0].kind == INDIGO_MENU_LABEL_SETTING);
+    CHECK(strcmp(m.items[0].label, "Adult content: Off") == 0);
+    CHECK(strcmp(m.items[0].payload, "adult:on") == 0);
+    CHECK(strcmp(m.items[1].label, "Adult nudity and porn: Hidden (adult off)") == 0);
+    CHECK(strcmp(m.items[1].payload, "porn:") == 0);
+    CHECK(strcmp(m.items[3].label, "Non-sexual nudity: Show") == 0);
+    CHECK(strcmp(m.items[3].payload, "nudity:hide") == 0);
+    CHECK(strcmp(m.items[4].label, "Graphic media: Hidden (adult off)") == 0);
+    CHECK(strcmp(m.items[4].payload, "graphic-media:") == 0);
+    CHECK(m.items[5].kind == INDIGO_MENU_LABELS_BACK);
+
+    /* With adult content on, the adult rows can be set, and a status replaces
+     * the title. */
+    s.adult = true;
+    indigo_menu_build_labels(&m, &s, "Saved.");
+    CHECK(strcmp(m.title, "Saved.") == 0);
+    CHECK(strcmp(m.items[0].label, "Adult content: On") == 0);
+    CHECK(strcmp(m.items[0].payload, "adult:off") == 0);
+    CHECK(strcmp(m.items[1].label, "Adult nudity and porn: Hide") == 0);
+    CHECK(strcmp(m.items[1].payload, "porn:warn") == 0);
 }
 
 /* Content-label covers: a warned post is shown as its cover until A reveals
@@ -8425,6 +8464,7 @@ main(void)
     test_feeds();
     test_prefs();
     test_label_covers();
+    test_label_menu();
     test_text_stays_on_screen();
     test_settings_screen();
     test_credits_screen();

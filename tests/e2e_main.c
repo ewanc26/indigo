@@ -1655,7 +1655,7 @@ test_feeds(const char *data_dir)
     CHECK_STR(feeds[0].name, "Tech talk");
     CHECK_STR(feeds[0].description, "Custom feed");
     CHECK_STR(feeds[1].name, "News");
-    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 1);
+    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 2);
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.getFeedGenerators") == 1);
 
     /* A failed name lookup still leaves a usable picker: the record key stands
@@ -1681,7 +1681,7 @@ test_feeds(const char *data_dir)
     CHECK(count == 2);
     /* Every picker fetch reads the preferences (one per submit above), and the
      * failed name lookup still read them. */
-    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 3);
+    CHECK(e2e_pds_hits(pds, "app.bsky.actor.getPreferences") == 4);
 
     /* One feed's posts: the muted word removes the second one, and the
      * preferences are fetched once for the whole sign-in. */
@@ -1719,6 +1719,99 @@ test_feeds(const char *data_dir)
     CHECK(ev.failure != WF_FAIL_NONE);
     CHECK(indigo_session_page(&count) != NULL && count == 1);
     CHECK(e2e_pds_hits(pds, "app.bsky.feed.getFeed") == 3);
+
+    indigo_session_stop();
+    e2e_pds_free(pds);
+}
+
+/* Content-label settings: one preference is written, the label context follows
+ * the server's copy, and a refused read or write changes nothing the viewer
+ * sees. Signed in as did:plc:abc. */
+static void
+test_label_settings(const char *data_dir)
+{
+    e2e_pds *pds = NULL;
+    int port = 0;
+    char svc[64];
+    char session_path[512];
+    indigo_session_event ev;
+    indigo_label_snapshot snap;
+    static const char prefs[] =
+        "{\"preferences\":["
+        "{\"$type\":\"app.bsky.actor.defs#adultContentPref\",\"enabled\":true},"
+        "{\"$type\":\"app.bsky.actor.defs#contentLabelPref\",\"label\":\"porn\",\"visibility\":\"hide\"},"
+        "{\"$type\":\"app.bsky.actor.defs#mutedWordsPref\",\"items\":["
+        "{\"id\":\"m1\",\"value\":\"spoiler\",\"targets\":[\"content\"],\"actorTarget\":\"all\"}]}]}";
+    static const char warned[] =
+        "{\"preferences\":["
+        "{\"$type\":\"app.bsky.actor.defs#adultContentPref\",\"enabled\":true},"
+        "{\"$type\":\"app.bsky.actor.defs#contentLabelPref\",\"label\":\"porn\",\"visibility\":\"warn\"}]}";
+
+    CHECK(e2e_pds_start(&pds, &port));
+    if (!pds) {
+        return;
+    }
+    snprintf(svc, sizeof svc, "http://127.0.0.1:%d", port);
+    snprintf(session_path, sizeof session_path, "%s/session-labels.dat", data_dir);
+    unlink(session_path);
+
+    e2e_pds_route(pds, "com.atproto.server.createSession", 200,
+                  "{\"did\":\"did:plc:abc\",\"handle\":\"ewancroft.uk\","
+                  "\"accessJwt\":\"a.b.c\",\"refreshJwt\":\"d.e.f\",\"active\":true}");
+    e2e_pds_route(pds, "app.bsky.actor.getPreferences", 200, prefs);
+    e2e_pds_route(pds, "app.bsky.actor.putPreferences", 200, "{}");
+
+    CHECK(indigo_session_start(session_path));
+    CHECK(indigo_session_submit_login(svc, "ewancroft.test", "app-pass"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_SIGNED_IN, &ev));
+
+    /* The account's own setting is what the menu shows. */
+    indigo_session_label_snapshot(&snap);
+    CHECK(snap.adult);
+    CHECK_STR(snap.visibility[0], "hide");
+
+    /* One preference is written, and the old porn entry is replaced. */
+    CHECK(indigo_session_submit_label_pref("porn", "warn"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LABEL_PREF_DONE, &ev));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"label\":\"porn\""));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"visibility\":\"warn\""));
+    CHECK(!e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"visibility\":\"hide\""));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "mutedWordsPref"));
+
+    /* After the write the server reports the new value, and the menu follows it. */
+    e2e_pds_route(pds, "app.bsky.actor.getPreferences", 200, warned);
+    CHECK(indigo_session_submit_label_pref("porn", "warn"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LABEL_PREF_DONE, &ev));
+    indigo_session_label_snapshot(&snap);
+    CHECK_STR(snap.visibility[0], "warn");
+
+    /* A refused read writes nothing and says so. */
+    e2e_pds_route(pds, "app.bsky.actor.getPreferences", 500,
+                  "{\"error\":\"InternalServerError\",\"message\":\"boom\"}");
+    {
+        const int puts = e2e_pds_hits(pds, "app.bsky.actor.putPreferences");
+        CHECK(indigo_session_submit_label_pref("sexual", "hide"));
+        CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LABEL_PREF_FAILED, &ev));
+        CHECK(strstr(ev.message, "nothing was changed") != NULL);
+        CHECK(e2e_pds_hits(pds, "app.bsky.actor.putPreferences") == puts);
+    }
+    e2e_pds_route(pds, "app.bsky.actor.getPreferences", 200, warned);
+
+    /* A refused write keeps the setting the account already has. */
+    e2e_pds_route(pds, "app.bsky.actor.putPreferences", 400,
+                  "{\"error\":\"InvalidRequest\",\"message\":\"nope\"}");
+    CHECK(indigo_session_submit_label_pref("porn", "hide"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LABEL_PREF_FAILED, &ev));
+    CHECK(strstr(ev.message, "It is unchanged") != NULL);
+    indigo_session_label_snapshot(&snap);
+    CHECK_STR(snap.visibility[0], "warn");
+
+    /* The adult switch is the same kind of write. */
+    e2e_pds_route(pds, "app.bsky.actor.putPreferences", 200, "{}");
+    CHECK(indigo_session_submit_label_pref("adult", "off"));
+    CHECK(wait_for_kind(INDIGO_SESSION_EVENT_LABEL_PREF_DONE, &ev));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "adultContentPref"));
+    CHECK(e2e_pds_request_contains(pds, "app.bsky.actor.putPreferences", "\"enabled\":false"));
 
     indigo_session_stop();
     e2e_pds_free(pds);
@@ -1897,6 +1990,7 @@ main(int argc, char **argv)
     test_search(argv[1]);
     test_lists_and_moderation(argv[1]);
     test_feeds(argv[1]);
+    test_label_settings(argv[1]);
     test_notifications(argv[1]);
     indigo_log_shutdown();
 
